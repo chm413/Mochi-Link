@@ -18,12 +18,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/your-org/koishi-plugin-mochi-link.git"
+    "url": "git+https://github.com/chm413/Mochi-Link.git"
   },
   "bugs": {
-    "url": "https://github.com/your-org/koishi-plugin-mochi-link/issues"
+    "url": "https://github.com/chm413/Mochi-Link/issues"
   },
-  "homepage": "https://github.com/your-org/koishi-plugin-mochi-link#readme",
+  "homepage": "https://github.com/chm413/Mochi-Link#readme",
   "scripts": {
     "build": "tsc -b",
     "dev": "node scripts/dev.js",
