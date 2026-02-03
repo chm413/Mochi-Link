@@ -1,0 +1,86 @@
+{
+  "name": "koishi-plugin-mochi-link",
+  "version": "1.0.0",
+  "description": "Mochi-Link (大福连) - Minecraft 统一管理与监控系统",
+  "main": "lib/index.js",
+  "typings": "lib/index.d.ts",
+  "files": [
+    "lib",
+    "readme.md"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "koishi",
+    "plugin",
+    "minecraft",
+    "management",
+    "monitoring"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-org/koishi-plugin-mochi-link.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/koishi-plugin-mochi-link/issues"
+  },
+  "homepage": "https://github.com/your-org/koishi-plugin-mochi-link#readme",
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "node scripts/dev.js",
+    "watch": "tsc -b --watch",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "clean": "rimraf lib",
+    "setup": "node scripts/dev.js setup",
+    "check": "node scripts/dev.js check",
+    "deploy:init": "node scripts/deploy.js init",
+    "deploy:init:dev": "node scripts/deploy.js init development",
+    "deploy:init:staging": "node scripts/deploy.js init staging",
+    "deploy:init:prod": "node scripts/deploy.js init production",
+    "deploy:build": "node scripts/deploy.js build",
+    "deploy:validate": "node scripts/deploy.js validate",
+    "deploy:start": "node scripts/deploy.js start",
+    "deploy:stop": "node scripts/deploy.js stop",
+    "deploy:status": "node scripts/deploy.js status",
+    "start": "node lib/index.js"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^18.15.0",
+    "@types/ws": "^8.5.4",
+    "@typescript-eslint/eslint-plugin": "^5.57.0",
+    "@typescript-eslint/parser": "^5.57.0",
+    "eslint": "^8.37.0",
+    "fast-check": "^3.8.0",
+    "jest": "^29.5.0",
+    "openapi-types": "^12.1.3",
+    "rimraf": "^4.4.1",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.0.2"
+  },
+  "dependencies": {
+    "koishi": "^4.15.0",
+    "uuid": "^9.0.0",
+    "ws": "^8.13.0"
+  },
+  "peerDependencies": {
+    "koishi": "^4.15.0"
+  },
+  "koishi": {
+    "description": {
+      "en": "Minecraft Unified Management and Monitoring System",
+      "zh": "Minecraft 统一管理与监控系统"
+    },
+    "service": {
+      "required": [
+        "database"
+      ],
+      "optional": [
+        "http"
+      ]
+    }
+  }
+}

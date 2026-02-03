@@ -1,0 +1,38 @@
+# Source files
+src/
+tests/
+
+# Development files
+.kiro/
+*.test.ts
+*.spec.ts
+jest.config.js
+.eslintrc.js
+tsconfig.json
+
+# Documentation
+README.md
+docs/
+
+# Git files
+.git/
+.gitignore
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs and temporary files
+*.log
+tmp/
+temp/
+
+# Coverage reports
+coverage/
+
+# Environment files
+.env*
+
+# OS files
+.DS_Store
+Thumbs.db

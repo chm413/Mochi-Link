@@ -1,0 +1,329 @@
+# ============================================================================
+# Mochi-Link (大福连) - .gitignore
+# Minecraft 统一管理与监控系统
+# ============================================================================
+
+# ============================================================================
+# Node.js Dependencies
+# ============================================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Package manager lock files (keep one, ignore others)
+# package-lock.json  # Uncomment if using yarn or pnpm
+# yarn.lock         # Uncomment if using npm or pnpm
+# pnpm-lock.yaml    # Uncomment if using npm or yarn
+
+# ============================================================================
+# Build Outputs
+# ============================================================================
+lib/
+dist/
+build/
+out/
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# ============================================================================
+# Environment & Configuration Files
+# ============================================================================
+.env
+.env.local
+.env.development
+.env.development.local
+.env.staging
+.env.staging.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+
+# Deployment configuration (contains sensitive info)
+config/deployment.json
+config/production.json
+config/staging.json
+ecosystem.config.js
+
+# ============================================================================
+# IDE & Editor Files
+# ============================================================================
+# Visual Studio Code
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Vim
+*.swp
+*.swo
+*~
+.netrwhist
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# ============================================================================
+# Operating System Files
+# ============================================================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ============================================================================
+# Testing & Coverage
+# ============================================================================
+coverage/
+*.lcov
+.nyc_output/
+junit.xml
+test-results/
+integration-test-report.json
+
+# Jest
+jest_*
+.jest/
+
+# ============================================================================
+# Logs & Runtime Data
+# ============================================================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# PM2 logs
+.pm2/
+
+# ============================================================================
+# Cache & Temporary Files
+# ============================================================================
+# npm
+.npm
+.npmrc
+
+# Yarn
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# ESLint
+.eslintcache
+
+# Prettier
+.prettiercache
+
+# TypeScript
+*.tsbuildinfo
+
+# Temporary folders
+tmp/
+temp/
+.tmp/
+.temp/
+
+# ============================================================================
+# Database Files (Local Development)
+# ============================================================================
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+data/
+database/
+db/
+
+# ============================================================================
+# Koishi Specific
+# ============================================================================
+koishi.yml
+koishi.config.*
+koishi.json
+.koishi/
+
+# Koishi plugins data
+plugins/
+external/
+
+# ============================================================================
+# Mochi-Link Specific
+# ============================================================================
+# Configuration files with sensitive data
+config/local.json
+config/secrets.json
+
+# SSL/TLS Certificates and Keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+ssl/
+certs/
+
+# API tokens and secrets
+tokens/
+secrets/
+.secrets
+
+# Backup files
+backup/
+*.backup
+*.bak
+
+# Server-specific data
+servers/
+server-data/
+
+# Audit logs (may contain sensitive info)
+audit/
+audit-logs/
+
+# Performance monitoring data
+metrics/
+monitoring/
+
+# ============================================================================
+# Docker
+# ============================================================================
+.dockerignore
+docker-compose.override.yml
+.docker/
+
+# ============================================================================
+# CI/CD
+# ============================================================================
+.github/workflows/secrets.yml
+
+# ============================================================================
+# Documentation Build
+# ============================================================================
+docs/build/
+docs/dist/
+.docusaurus/
+
+# ============================================================================
+# Miscellaneous
+# ============================================================================
+# Archives
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Compiled binary addons
+build/Release/
+
+# Dependency directories
+jspm_packages/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# parcel-bundler cache
+.cache
+.parcel-cache
+
+# Next.js build output
+.next
+
+# Nuxt.js build / generate output
+.nuxt
+dist
+
+# Storybook build outputs
+.out
+.storybook-out
+
+# Temporary public files
+public/temp/
+
+# ============================================================================
+# Security & Sensitive Data
+# ============================================================================
+# Never commit these files
+*.env.production
+*.env.staging
+*secret*
+*password*
+*private*
+api-keys.json
+credentials.json
+
+# ============================================================================
+# Custom Project Ignores
+# ============================================================================
+# Add your custom ignores here
+# example: custom-config.json
