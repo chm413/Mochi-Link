@@ -56,6 +56,7 @@ export const Config: Schema<PluginConfig> = Schema.object({
 // ============================================================================
 
 export const name = 'mochi-link';
+export const inject = ['database']; // Declare database dependency
 export const usage = `
 # Mochi-Link (大福连) - Minecraft 统一管理与监控系统
 
