@@ -118,6 +118,8 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // Service instances
     let dbManager: any = null;
+    let serviceManager: any = null;
+    let wsManager: any = null;
     let isInitialized = false;
     
     /**
@@ -148,6 +150,40 @@ export function apply(ctx: Context, config: PluginConfig) {
             
             await dbManager.initialize();
             logger.info('Database initialized successfully');
+            
+            // Initialize service manager
+            try {
+                const { ServiceManager } = await import('./services');
+                serviceManager = new ServiceManager(ctx);
+                await serviceManager.initialize();
+                logger.info('Service manager initialized successfully');
+                
+                // Initialize WebSocket manager if configured
+                if (config.websocket?.port) {
+                    const { WebSocketConnectionManager } = await import('./websocket/manager');
+                    wsManager = new WebSocketConnectionManager(
+                        serviceManager.token,
+                        {
+                            server: {
+                                port: config.websocket.port,
+                                host: config.websocket.host || '0.0.0.0',
+                                ssl: config.websocket.ssl
+                            },
+                            maxConnections: config.security?.maxConnections || 100,
+                            heartbeat: {
+                                interval: 30000,
+                                timeout: 10000
+                            }
+                        },
+                        serviceManager.audit
+                    );
+                    
+                    await wsManager.start();
+                    logger.info(`WebSocket server started on ${config.websocket.host || '0.0.0.0'}:${config.websocket.port}`);
+                }
+            } catch (error) {
+                logger.warn('Service manager initialization skipped (will use basic mode):', error);
+            }
             
             isInitialized = true;
             logger.info('Mochi-Link plugin started successfully');
@@ -385,9 +421,28 @@ export function apply(ctx: Context, config: PluginConfig) {
             return `服务器 ${targetServerId} 不存在`;
           }
           
-          // TODO: 调用实际的白名单服务
-          return `服务器 ${server.name} 的白名单功能正在开发中\n` +
-                 `提示: 需要服务器连接后才能获取白名单数据`;
+          // 调用实际的白名单服务
+          if (serviceManager?.whitelist) {
+            try {
+              const whitelist = await serviceManager.whitelist.getWhitelist(targetServerId);
+              
+              if (!whitelist || whitelist.length === 0) {
+                return `服务器 ${server.name} 的白名单为空`;
+              }
+              
+              return `服务器 ${server.name} 的白名单 (${whitelist.length} 人)：\n` +
+                     whitelist.map((entry: any, index: number) => 
+                       `  [${index + 1}] ${entry.name || entry.uuid}`
+                     ).join('\n');
+            } catch (error) {
+              logger.error('Failed to get whitelist from service:', error);
+              return `获取白名单失败: ${(error as Error).message}\n` +
+                     `提示: 确保服务器已连接`;
+            }
+          } else {
+            return `服务器 ${server.name} 的白名单功能需要服务器连接\n` +
+                   `提示: 请确保服务器已通过 WebSocket 连接`;
+          }
         } catch (error) {
           logger.error('Failed to get whitelist:', error);
           return '获取白名单失败';
@@ -430,18 +485,40 @@ export function apply(ctx: Context, config: PluginConfig) {
             return `服务器 ${targetServerId} 不存在`;
           }
           
-          // 记录审计日志
-          await dbManager.createAuditLog({
-            user_id: session?.userId,
-            server_id: targetServerId,
-            operation: 'whitelist.add',
-            operation_data: JSON.stringify({ player: targetPlayer }),
-            result: 'success'
-          });
-          
-          // TODO: 调用实际的白名单服务
-          return `已将 ${targetPlayer} 添加到服务器 ${server.name} 的白名单\n` +
-                 `提示: 需要服务器连接后才能同步到游戏`;
+          // 调用实际的白名单服务
+          if (serviceManager?.whitelist) {
+            try {
+              await serviceManager.whitelist.addToWhitelist(targetServerId, targetPlayer);
+              
+              // 记录审计日志
+              await dbManager.createAuditLog({
+                user_id: session?.userId,
+                server_id: targetServerId,
+                operation: 'whitelist.add',
+                operation_data: JSON.stringify({ player: targetPlayer }),
+                result: 'success'
+              });
+              
+              return `已将 ${targetPlayer} 添加到服务器 ${server.name} 的白名单`;
+            } catch (error) {
+              logger.error('Failed to add to whitelist:', error);
+              
+              // 记录失败的审计日志
+              await dbManager.createAuditLog({
+                user_id: session?.userId,
+                server_id: targetServerId,
+                operation: 'whitelist.add',
+                operation_data: JSON.stringify({ player: targetPlayer }),
+                result: 'failure',
+                error_message: (error as Error).message
+              });
+              
+              return `添加到白名单失败: ${(error as Error).message}`;
+            }
+          } else {
+            return `服务器 ${server.name} 的白名单功能需要服务器连接\n` +
+                   `提示: 请确保服务器已通过 WebSocket 连接`;
+          }
         } catch (error) {
           logger.error('Failed to add to whitelist:', error);
           return '添加到白名单失败';
@@ -494,29 +571,50 @@ export function apply(ctx: Context, config: PluginConfig) {
                '  mochi.player.kick <serverId> <player> [reason] - 踢出玩家';
       });
     
-    ctx.command('mochi.player.list <serverId>', '查看服务器在线玩家')
+    ctx.command('mochi.player.list [serverId]', '查看服务器在线玩家')
       .action(async ({ session }, serverId) => {
         if (!isInitialized || !dbManager) {
           return '插件尚未初始化完成';
         }
         
-        if (!serverId) {
-          return '用法: mochi.player.list <serverId>';
+        const targetServerId = await getServerId(session, serverId);
+        if (!targetServerId) {
+          return '请指定服务器 ID 或在群组中绑定服务器';
         }
         
         try {
-          const server = await dbManager.getServer(serverId);
+          const server = await dbManager.getServer(targetServerId);
           if (!server) {
-            return `服务器 ${serverId} 不存在`;
+            return `服务器 ${targetServerId} 不存在`;
           }
           
           if (server.status !== 'online') {
             return `服务器 ${server.name} 当前离线`;
           }
           
-          // TODO: 调用实际的玩家服务
-          return `服务器 ${server.name} 的在线玩家功能正在开发中\n` +
-                 `提示: 需要服务器连接后才能获取在线玩家数据`;
+          // 调用实际的玩家服务
+          if (serviceManager?.player) {
+            try {
+              const players = await serviceManager.player.getOnlinePlayers(targetServerId);
+              
+              if (!players || players.length === 0) {
+                return `服务器 ${server.name} 当前无在线玩家`;
+              }
+              
+              return `服务器 ${server.name} 在线玩家 (${players.length} 人)：\n` +
+                     players.map((player: any, index: number) => 
+                       `  [${index + 1}] ${player.name}` +
+                       (player.health !== undefined ? ` - 生命: ${player.health}/20` : '') +
+                       (player.level !== undefined ? ` - 等级: ${player.level}` : '') +
+                       (player.gameMode ? ` - ${player.gameMode}` : '')
+                     ).join('\n');
+            } catch (error) {
+              logger.error('Failed to get players:', error);
+              return `获取在线玩家失败: ${(error as Error).message}`;
+            }
+          } else {
+            return `服务器 ${server.name} 的玩家查询功能需要服务器连接`;
+          }
         } catch (error) {
           logger.error('Failed to get players:', error);
           return '获取在线玩家失败';
@@ -619,19 +717,59 @@ export function apply(ctx: Context, config: PluginConfig) {
             return `服务器 ${server.name} 当前离线`;
           }
           
-          // 记录审计日志
-          await dbManager.createAuditLog({
-            user_id: session?.userId,
-            server_id: serverId,
-            operation: 'command.execute',
-            operation_data: JSON.stringify({ command, executor: options.as }),
-            result: 'success'
-          });
-          
-          // TODO: 调用实际的命令执行服务
-          return `已在服务器 ${server.name} 执行命令: ${command}\n` +
-                 `执行者: ${options.as}\n` +
-                 `提示: 需要服务器连接后才能执行`;
+          // 调用实际的命令执行服务
+          if (serviceManager?.command) {
+            try {
+              const result = await serviceManager.command.executeCommand(
+                serverId,
+                command,
+                session?.userId || 'system',
+                {
+                  executeAs: options.as === 'player' ? 'player' : 'console',
+                  timeout: 30000
+                }
+              );
+              
+              // 记录审计日志
+              await dbManager.createAuditLog({
+                user_id: session?.userId,
+                server_id: serverId,
+                operation: 'command.execute',
+                operation_data: JSON.stringify({ command, executor: options.as }),
+                result: 'success'
+              });
+              
+              let response = `已在服务器 ${server.name} 执行命令: ${command}\n`;
+              response += `执行者: ${options.as}\n`;
+              response += `状态: ${result.success ? '成功' : '失败'}\n`;
+              
+              if (result.output) {
+                response += `输出:\n${result.output}`;
+              }
+              
+              if (result.error) {
+                response += `\n错误: ${result.error}`;
+              }
+              
+              return response;
+            } catch (error) {
+              logger.error('Failed to execute command:', error);
+              
+              // 记录失败的审计日志
+              await dbManager.createAuditLog({
+                user_id: session?.userId,
+                server_id: serverId,
+                operation: 'command.execute',
+                operation_data: JSON.stringify({ command, executor: options.as }),
+                result: 'failure',
+                error_message: (error as Error).message
+              });
+              
+              return `执行命令失败: ${(error as Error).message}`;
+            }
+          } else {
+            return `服务器 ${server.name} 的命令执行功能需要服务器连接`;
+          }
         } catch (error) {
           logger.error('Failed to execute command:', error);
           return '执行命令失败';
