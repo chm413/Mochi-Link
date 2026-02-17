@@ -43,11 +43,44 @@ Mochi-Link（大福连）是一个基于 Koishi 框架的 Minecraft 统一管理
 
 ### 安装
 
+#### 从 npm 安装（即将发布）
+
 ```bash
 npm install koishi-plugin-mochi-link
 ```
 
 或者在 Koishi 控制台中搜索 "mochi-link" 进行安装。
+
+#### 从 GitHub 安装（当前推荐）
+
+由于插件尚未发布到 npm，请使用以下方式安装：
+
+**开发环境**:
+```bash
+# 克隆仓库
+git clone https://github.com/chm413/Mochi-Link.git
+cd Mochi-Link
+
+# 安装依赖并构建
+npm install
+npm run build
+
+# 在 Koishi 项目中安装
+cd /path/to/koishi-project
+npm install file:../Mochi-Link
+```
+
+**生产环境**:
+```bash
+# 直接从 GitHub 安装
+npm install git+https://github.com/chm413/Mochi-Link.git
+
+# 或安装特定版本
+npm install git+https://github.com/chm413/Mochi-Link.git#v1.0.0
+```
+
+> 📖 详细安装说明请查看 [KOISHI_INSTALLATION_GUIDE.md](./KOISHI_INSTALLATION_GUIDE.md)  
+> 🚀 快速参考请查看 [QUICK_INSTALL.md](./QUICK_INSTALL.md)
 
 ### 基础配置
 

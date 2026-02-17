@@ -1,0 +1,40 @@
+name: MochiLinkConnector
+version: '1.0.0'
+main: com.mochilink.connector.MochiLinkPlugin
+api-version: '1.20'
+authors: [chm413]
+description: Minecraft Java Edition connector plugin for Mochi-Link unified management system
+website: https://github.com/chm413/Mochi-Link
+
+# Plugin dependencies
+softdepend: [PlaceholderAPI, LuckPerms, Vault, Plan]
+
+# Permissions
+permissions:
+  mochilink.admin:
+    description: Full access to MochiLink commands
+    default: op
+  mochilink.manage:
+    description: Manage server connections and settings
+    default: op
+  mochilink.monitor:
+    description: View server status and monitoring data
+    default: op
+
+# Commands
+commands:
+  mochilink:
+    description: Main MochiLink command
+    usage: /mochilink <subcommand>
+    permission: mochilink.admin
+    aliases: [ml, mochi]
+  
+  mlstatus:
+    description: Check MochiLink connection status
+    usage: /mlstatus
+    permission: mochilink.monitor
+    
+  mlreconnect:
+    description: Reconnect to MochiLink management server
+    usage: /mlreconnect
+    permission: mochilink.manage

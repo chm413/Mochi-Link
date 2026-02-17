@@ -191,16 +191,6 @@ export class MochiLinkPlugin extends Service {
             responseTime: finalDeploymentConfig.monitoring.healthCheck.timeout,
             errorRate: 5,
             diskUsage: 90
-          },
-          monitoring: {
-            enabled: finalDeploymentConfig.monitoring.enabled,
-            metricsInterval: finalDeploymentConfig.monitoring.metrics.interval,
-            alertThresholds: {
-              memoryUsage: 85,
-              cpuUsage: 80,
-              responseTime: finalDeploymentConfig.monitoring.healthCheck.timeout,
-              errorRate: 5
-            }
           }
         }
       );
@@ -209,7 +199,7 @@ export class MochiLinkPlugin extends Service {
       await this.systemIntegration.initialize();
       
       // Start health monitoring
-      await this.healthMonitoring.start(this.systemIntegration);
+      await this.healthMonitoring.start();
       
       // Get references to initialized components
       this.dbManager = this.systemIntegration.getDatabaseManager()!;
@@ -364,10 +354,26 @@ export class MochiLinkPlugin extends Service {
 }
 
 // ============================================================================
-// Plugin Export
+// Plugin Export (Koishi v4 Compatible)
 // ============================================================================
 
-export default MochiLinkPlugin;
+export function apply(ctx: Context, config: PluginConfig) {
+  const plugin = new MochiLinkPlugin(ctx, config);
+  
+  ctx.on('ready', async () => {
+    await plugin.start();
+  });
+  
+  ctx.on('dispose', async () => {
+    await plugin.stop();
+  });
+  
+  // Expose plugin instance as a service
+  ctx.provide('mochi-link', plugin);
+}
+
+// Export configuration schema for Koishi
+apply.Config = Config;
 
 // Re-export types for external use
 export * from './types';

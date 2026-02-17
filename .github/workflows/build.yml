@@ -1,0 +1,60 @@
+name: Build and Commit Artifacts
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+    paths:
+      - 'src/**'
+      - 'package.json'
+      - 'tsconfig.json'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build TypeScript
+        run: npm run build
+      
+      - name: Check for changes
+        id: check_changes
+        run: |
+          git add lib/
+          if git diff --staged --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Commit and push if changed
+        if: steps.check_changes.outputs.has_changes == 'true'
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: "chore: build artifacts [skip ci]"
+          file_pattern: lib/**
+          commit_user_name: GitHub Actions
+          commit_user_email: actions@github.com
+          commit_author: GitHub Actions <actions@github.com>
+      
+      - name: No changes detected
+        if: steps.check_changes.outputs.has_changes == 'false'
+        run: echo "No changes in build artifacts"

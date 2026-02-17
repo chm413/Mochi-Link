@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "mochi-link-connector-fabric",
+  "version": "${version}",
+  "name": "Mochi-Link Connector Fabric",
+  "description": "Minecraft Fabric server connector mod for Mochi-Link unified management system",
+  "authors": [
+    "chm413"
+  ],
+  "contact": {
+    "homepage": "https://github.com/chm413/Mochi-Link",
+    "sources": "https://github.com/chm413/Mochi-Link"
+  },
+  "license": "MIT",
+  "icon": "assets/mochi-link-connector-fabric/icon.png",
+  "environment": "server",
+  "entrypoints": {
+    "server": [
+      "com.mochilink.connector.fabric.MochiLinkFabricMod"
+    ]
+  },
+  "mixins": [
+    "mochi-link-connector-fabric.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "minecraft": "${minecraft_version}",
+    "java": ">=17",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "fabric-permissions-api": "*"
+  },
+  "custom": {
+    "modmenu": {
+      "badges": ["server"],
+      "parent": {
+        "id": "fabric-api",
+        "name": "Fabric API"
+      }
+    }
+  }
+}

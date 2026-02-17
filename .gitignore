@@ -21,7 +21,7 @@ lerna-debug.log*
 # ============================================================================
 # Build Outputs
 # ============================================================================
-lib/
+# lib/  # Commented out: lib/ is needed for GitHub installation
 dist/
 build/
 out/

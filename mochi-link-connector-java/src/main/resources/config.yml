@@ -1,0 +1,155 @@
+# Mochi-Link Connector Configuration
+# 大福连 Java 版连接器配置
+
+# 连接配置
+connection:
+  # 连接模式: forward (正向连接) 或 reverse (反向连接)
+  mode: "forward"
+  
+  # 正向连接配置 (插件作为客户端连接到 Koishi)
+  forward:
+    host: "127.0.0.1"
+    port: 8080
+    ssl: false
+    
+  # 反向连接配置 (Koishi 连接到插件)
+  reverse:
+    port: 25566
+    bind_address: "0.0.0.0"
+    ssl: false
+    
+  # 连接选项
+  options:
+    # 自动重连
+    auto_reconnect: true
+    # 重连间隔 (秒)
+    reconnect_interval: 30
+    # 最大重连次数 (-1 为无限制)
+    max_reconnect_attempts: -1
+    # 连接超时 (毫秒)
+    connect_timeout: 10000
+    # 心跳间隔 (秒)
+    heartbeat_interval: 30
+
+# 认证配置
+authentication:
+  # API 令牌 (从 Mochi-Link 管理端获取)
+  token: "your-api-token-here"
+  # 服务器 ID (唯一标识符)
+  server_id: "my-minecraft-server"
+  # IP 白名单验证
+  ip_whitelist_enabled: false
+
+# 功能配置
+features:
+  # 启用的功能模块
+  enabled_modules:
+    - "player_management"    # 玩家管理
+    - "command_execution"    # 命令执行
+    - "event_monitoring"     # 事件监控
+    - "performance_stats"    # 性能统计
+    - "plugin_integration"   # 插件集成
+    
+  # 玩家管理
+  player_management:
+    # 同步玩家加入/离开事件
+    sync_join_leave: true
+    # 同步聊天消息
+    sync_chat: true
+    # 同步玩家死亡事件
+    sync_death: true
+    # 同步成就获得
+    sync_advancement: true
+    
+  # 命令执行
+  command_execution:
+    # 允许远程执行控制台命令
+    allow_console_commands: true
+    # 命令执行超时 (秒)
+    command_timeout: 30
+    # 命令黑名单 (禁止远程执行的命令)
+    command_blacklist:
+      - "stop"
+      - "restart"
+      - "op"
+      - "deop"
+      
+  # 事件监控
+  event_monitoring:
+    # 监控的事件类型
+    monitored_events:
+      - "player_join"
+      - "player_quit"
+      - "player_chat"
+      - "player_death"
+      - "player_advancement"
+      - "server_start"
+      - "server_stop"
+      
+  # 性能统计
+  performance_stats:
+    # 统计收集间隔 (秒)
+    collection_interval: 60
+    # 启用 TPS 监控
+    enable_tps_monitoring: true
+    # 启用内存监控
+    enable_memory_monitoring: true
+    # 启用玩家数量监控
+    enable_player_count_monitoring: true
+
+# 插件集成
+integrations:
+  # PlaceholderAPI 集成
+  placeholderapi:
+    enabled: true
+    # 自定义占位符前缀
+    placeholder_prefix: "mochilink_"
+    
+  # LuckPerms 集成
+  luckperms:
+    enabled: true
+    # 同步权限变更
+    sync_permission_changes: true
+    
+  # Vault 集成
+  vault:
+    enabled: true
+    # 同步经济数据
+    sync_economy_data: false
+    
+  # Plan 集成
+  plan:
+    enabled: true
+    # 同步分析数据
+    sync_analytics_data: true
+
+# 日志配置
+logging:
+  # 日志级别: DEBUG, INFO, WARN, ERROR
+  level: "INFO"
+  # 启用详细连接日志
+  verbose_connection: false
+  # 启用事件日志
+  log_events: true
+  # 启用命令执行日志
+  log_commands: true
+
+# 安全配置
+security:
+  # 启用消息加密
+  enable_encryption: false
+  # 加密算法
+  encryption_algorithm: "AES-256-GCM"
+  # 验证消息完整性
+  verify_message_integrity: true
+  # 允许的管理端 IP 地址 (空列表表示允许所有)
+  allowed_management_ips: []
+
+# 调试配置
+debug:
+  # 启用调试模式
+  enabled: false
+  # 保存调试日志到文件
+  save_debug_logs: false
+  # 调试日志文件路径
+  debug_log_file: "plugins/MochiLinkConnector/debug.log"

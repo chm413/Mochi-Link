@@ -1,0 +1,32 @@
+modLoader="javafml"
+loaderVersion="[49,)"
+license="MIT"
+issueTrackerURL="https://github.com/chm413/Mochi-Link/issues"
+
+[[mods]]
+modId="mochi-link-connector-forge"
+version="1.0.0"
+displayName="Mochi-Link Connector Forge"
+updateJSONURL=""
+displayURL="https://github.com/chm413/Mochi-Link"
+logoFile=""
+credits="chm413"
+authors="chm413"
+description='''
+Minecraft Forge server connector mod for Mochi-Link unified management system.
+Provides seamless integration between Forge servers and the Mochi-Link management platform.
+'''
+
+[[dependencies.mochi-link-connector-forge]]
+modId="forge"
+mandatory=true
+versionRange="[49,)"
+ordering="NONE"
+side="SERVER"
+
+[[dependencies.mochi-link-connector-forge]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.20.4,1.21)"
+ordering="NONE"
+side="SERVER"

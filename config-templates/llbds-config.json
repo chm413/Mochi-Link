@@ -1,0 +1,178 @@
+{
+  "_comment": "Mochi-Link Connector Configuration for LLBDS / 大福连连接器LLBDS配置文件",
+  
+  "connection": {
+    "_comment": "Connection Configuration / 连接配置",
+    "host": "localhost",
+    "port": 8080,
+    "ssl": false,
+    "timeout": 30000,
+    "path": "/ws"
+  },
+  
+  "server": {
+    "_comment": "Server Configuration / 服务器配置",
+    "id": "my-llbds-server",
+    "name": "我的LLBDS服务器",
+    "type": "LLBDS",
+    "description": "An LLBDS server managed by Mochi-Link",
+    "tags": ["bedrock", "llbds", "javascript"]
+  },
+  
+  "auth": {
+    "_comment": "Authentication Configuration / 认证配置",
+    "token": "your-api-token-here",
+    "refreshInterval": 3600
+  },
+  
+  "reconnect": {
+    "_comment": "Auto-reconnection Configuration / 自动重连配置",
+    "enabled": true,
+    "interval": 30,
+    "maxAttempts": 10,
+    "exponentialBackoff": true,
+    "maxBackoffTime": 300
+  },
+  
+  "features": {
+    "_comment": "Feature Configuration / 功能配置",
+    "playerEvents": {
+      "enabled": true,
+      "events": ["join", "left", "chat", "die", "respawn", "cmd"]
+    },
+    "serverMonitoring": {
+      "enabled": true,
+      "interval": 30
+    },
+    "commandExecution": {
+      "enabled": true,
+      "whitelist": ["list", "tps", "memory", "save"],
+      "blacklist": ["stop", "restart"]
+    },
+    "performanceMonitoring": {
+      "enabled": true,
+      "interval": 60,
+      "metrics": ["tps", "memory", "cpu", "players", "plugins"]
+    },
+    "blockEvents": {
+      "enabled": false,
+      "events": ["place", "destroy", "interact"]
+    },
+    "entityEvents": {
+      "enabled": false,
+      "events": ["spawn", "despawn", "attack"]
+    }
+  },
+  
+  "llbds": {
+    "_comment": "LLBDS-specific Configuration / LLBDS特定配置",
+    "useNativeEvents": true,
+    "enableScriptEngine": true,
+    "pluginIntegration": {
+      "enabled": true,
+      "scanPlugins": true,
+      "reportPluginList": true
+    },
+    "bedrockProtocol": {
+      "version": "1.20.40",
+      "enableExtensions": true
+    },
+    "permissions": {
+      "useNativePermissions": true,
+      "fallbackToOp": true
+    }
+  },
+  
+  "integrations": {
+    "_comment": "Plugin Integration Configuration / 插件集成配置",
+    "llse": {
+      "enabled": true,
+      "version": "2.0"
+    }
+  },
+  
+  "security": {
+    "_comment": "Security Configuration / 安全配置",
+    "ipWhitelist": {
+      "enabled": false,
+      "addresses": ["127.0.0.1", "192.168.1.0/24"]
+    },
+    "encryption": {
+      "enabled": false,
+      "algorithm": "AES-256-GCM",
+      "keyFile": "encryption.key"
+    },
+    "scriptSecurity": {
+      "enabled": true,
+      "allowFileAccess": false,
+      "allowNetworkAccess": true
+    }
+  },
+  
+  "logging": {
+    "_comment": "Logging Configuration / 日志配置",
+    "level": "INFO",
+    "debug": false,
+    "logPerformance": true,
+    "file": {
+      "enabled": true,
+      "path": "plugins/MochiLinkConnector-LLBDS/logs/",
+      "maxSize": "10MB",
+      "maxFiles": 5
+    },
+    "console": {
+      "enabled": true,
+      "colorOutput": true
+    }
+  },
+  
+  "cache": {
+    "_comment": "Cache Configuration / 缓存配置",
+    "playerInfo": {
+      "enabled": true,
+      "maxSize": 1000,
+      "ttl": 300
+    },
+    "permissions": {
+      "enabled": true,
+      "maxSize": 500,
+      "ttl": 600
+    },
+    "worldData": {
+      "enabled": true,
+      "maxSize": 200,
+      "ttl": 900
+    }
+  },
+  
+  "advanced": {
+    "_comment": "Advanced Configuration / 高级配置",
+    "eventLoop": {
+      "maxListeners": 100,
+      "warningThreshold": 50
+    },
+    "messageQueue": {
+      "maxSize": 1000,
+      "batchSize": 50,
+      "flushInterval": 1000
+    },
+    "heartbeat": {
+      "enabled": true,
+      "interval": 30,
+      "timeout": 10
+    },
+    "memory": {
+      "gcInterval": 300,
+      "maxHeapSize": "512MB"
+    }
+  },
+  
+  "development": {
+    "_comment": "Development Configuration / 开发配置",
+    "enabled": false,
+    "simulateLatency": 0,
+    "simulatePacketLoss": 0.0,
+    "debugEvents": false,
+    "verboseLogging": false
+  }
+}
