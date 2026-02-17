@@ -201,5 +201,4 @@ export declare class HealthMonitoringService extends EventEmitter {
     private clearAlert;
     private sanitizeEnvironment;
 }
-export { HealthMonitoringService };
 export default HealthMonitoringService;

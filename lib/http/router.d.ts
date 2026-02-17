@@ -70,5 +70,4 @@ export declare class APIRouter {
     private createPaginatedResponse;
     private createErrorResponse;
 }
-export { APIRouter };
 export default APIRouter;

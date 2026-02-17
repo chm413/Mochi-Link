@@ -701,6 +701,5 @@ export class HealthMonitoringService extends EventEmitter {
   }
 }
 
-// Export for module compatibility
-export { HealthMonitoringService };
+// Export as default only (class already exported above)
 export default HealthMonitoringService;

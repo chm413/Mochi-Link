@@ -1,60 +1,54 @@
 /**
  * Mochi-Link (大福连) - Main Plugin Entry Point
  * 
- * This is the main entry point for the Koishi plugin that implements
- * the Minecraft Unified Management and Monitoring System.
+ * Simplified version with lazy loading to avoid module resolution issues
  */
 
-import { Context, Schema, Service, Logger } from 'koishi';
+import { Context, Schema, Logger } from 'koishi';
 import { PluginConfig } from './types';
-import { DatabaseInitializer, DatabaseManager } from './database/init';
-import { ServiceManager } from './services';
-import { SystemIntegrationService } from './services/system-integration';
-import { HealthMonitoringService } from './services/health-monitoring';
-import { DeploymentConfigManager, EnvironmentDetector, ConfigurationUtils } from './config/deployment';
 
 // ============================================================================
 // Plugin Configuration Schema
 // ============================================================================
 
 export const Config: Schema<PluginConfig> = Schema.object({
-  websocket: Schema.object({
-    port: Schema.number().default(8080).description('WebSocket server port'),
-    host: Schema.string().default('0.0.0.0').description('WebSocket server host'),
-    ssl: Schema.object({
-      cert: Schema.string().description('SSL certificate path'),
-      key: Schema.string().description('SSL private key path')
-    }).description('SSL configuration (optional)')
-  }).description('WebSocket server configuration'),
-  
-  http: Schema.object({
-    port: Schema.number().default(8081).description('HTTP API server port'),
-    host: Schema.string().default('0.0.0.0').description('HTTP API server host'),
-    cors: Schema.boolean().default(true).description('Enable CORS')
-  }).description('HTTP API configuration (optional)'),
-  
-  database: Schema.object({
-    prefix: Schema.string().default('mochi_').description('Database table prefix')
-  }).description('Database configuration'),
-  
-  security: Schema.object({
-    tokenExpiry: Schema.number().default(86400).description('Token expiry time in seconds'),
-    maxConnections: Schema.number().default(100).description('Maximum concurrent connections'),
-    rateLimiting: Schema.object({
-      windowMs: Schema.number().default(60000).description('Rate limiting window in milliseconds'),
-      maxRequests: Schema.number().default(100).description('Maximum requests per window')
-    }).description('Rate limiting configuration')
-  }).description('Security configuration'),
-  
-  monitoring: Schema.object({
-    reportInterval: Schema.number().default(30).description('Status report interval in seconds'),
-    historyRetention: Schema.number().default(30).description('History retention in days')
-  }).description('Monitoring configuration'),
-  
-  logging: Schema.object({
-    level: Schema.union(['debug', 'info', 'warn', 'error']).default('info').description('Log level'),
-    auditRetention: Schema.number().default(90).description('Audit log retention in days')
-  }).description('Logging configuration')
+    websocket: Schema.object({
+        port: Schema.number().default(8080).description('WebSocket server port'),
+        host: Schema.string().default('0.0.0.0').description('WebSocket server host'),
+        ssl: Schema.object({
+            cert: Schema.string().description('SSL certificate path'),
+            key: Schema.string().description('SSL private key path')
+        }).description('SSL configuration (optional)')
+    }).description('WebSocket server configuration'),
+    
+    http: Schema.object({
+        port: Schema.number().default(8081).description('HTTP API server port'),
+        host: Schema.string().default('0.0.0.0').description('HTTP API server host'),
+        cors: Schema.boolean().default(true).description('Enable CORS')
+    }).description('HTTP API configuration (optional)'),
+    
+    database: Schema.object({
+        prefix: Schema.string().default('mochi_').description('Database table prefix')
+    }).description('Database configuration'),
+    
+    security: Schema.object({
+        tokenExpiry: Schema.number().default(86400).description('Token expiry time in seconds'),
+        maxConnections: Schema.number().default(100).description('Maximum concurrent connections'),
+        rateLimiting: Schema.object({
+            windowMs: Schema.number().default(60000).description('Rate limiting window in milliseconds'),
+            maxRequests: Schema.number().default(100).description('Maximum requests per window')
+        }).description('Rate limiting configuration')
+    }).description('Security configuration'),
+    
+    monitoring: Schema.object({
+        reportInterval: Schema.number().default(30).description('Status report interval in seconds'),
+        historyRetention: Schema.number().default(30).description('History retention in days')
+    }).description('Monitoring configuration'),
+    
+    logging: Schema.object({
+        level: Schema.union(['debug', 'info', 'warn', 'error']).default('info').description('Log level'),
+        auditRetention: Schema.number().default(90).description('Audit log retention in days')
+    }).description('Logging configuration')
 });
 
 // ============================================================================
@@ -115,266 +109,117 @@ export const usage = `
 `;
 
 // ============================================================================
-// Main Plugin Class
-// ============================================================================
-
-export class MochiLinkPlugin extends Service {
-  static readonly inject = ['database'] as const;
-  
-  public logger: Logger;
-  public dbManager!: DatabaseManager;
-  public serviceManager!: ServiceManager;
-  public systemIntegration!: SystemIntegrationService;
-  public healthMonitoring!: HealthMonitoringService;
-  private dbInitializer: DatabaseInitializer;
-  private deploymentConfigManager: DeploymentConfigManager;
-  private isInitialized = false;
-
-  constructor(ctx: Context, public config: PluginConfig) {
-    super(ctx, 'mochi-link', true);
-    this.logger = ctx.logger('mochi-link');
-    this.dbInitializer = new DatabaseInitializer(ctx);
-    this.deploymentConfigManager = new DeploymentConfigManager();
-  }
-
-  async start(): Promise<void> {
-    this.logger.info('Starting Mochi-Link plugin...');
-    
-    try {
-      // Detect environment and load deployment configuration
-      const environment = EnvironmentDetector.detectEnvironment();
-      const deploymentInfo = EnvironmentDetector.getDeploymentInfo();
-      
-      this.logger.info(`Starting in ${environment} environment`, deploymentInfo);
-      
-      // Load and validate deployment configuration
-      const deploymentConfig = this.deploymentConfigManager.loadConfig(environment);
-      const envValidation = ConfigurationUtils.validateEnvironmentVariables();
-      
-      if (!envValidation.valid) {
-        this.logger.warn('Environment validation warnings:', envValidation.errors);
-      }
-      
-      // Apply environment overrides
-      const finalDeploymentConfig = ConfigurationUtils.applyEnvironmentOverrides(deploymentConfig);
-      
-      // Convert to plugin config if needed (merge with existing config)
-      const pluginConfigFromDeployment = this.deploymentConfigManager.toPluginConfig(finalDeploymentConfig);
-      this.config = { ...this.config, ...pluginConfigFromDeployment };
-      
-      // Initialize system integration service
-      this.systemIntegration = new SystemIntegrationService(
-        this.ctx,
-        this.config,
-        {
-          monitoring: {
-            enabled: finalDeploymentConfig.monitoring.enabled,
-            metricsInterval: finalDeploymentConfig.monitoring.metrics.interval,
-            alertThresholds: {
-              memoryUsage: 85,
-              cpuUsage: 80,
-              responseTime: finalDeploymentConfig.monitoring.healthCheck.timeout,
-              errorRate: 5
-            }
-          }
-        }
-      );
-      
-      // Initialize health monitoring service
-      this.healthMonitoring = new HealthMonitoringService(
-        this.ctx,
-        {
-          systemCheckInterval: finalDeploymentConfig.monitoring.healthCheck.interval,
-          thresholds: {
-            memoryUsage: 85,
-            cpuUsage: 80,
-            responseTime: finalDeploymentConfig.monitoring.healthCheck.timeout,
-            errorRate: 5,
-            diskUsage: 90
-          }
-        }
-      );
-      
-      // Initialize the entire system through system integration service
-      await this.systemIntegration.initialize();
-      
-      // Start health monitoring
-      await this.healthMonitoring.start();
-      
-      // Get references to initialized components
-      this.dbManager = this.systemIntegration.getDatabaseManager()!;
-      this.serviceManager = this.systemIntegration.getServiceManager()!;
-      
-      this.isInitialized = true;
-      this.logger.info('Mochi-Link plugin started successfully');
-      
-    } catch (error) {
-      this.logger.error('Failed to start Mochi-Link plugin:', error);
-      throw error;
-    }
-  }
-
-  async stop(): Promise<void> {
-    this.logger.info('Stopping Mochi-Link plugin...');
-    
-    try {
-      // Stop health monitoring
-      if (this.healthMonitoring) {
-        await this.healthMonitoring.stop();
-      }
-      
-      // Shutdown system integration (handles all components)
-      if (this.systemIntegration) {
-        await this.systemIntegration.shutdown();
-      }
-      
-      this.isInitialized = false;
-      this.logger.info('Mochi-Link plugin stopped successfully');
-      
-    } catch (error) {
-      this.logger.error('Error stopping Mochi-Link plugin:', error);
-    }
-  }
-
-  // ============================================================================
-  // Public API Methods
-  // ============================================================================
-
-  /**
-   * Get plugin health status
-   */
-  async getHealth(): Promise<{ status: string; initialized: boolean; uptime: number; system?: any; deployment?: any }> {
-    const baseHealth = {
-      status: this.isInitialized ? 'healthy' : 'initializing',
-      initialized: this.isInitialized,
-      uptime: process.uptime()
-    };
-
-    if (this.systemIntegration) {
-      const systemHealth = await this.systemIntegration.getSystemHealth();
-      const systemStats = this.systemIntegration.getSystemStats();
-      
-      (baseHealth as any).system = {
-        health: systemHealth,
-        stats: systemStats
-      };
-    }
-
-    if (this.healthMonitoring) {
-      const healthStatus = await this.healthMonitoring.getHealthStatus();
-      const diagnostics = this.healthMonitoring.getDiagnosticInfo();
-      
-      (baseHealth as any).monitoring = {
-        status: healthStatus,
-        diagnostics
-      };
-    }
-
-    // Add deployment information
-    const deploymentInfo = EnvironmentDetector.getDeploymentInfo();
-    const currentConfig = this.deploymentConfigManager.getCurrentConfig();
-    
-    (baseHealth as any).deployment = {
-      info: deploymentInfo,
-      config: currentConfig ? {
-        environment: currentConfig.environment,
-        version: currentConfig.version,
-        buildTime: currentConfig.buildTime
-      } : null
-    };
-
-    return baseHealth;
-  }
-
-  /**
-   * Get plugin configuration
-   */
-  getConfig(): PluginConfig {
-    return { ...this.config };
-  }
-
-  /**
-   * Get system integration service
-   */
-  getSystemIntegration(): SystemIntegrationService | undefined {
-    return this.systemIntegration;
-  }
-
-  /**
-   * Get health monitoring service
-   */
-  getHealthMonitoring(): HealthMonitoringService | undefined {
-    return this.healthMonitoring;
-  }
-
-  /**
-   * Get service manager (for external access)
-   */
-  getServiceManager(): ServiceManager | undefined {
-    return this.serviceManager;
-  }
-
-  /**
-   * Get database manager (for external access)
-   */
-  getDatabaseManager(): DatabaseManager | undefined {
-    return this.dbManager;
-  }
-
-  /**
-   * Check if system is ready
-   */
-  isReady(): boolean {
-    return this.isInitialized && 
-           this.systemIntegration?.isReady() === true;
-  }
-
-  /**
-   * Force shutdown (emergency stop)
-   */
-  async forceShutdown(): Promise<void> {
-    this.logger.warn('Force shutdown initiated');
-    
-    try {
-      if (this.healthMonitoring) {
-        await this.healthMonitoring.stop();
-      }
-      
-      if (this.systemIntegration) {
-        await this.systemIntegration.forceShutdown();
-      }
-      
-      this.isInitialized = false;
-      this.logger.info('Force shutdown completed');
-      
-    } catch (error) {
-      this.logger.error('Error during force shutdown:', error);
-    }
-  }
-}
-
-// ============================================================================
-// Plugin Export (Koishi v4 Compatible)
+// Plugin Apply Function (with lazy loading)
 // ============================================================================
 
 export function apply(ctx: Context, config: PluginConfig) {
-  const plugin = new MochiLinkPlugin(ctx, config);
-  
-  ctx.on('ready', async () => {
-    await plugin.start();
-  });
-  
-  ctx.on('dispose', async () => {
-    await plugin.stop();
-  });
-  
-  // Expose plugin instance as a service
-  ctx.provide('mochi-link', plugin);
+    const logger = ctx.logger('mochi-link');
+    
+    // Service instances (lazy loaded)
+    let systemIntegration: any = null;
+    let healthMonitoring: any = null;
+    let isInitialized = false;
+    
+    // Initialize on ready
+    ctx.on('ready', async () => {
+        try {
+            logger.info('Starting Mochi-Link plugin...');
+            
+            // Lazy load dependencies only when needed
+            const { SystemIntegrationService } = await import('./services/system-integration');
+            const { HealthMonitoringService } = await import('./services/health-monitoring');
+            const { EnvironmentDetector, DeploymentConfigManager, ConfigurationUtils } = await import('./config/deployment');
+            
+            // Detect environment
+            const environment = EnvironmentDetector.detectEnvironment();
+            const deploymentInfo = EnvironmentDetector.getDeploymentInfo();
+            logger.info(`Starting in ${environment} environment`, deploymentInfo);
+            
+            // Load deployment configuration
+            const deploymentConfigManager = new DeploymentConfigManager();
+            const deploymentConfig = deploymentConfigManager.loadConfig(environment);
+            const finalDeploymentConfig = ConfigurationUtils.applyEnvironmentOverrides(deploymentConfig);
+            
+            // Merge configurations
+            const pluginConfigFromDeployment = deploymentConfigManager.toPluginConfig(finalDeploymentConfig);
+            const finalConfig = { ...config, ...pluginConfigFromDeployment };
+            
+            // Initialize system integration
+            systemIntegration = new SystemIntegrationService(ctx, finalConfig, {
+                monitoring: {
+                    enabled: finalDeploymentConfig.monitoring.enabled,
+                    metricsInterval: finalDeploymentConfig.monitoring.metrics.interval,
+                    alertThresholds: {
+                        memoryUsage: 85,
+                        cpuUsage: 80,
+                        responseTime: finalDeploymentConfig.monitoring.healthCheck.timeout,
+                        errorRate: 5
+                    }
+                }
+            });
+            
+            // Initialize health monitoring
+            healthMonitoring = new HealthMonitoringService(ctx, {
+                systemCheckInterval: finalDeploymentConfig.monitoring.healthCheck.interval,
+                thresholds: {
+                    memoryUsage: 85,
+                    cpuUsage: 80,
+                    responseTime: finalDeploymentConfig.monitoring.healthCheck.timeout,
+                    errorRate: 5,
+                    diskUsage: 90
+                }
+            });
+            
+            // Start services
+            await systemIntegration.initialize();
+            await healthMonitoring.start();
+            
+            isInitialized = true;
+            logger.info('Mochi-Link plugin started successfully');
+            
+        } catch (error) {
+            logger.error('Failed to start Mochi-Link plugin:', error);
+            logger.error('Stack trace:', (error as Error).stack);
+        }
+    });
+    
+    // Cleanup on dispose
+    ctx.on('dispose', async () => {
+        try {
+            logger.info('Stopping Mochi-Link plugin...');
+            
+            if (healthMonitoring) {
+                await healthMonitoring.stop();
+            }
+            
+            if (systemIntegration) {
+                await systemIntegration.shutdown();
+            }
+            
+            isInitialized = false;
+            logger.info('Mochi-Link plugin stopped successfully');
+            
+        } catch (error) {
+            logger.error('Error stopping Mochi-Link plugin:', error);
+        }
+    });
+    
+    // Expose service access methods
+    ctx.provide('mochi-link', {
+        getHealth: async () => {
+            return {
+                status: isInitialized ? 'healthy' : 'initializing',
+                initialized: isInitialized,
+                uptime: process.uptime()
+            };
+        },
+        getConfig: () => ({ ...config }),
+        isReady: () => isInitialized && systemIntegration?.isReady() === true
+    });
 }
 
 // Export configuration schema for Koishi
 apply.Config = Config;
 
-// Re-export types for external use
-export * from './types';
-export * from './database/models';
+// Re-export types for external use (optional, for advanced users)
+export type { PluginConfig } from './types';

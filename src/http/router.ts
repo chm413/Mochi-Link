@@ -1063,6 +1063,5 @@ export class APIRouter {
   }
 }
 
-// Export for module compatibility
-export { APIRouter };
+// Export as default only (class already exported above)
 export default APIRouter;
