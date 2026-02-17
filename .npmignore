@@ -7,16 +7,30 @@ tests/
 *.test.ts
 *.spec.ts
 jest.config.js
+jest.integration.config.js
 .eslintrc.js
 tsconfig.json
+tsconfig.tsbuildinfo
 
-# Documentation
-README.md
+# Build scripts
+scripts/
+build-all-connectors.*
+fix-koishi-*.bat
+
+# Connector implementations (not part of Koishi plugin)
+mochi-link-connector-*/
+build-output/
+config-templates/
+
+# Documentation (keep README.md, exclude others)
 docs/
+*.md
+!README.md
 
 # Git files
 .git/
 .gitignore
+.github/
 
 # IDE files
 .vscode/
@@ -36,3 +50,6 @@ coverage/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Test files
+test-*.js
