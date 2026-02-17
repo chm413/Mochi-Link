@@ -115,22 +115,25 @@ export const usage = `
 export function apply(ctx: Context, config: PluginConfig) {
     const logger = ctx.logger('mochi-link');
     
-    // Service instances (lazy loaded)
-    let systemIntegration: any = null;
+    // Service instances
+    let dbManager: any = null;
     let isInitialized = false;
     
     // Initialize on ready
     ctx.on('ready', async () => {
         try {
             logger.info('Starting Mochi-Link plugin...');
-            logger.info('Plugin loaded successfully. Advanced features will be initialized when needed.');
             
-            // For now, just mark as initialized
-            // Full initialization will be added in future versions
+            // Initialize database
+            const { SimpleDatabaseManager } = await import('./database/simple-init');
+            dbManager = new SimpleDatabaseManager(ctx, config.database?.prefix || 'mochi');
+            
+            await dbManager.initialize();
+            logger.info('Database initialized successfully');
+            
             isInitialized = true;
-            
-            logger.info('Mochi-Link plugin started successfully (basic mode)');
-            logger.warn('Note: Full feature set requires additional configuration. See documentation for details.');
+            logger.info('Mochi-Link plugin started successfully');
+            logger.info('Database tables created with prefix:', config.database?.prefix || 'mochi');
             
         } catch (error) {
             logger.error('Failed to start Mochi-Link plugin:', error);
@@ -142,18 +145,186 @@ export function apply(ctx: Context, config: PluginConfig) {
     ctx.on('dispose', async () => {
         try {
             logger.info('Stopping Mochi-Link plugin...');
-            
-            if (systemIntegration) {
-                await systemIntegration.shutdown();
-            }
-            
             isInitialized = false;
             logger.info('Mochi-Link plugin stopped successfully');
-            
         } catch (error) {
             logger.error('Error stopping Mochi-Link plugin:', error);
         }
     });
+    
+    // Register commands
+    ctx.command('mochi', 'Mochi-Link 管理命令')
+      .action(({ session }) => {
+        return 'Mochi-Link (大福连) - Minecraft 统一管理系统\n' +
+               '使用 mochi.help 查看可用命令';
+      });
+    
+    ctx.command('mochi.server', '服务器管理')
+      .action(({ session }) => {
+        return '服务器管理命令：\n' +
+               '  mochi.server.list - 列出所有服务器\n' +
+               '  mochi.server.add <id> <name> - 添加服务器\n' +
+               '  mochi.server.info <id> - 查看服务器信息\n' +
+               '  mochi.server.remove <id> - 删除服务器';
+      });
+    
+    ctx.command('mochi.server.list', '列出所有服务器')
+      .action(async ({ session }) => {
+        if (!isInitialized || !dbManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        try {
+          const servers = await dbManager.listServers();
+          if (servers.length === 0) {
+            return '暂无服务器';
+          }
+          
+          return '服务器列表：\n' + servers.map(s => 
+            `  [${s.id}] ${s.name} (${s.core_type}/${s.core_name}) - ${s.status}`
+          ).join('\n');
+        } catch (error) {
+          logger.error('Failed to list servers:', error);
+          return '获取服务器列表失败';
+        }
+      });
+    
+    ctx.command('mochi.server.add <id> <name>', '添加服务器')
+      .option('type', '-t <type:string> 服务器类型 (java/bedrock)', { fallback: 'java' })
+      .option('core', '-c <core:string> 核心名称', { fallback: 'paper' })
+      .action(async ({ session, options }, id, name) => {
+        if (!isInitialized || !dbManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!id || !name) {
+          return '用法: mochi.server.add <id> <name> [-t type] [-c core]';
+        }
+        
+        try {
+          // Check if server already exists
+          const existing = await dbManager.getServer(id);
+          if (existing) {
+            return `服务器 ${id} 已存在`;
+          }
+          
+          // Create server
+          await dbManager.createServer({
+            id,
+            name,
+            core_type: options.type as 'java' | 'bedrock',
+            core_name: options.core,
+            connection_mode: 'reverse',
+            connection_config: JSON.stringify({}),
+            status: 'offline',
+            owner_id: session?.userId
+          });
+          
+          // Create audit log
+          await dbManager.createAuditLog({
+            user_id: session?.userId,
+            server_id: id,
+            operation: 'server.create',
+            operation_data: JSON.stringify({ name, type: options.type, core: options.core }),
+            result: 'success'
+          });
+          
+          return `服务器 ${name} (${id}) 创建成功`;
+        } catch (error) {
+          logger.error('Failed to create server:', error);
+          return '创建服务器失败';
+        }
+      });
+    
+    ctx.command('mochi.server.info <id>', '查看服务器信息')
+      .action(async ({ session }, id) => {
+        if (!isInitialized || !dbManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!id) {
+          return '用法: mochi.server.info <id>';
+        }
+        
+        try {
+          const server = await dbManager.getServer(id);
+          if (!server) {
+            return `服务器 ${id} 不存在`;
+          }
+          
+          return `服务器信息：\n` +
+                 `  ID: ${server.id}\n` +
+                 `  名称: ${server.name}\n` +
+                 `  类型: ${server.core_type}\n` +
+                 `  核心: ${server.core_name}\n` +
+                 `  版本: ${server.core_version || '未知'}\n` +
+                 `  状态: ${server.status}\n` +
+                 `  连接模式: ${server.connection_mode}\n` +
+                 `  创建时间: ${server.created_at.toLocaleString()}\n` +
+                 `  最后更新: ${server.updated_at.toLocaleString()}`;
+        } catch (error) {
+          logger.error('Failed to get server info:', error);
+          return '获取服务器信息失败';
+        }
+      });
+    
+    ctx.command('mochi.server.remove <id>', '删除服务器')
+      .action(async ({ session }, id) => {
+        if (!isInitialized || !dbManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!id) {
+          return '用法: mochi.server.remove <id>';
+        }
+        
+        try {
+          const server = await dbManager.getServer(id);
+          if (!server) {
+            return `服务器 ${id} 不存在`;
+          }
+          
+          await dbManager.deleteServer(id);
+          
+          // Create audit log
+          await dbManager.createAuditLog({
+            user_id: session?.userId,
+            server_id: id,
+            operation: 'server.delete',
+            operation_data: JSON.stringify({ name: server.name }),
+            result: 'success'
+          });
+          
+          return `服务器 ${server.name} (${id}) 已删除`;
+        } catch (error) {
+          logger.error('Failed to delete server:', error);
+          return '删除服务器失败';
+        }
+      });
+    
+    ctx.command('mochi.audit', '查看审计日志')
+      .option('limit', '-l <limit:number> 显示条数', { fallback: 10 })
+      .action(async ({ session, options }) => {
+        if (!isInitialized || !dbManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        try {
+          const logs = await dbManager.getAuditLogs(options.limit);
+          if (logs.length === 0) {
+            return '暂无审计日志';
+          }
+          
+          return '审计日志：\n' + logs.map(log => 
+            `  [${log.timestamp.toLocaleString()}] ${log.operation} - ${log.result}` +
+            (log.user_id ? ` (用户: ${log.user_id})` : '') +
+            (log.server_id ? ` (服务器: ${log.server_id})` : '')
+          ).join('\n');
+        } catch (error) {
+          logger.error('Failed to get audit logs:', error);
+          return '获取审计日志失败';
+        }
+      });
     
     // Expose service access methods
     ctx.provide('mochi-link', {
@@ -162,11 +333,12 @@ export function apply(ctx: Context, config: PluginConfig) {
                 status: isInitialized ? 'healthy' : 'initializing',
                 initialized: isInitialized,
                 uptime: process.uptime(),
-                mode: 'basic'
+                database: isInitialized ? 'connected' : 'disconnected'
             };
         },
         getConfig: () => ({ ...config }),
-        isReady: () => isInitialized
+        isReady: () => isInitialized,
+        getDatabaseManager: () => dbManager
     });
 }
 
