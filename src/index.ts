@@ -120,6 +120,23 @@ export function apply(ctx: Context, config: PluginConfig) {
     let dbManager: any = null;
     let isInitialized = false;
     
+    /**
+     * Get server ID from parameter or group binding
+     */
+    async function getServerId(session: any, providedId?: string): Promise<string | null> {
+        if (providedId) {
+            return providedId;
+        }
+        
+        // Try to get from group binding
+        if (session?.guildId && dbManager) {
+            const serverId = await dbManager.getGroupPrimaryServer(session.guildId);
+            return serverId;
+        }
+        
+        return null;
+    }
+    
     // Initialize on ready
     ctx.on('ready', async () => {
         try {
@@ -347,21 +364,25 @@ export function apply(ctx: Context, config: PluginConfig) {
                '  mochi.whitelist.remove <serverId> <player> - 从白名单移除';
       });
     
-    ctx.command('mochi.whitelist.list <serverId>', '查看服务器白名单')
+    ctx.command('mochi.whitelist.list [serverId]', '查看服务器白名单')
       .action(async ({ session }, serverId) => {
         if (!isInitialized || !dbManager) {
           return '插件尚未初始化完成';
         }
         
-        if (!serverId) {
-          return '用法: mochi.whitelist.list <serverId>';
+        // 获取服务器 ID（从参数或群组绑定）
+        const targetServerId = await getServerId(session, serverId);
+        if (!targetServerId) {
+          return '请指定服务器 ID 或在群组中绑定服务器\n' +
+                 '用法: mochi.whitelist.list <serverId>\n' +
+                 '或在群组中: mochi.bind.add <serverId>';
         }
         
         try {
           // 验证服务器存在
-          const server = await dbManager.getServer(serverId);
+          const server = await dbManager.getServer(targetServerId);
           if (!server) {
-            return `服务器 ${serverId} 不存在`;
+            return `服务器 ${targetServerId} 不存在`;
           }
           
           // TODO: 调用实际的白名单服务
@@ -373,33 +394,53 @@ export function apply(ctx: Context, config: PluginConfig) {
         }
       });
     
-    ctx.command('mochi.whitelist.add <serverId> <player>', '添加玩家到白名单')
-      .action(async ({ session }, serverId, player) => {
+    ctx.command('mochi.whitelist.add [serverId] <player>', '添加玩家到白名单')
+      .action(async ({ session }, serverIdOrPlayer, player) => {
         if (!isInitialized || !dbManager) {
           return '插件尚未初始化完成';
         }
         
-        if (!serverId || !player) {
-          return '用法: mochi.whitelist.add <serverId> <player>';
+        // 判断参数：如果只有一个参数，则为 player，serverId 从群组绑定获取
+        let targetServerId: string | null;
+        let targetPlayer: string;
+        
+        if (!player) {
+          // 只有一个参数，从群组绑定获取服务器
+          targetServerId = await getServerId(session);
+          targetPlayer = serverIdOrPlayer;
+        } else {
+          // 两个参数，第一个是服务器 ID
+          targetServerId = serverIdOrPlayer;
+          targetPlayer = player;
+        }
+        
+        if (!targetServerId) {
+          return '请指定服务器 ID 或在群组中绑定服务器\n' +
+                 '用法: mochi.whitelist.add <serverId> <player>\n' +
+                 '或在群组中: mochi.whitelist.add <player>';
+        }
+        
+        if (!targetPlayer) {
+          return '请指定玩家名称';
         }
         
         try {
-          const server = await dbManager.getServer(serverId);
+          const server = await dbManager.getServer(targetServerId);
           if (!server) {
-            return `服务器 ${serverId} 不存在`;
+            return `服务器 ${targetServerId} 不存在`;
           }
           
           // 记录审计日志
           await dbManager.createAuditLog({
             user_id: session?.userId,
-            server_id: serverId,
+            server_id: targetServerId,
             operation: 'whitelist.add',
-            operation_data: JSON.stringify({ player }),
+            operation_data: JSON.stringify({ player: targetPlayer }),
             result: 'success'
           });
           
           // TODO: 调用实际的白名单服务
-          return `已将 ${player} 添加到服务器 ${server.name} 的白名单\n` +
+          return `已将 ${targetPlayer} 添加到服务器 ${server.name} 的白名单\n` +
                  `提示: 需要服务器连接后才能同步到游戏`;
         } catch (error) {
           logger.error('Failed to add to whitelist:', error);
@@ -594,6 +635,164 @@ export function apply(ctx: Context, config: PluginConfig) {
         } catch (error) {
           logger.error('Failed to execute command:', error);
           return '执行命令失败';
+        }
+      });
+    
+    // ========================================================================
+    // 群组绑定管理
+    // ========================================================================
+    
+    ctx.command('mochi.bind', '群组绑定管理')
+      .action(() => {
+        return '群组绑定管理命令：\n' +
+               '  mochi.bind.add <serverId> - 绑定服务器到当前群组\n' +
+               '  mochi.bind.list - 查看当前群组绑定\n' +
+               '  mochi.bind.remove <bindingId> - 解除绑定\n' +
+               '  mochi.bind.set <serverId> - 设置默认服务器';
+      });
+    
+    ctx.command('mochi.bind.add <serverId>', '绑定服务器到当前群组')
+      .option('type', '-t <type:string> 绑定类型 (full/monitor/command)', { fallback: 'full' })
+      .action(async ({ session, options }, serverId) => {
+        if (!isInitialized || !dbManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!session?.guildId) {
+          return '此命令只能在群组中使用';
+        }
+        
+        if (!serverId) {
+          return '用法: mochi.bind.add <serverId> [-t type]';
+        }
+        
+        if (!options) {
+          return '选项参数错误';
+        }
+        
+        try {
+          // 验证服务器存在
+          const server = await dbManager.getServer(serverId);
+          if (!server) {
+            return `服务器 ${serverId} 不存在`;
+          }
+          
+          // 检查是否已绑定
+          const existingBindings = await dbManager.getGroupBindings(session.guildId);
+          const alreadyBound = existingBindings.find((b: any) => b.server_id === serverId);
+          if (alreadyBound) {
+            return `服务器 ${server.name} 已绑定到此群组`;
+          }
+          
+          // 创建绑定
+          const binding = await dbManager.createGroupBinding({
+            group_id: session.guildId,
+            server_id: serverId,
+            binding_type: options.type,
+            config: JSON.stringify({}),
+            created_by: session.userId || 'unknown',
+            status: 'active'
+          });
+          
+          // 记录审计日志
+          await dbManager.createAuditLog({
+            user_id: session.userId,
+            server_id: serverId,
+            operation: 'binding.create',
+            operation_data: JSON.stringify({ 
+              groupId: session.guildId, 
+              bindingType: options.type 
+            }),
+            result: 'success'
+          });
+          
+          return `已将服务器 ${server.name} 绑定到当前群组\n` +
+                 `绑定类型: ${options.type}\n` +
+                 `绑定 ID: ${binding.id}\n` +
+                 `提示: 现在可以在群组中直接使用命令，无需指定服务器 ID`;
+        } catch (error) {
+          logger.error('Failed to create binding:', error);
+          return '创建绑定失败';
+        }
+      });
+    
+    ctx.command('mochi.bind.list', '查看当前群组的服务器绑定')
+      .action(async ({ session }) => {
+        if (!isInitialized || !dbManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!session?.guildId) {
+          return '此命令只能在群组中使用';
+        }
+        
+        try {
+          const bindings = await dbManager.getGroupBindings(session.guildId);
+          
+          if (bindings.length === 0) {
+            return '当前群组暂无绑定的服务器\n' +
+                   '使用 mochi.bind.add <serverId> 绑定服务器';
+          }
+          
+          let result = '当前群组绑定的服务器：\n';
+          for (const binding of bindings) {
+            const server = await dbManager.getServer(binding.server_id);
+            if (server) {
+              result += `  [${binding.id}] ${server.name} (${server.id}) - ${binding.binding_type} - ${binding.status}\n`;
+            }
+          }
+          
+          return result;
+        } catch (error) {
+          logger.error('Failed to list bindings:', error);
+          return '获取绑定列表失败';
+        }
+      });
+    
+    ctx.command('mochi.bind.remove <bindingId:number>', '解除服务器绑定')
+      .action(async ({ session }, bindingId) => {
+        if (!isInitialized || !dbManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!session?.guildId) {
+          return '此命令只能在群组中使用';
+        }
+        
+        if (!bindingId) {
+          return '用法: mochi.bind.remove <bindingId>';
+        }
+        
+        try {
+          // 验证绑定属于当前群组
+          const bindings = await dbManager.getGroupBindings(session.guildId);
+          const binding = bindings.find((b: any) => b.id === bindingId);
+          
+          if (!binding) {
+            return `绑定 ${bindingId} 不存在或不属于当前群组`;
+          }
+          
+          const server = await dbManager.getServer(binding.server_id);
+          
+          // 删除绑定
+          await dbManager.deleteGroupBinding(bindingId);
+          
+          // 记录审计日志
+          await dbManager.createAuditLog({
+            user_id: session.userId,
+            server_id: binding.server_id,
+            operation: 'binding.delete',
+            operation_data: JSON.stringify({ 
+              groupId: session.guildId,
+              bindingId 
+            }),
+            result: 'success'
+          });
+          
+          return `已解除服务器 ${server?.name || binding.server_id} 的绑定`;
+        } catch (error) {
+          logger.error('Failed to remove binding:', error);
+          return '解除绑定失败';
         }
       });
     

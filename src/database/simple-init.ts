@@ -62,6 +62,18 @@ export interface AuditLog {
   timestamp: Date;
 }
 
+export interface GroupBinding {
+  id: number;
+  group_id: string;
+  server_id: string;
+  binding_type: 'full' | 'monitor' | 'command';
+  config: string; // JSON string
+  created_by: string;
+  created_at: Date;
+  updated_at: Date;
+  status: 'active' | 'inactive';
+}
+
 // ============================================================================
 // Extend Koishi Tables
 // ============================================================================
@@ -72,6 +84,7 @@ declare module 'koishi' {
     'mochi_server_acl': ServerACL;
     'mochi_api_tokens': APIToken;
     'mochi_audit_logs': AuditLog;
+    'mochi_group_bindings': GroupBinding;
   }
 }
 
@@ -155,6 +168,22 @@ export class SimpleDatabaseManager {
       primary: 'id',
       autoInc: true
     });
+
+    // Group Bindings Table
+    ctx.model.extend(`${prefix}group_bindings` as any, {
+      id: 'unsigned',
+      group_id: 'string',
+      server_id: 'string',
+      binding_type: { type: 'string', initial: 'full' },
+      config: 'text',
+      created_by: 'string',
+      created_at: 'timestamp',
+      updated_at: 'timestamp',
+      status: { type: 'string', initial: 'active' }
+    }, {
+      primary: 'id',
+      autoInc: true
+    });
   }
 
   /**
@@ -227,5 +256,64 @@ export class SimpleDatabaseManager {
     const prefix = this.tablePrefix.replace(/\.$/, '_');
     const logs = await this.ctx.database.get(`${prefix}audit_logs` as any, {});
     return logs.slice(-limit) as any;
+  }
+
+  /**
+   * Create group binding
+   */
+  async createGroupBinding(binding: Omit<GroupBinding, 'id' | 'created_at' | 'updated_at'>): Promise<GroupBinding> {
+    const prefix = this.tablePrefix.replace(/\.$/, '_');
+    const now = new Date();
+    const newBinding: any = {
+      ...binding,
+      created_at: now,
+      updated_at: now
+    };
+    
+    const result = await this.ctx.database.create(`${prefix}group_bindings` as any, newBinding);
+    return { ...newBinding, id: result.id } as GroupBinding;
+  }
+
+  /**
+   * Get group bindings by group ID
+   */
+  async getGroupBindings(groupId: string): Promise<GroupBinding[]> {
+    const prefix = this.tablePrefix.replace(/\.$/, '_');
+    const bindings = await this.ctx.database.get(`${prefix}group_bindings` as any, { 
+      group_id: groupId,
+      status: 'active'
+    });
+    return bindings as any;
+  }
+
+  /**
+   * Get primary server for a group
+   */
+  async getGroupPrimaryServer(groupId: string): Promise<string | null> {
+    const bindings = await this.getGroupBindings(groupId);
+    if (bindings.length === 0) return null;
+    
+    // Return the first active binding's server
+    return bindings[0].server_id;
+  }
+
+  /**
+   * Delete group binding
+   */
+  async deleteGroupBinding(id: number): Promise<void> {
+    const prefix = this.tablePrefix.replace(/\.$/, '_');
+    await this.ctx.database.remove(`${prefix}group_bindings` as any, { id });
+  }
+
+  /**
+   * Get all bindings for a server
+   */
+  async getServerBindings(serverId: string): Promise<GroupBinding[]> {
+    const prefix = this.tablePrefix.replace(/\.$/, '_');
+    const bindings = await this.ctx.database.get(`${prefix}group_bindings` as any, { 
+      server_id: serverId,
+      status: 'active'
+    });
+    return bindings as any;
   }
 }
