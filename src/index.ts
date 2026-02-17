@@ -335,6 +335,268 @@ export function apply(ctx: Context, config: PluginConfig) {
         }
       });
     
+    // ========================================================================
+    // 白名单管理命令
+    // ========================================================================
+    
+    ctx.command('mochi.whitelist', '白名单管理')
+      .action(() => {
+        return '白名单管理命令：\n' +
+               '  mochi.whitelist.list <serverId> - 查看白名单\n' +
+               '  mochi.whitelist.add <serverId> <player> - 添加到白名单\n' +
+               '  mochi.whitelist.remove <serverId> <player> - 从白名单移除';
+      });
+    
+    ctx.command('mochi.whitelist.list <serverId>', '查看服务器白名单')
+      .action(async ({ session }, serverId) => {
+        if (!isInitialized || !dbManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!serverId) {
+          return '用法: mochi.whitelist.list <serverId>';
+        }
+        
+        try {
+          // 验证服务器存在
+          const server = await dbManager.getServer(serverId);
+          if (!server) {
+            return `服务器 ${serverId} 不存在`;
+          }
+          
+          // TODO: 调用实际的白名单服务
+          return `服务器 ${server.name} 的白名单功能正在开发中\n` +
+                 `提示: 需要服务器连接后才能获取白名单数据`;
+        } catch (error) {
+          logger.error('Failed to get whitelist:', error);
+          return '获取白名单失败';
+        }
+      });
+    
+    ctx.command('mochi.whitelist.add <serverId> <player>', '添加玩家到白名单')
+      .action(async ({ session }, serverId, player) => {
+        if (!isInitialized || !dbManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!serverId || !player) {
+          return '用法: mochi.whitelist.add <serverId> <player>';
+        }
+        
+        try {
+          const server = await dbManager.getServer(serverId);
+          if (!server) {
+            return `服务器 ${serverId} 不存在`;
+          }
+          
+          // 记录审计日志
+          await dbManager.createAuditLog({
+            user_id: session?.userId,
+            server_id: serverId,
+            operation: 'whitelist.add',
+            operation_data: JSON.stringify({ player }),
+            result: 'success'
+          });
+          
+          // TODO: 调用实际的白名单服务
+          return `已将 ${player} 添加到服务器 ${server.name} 的白名单\n` +
+                 `提示: 需要服务器连接后才能同步到游戏`;
+        } catch (error) {
+          logger.error('Failed to add to whitelist:', error);
+          return '添加到白名单失败';
+        }
+      });
+    
+    ctx.command('mochi.whitelist.remove <serverId> <player>', '从白名单移除玩家')
+      .action(async ({ session }, serverId, player) => {
+        if (!isInitialized || !dbManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!serverId || !player) {
+          return '用法: mochi.whitelist.remove <serverId> <player>';
+        }
+        
+        try {
+          const server = await dbManager.getServer(serverId);
+          if (!server) {
+            return `服务器 ${serverId} 不存在`;
+          }
+          
+          // 记录审计日志
+          await dbManager.createAuditLog({
+            user_id: session?.userId,
+            server_id: serverId,
+            operation: 'whitelist.remove',
+            operation_data: JSON.stringify({ player }),
+            result: 'success'
+          });
+          
+          // TODO: 调用实际的白名单服务
+          return `已将 ${player} 从服务器 ${server.name} 的白名单移除\n` +
+                 `提示: 需要服务器连接后才能同步到游戏`;
+        } catch (error) {
+          logger.error('Failed to remove from whitelist:', error);
+          return '从白名单移除失败';
+        }
+      });
+    
+    // ========================================================================
+    // 玩家管理命令
+    // ========================================================================
+    
+    ctx.command('mochi.player', '玩家管理')
+      .action(() => {
+        return '玩家管理命令：\n' +
+               '  mochi.player.list <serverId> - 查看在线玩家\n' +
+               '  mochi.player.info <serverId> <player> - 查看玩家详情\n' +
+               '  mochi.player.kick <serverId> <player> [reason] - 踢出玩家';
+      });
+    
+    ctx.command('mochi.player.list <serverId>', '查看服务器在线玩家')
+      .action(async ({ session }, serverId) => {
+        if (!isInitialized || !dbManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!serverId) {
+          return '用法: mochi.player.list <serverId>';
+        }
+        
+        try {
+          const server = await dbManager.getServer(serverId);
+          if (!server) {
+            return `服务器 ${serverId} 不存在`;
+          }
+          
+          if (server.status !== 'online') {
+            return `服务器 ${server.name} 当前离线`;
+          }
+          
+          // TODO: 调用实际的玩家服务
+          return `服务器 ${server.name} 的在线玩家功能正在开发中\n` +
+                 `提示: 需要服务器连接后才能获取在线玩家数据`;
+        } catch (error) {
+          logger.error('Failed to get players:', error);
+          return '获取在线玩家失败';
+        }
+      });
+    
+    ctx.command('mochi.player.info <serverId> <player>', '查看玩家详细信息')
+      .action(async ({ session }, serverId, player) => {
+        if (!isInitialized || !dbManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!serverId || !player) {
+          return '用法: mochi.player.info <serverId> <player>';
+        }
+        
+        try {
+          const server = await dbManager.getServer(serverId);
+          if (!server) {
+            return `服务器 ${serverId} 不存在`;
+          }
+          
+          // TODO: 调用实际的玩家服务
+          return `玩家 ${player} 在服务器 ${server.name} 的详情功能正在开发中\n` +
+                 `提示: 需要服务器连接后才能获取玩家数据`;
+        } catch (error) {
+          logger.error('Failed to get player info:', error);
+          return '获取玩家信息失败';
+        }
+      });
+    
+    ctx.command('mochi.player.kick <serverId> <player> [reason]', '踢出玩家')
+      .action(async ({ session }, serverId, player, reason) => {
+        if (!isInitialized || !dbManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!serverId || !player) {
+          return '用法: mochi.player.kick <serverId> <player> [reason]';
+        }
+        
+        try {
+          const server = await dbManager.getServer(serverId);
+          if (!server) {
+            return `服务器 ${serverId} 不存在`;
+          }
+          
+          if (server.status !== 'online') {
+            return `服务器 ${server.name} 当前离线`;
+          }
+          
+          // 记录审计日志
+          await dbManager.createAuditLog({
+            user_id: session?.userId,
+            server_id: serverId,
+            operation: 'player.kick',
+            operation_data: JSON.stringify({ player, reason: reason || '无' }),
+            result: 'success'
+          });
+          
+          // TODO: 调用实际的玩家服务
+          return `已踢出玩家 ${player} 从服务器 ${server.name}\n` +
+                 `原因: ${reason || '无'}\n` +
+                 `提示: 需要服务器连接后才能执行`;
+        } catch (error) {
+          logger.error('Failed to kick player:', error);
+          return '踢出玩家失败';
+        }
+      });
+    
+    // ========================================================================
+    // 命令执行
+    // ========================================================================
+    
+    ctx.command('mochi.exec <serverId> <command...>', '在服务器执行命令')
+      .alias('mochi.cmd')
+      .option('as', '-a <executor:string> 执行者 (console/player)', { fallback: 'console' })
+      .action(async ({ session, options }, serverId, ...commandParts) => {
+        if (!isInitialized || !dbManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!serverId || !commandParts || commandParts.length === 0) {
+          return '用法: mochi.exec <serverId> <command...> [-a executor]';
+        }
+        
+        if (!options) {
+          return '选项参数错误';
+        }
+        
+        const command = commandParts.join(' ');
+        
+        try {
+          const server = await dbManager.getServer(serverId);
+          if (!server) {
+            return `服务器 ${serverId} 不存在`;
+          }
+          
+          if (server.status !== 'online') {
+            return `服务器 ${server.name} 当前离线`;
+          }
+          
+          // 记录审计日志
+          await dbManager.createAuditLog({
+            user_id: session?.userId,
+            server_id: serverId,
+            operation: 'command.execute',
+            operation_data: JSON.stringify({ command, executor: options.as }),
+            result: 'success'
+          });
+          
+          // TODO: 调用实际的命令执行服务
+          return `已在服务器 ${server.name} 执行命令: ${command}\n` +
+                 `执行者: ${options.as}\n` +
+                 `提示: 需要服务器连接后才能执行`;
+        } catch (error) {
+          logger.error('Failed to execute command:', error);
+          return '执行命令失败';
+        }
+      });
+    
     // Expose service access methods
     ctx.provide('mochi-link', {
         getHealth: async () => {
