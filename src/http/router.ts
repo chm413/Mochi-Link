@@ -921,7 +921,7 @@ export class APIRouter {
       const response = {
         totalRequested: req.body.bindings.length,
         successCount: results.length,
-        results: results.map((binding, index) => ({
+        results: results.map((binding: any, index: number) => ({
           groupId: req.body.bindings[index].groupId,
           serverId: req.body.bindings[index].serverId,
           bindingType: req.body.bindings[index].bindingType,

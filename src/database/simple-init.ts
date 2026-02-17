@@ -68,10 +68,10 @@ export interface AuditLog {
 
 declare module 'koishi' {
   interface Tables {
-    'mochi.servers': MinecraftServer;
-    'mochi.server_acl': ServerACL;
-    'mochi.api_tokens': APIToken;
-    'mochi.audit_logs': AuditLog;
+    'mochi_servers': MinecraftServer;
+    'mochi_server_acl': ServerACL;
+    'mochi_api_tokens': APIToken;
+    'mochi_audit_logs': AuditLog;
   }
 }
 
@@ -87,9 +87,10 @@ export class SimpleDatabaseManager {
    */
   async initialize(): Promise<void> {
     const ctx = this.ctx;
+    const prefix = this.tablePrefix.replace(/\.$/, '_'); // Replace . with _
 
     // Minecraft Servers Table
-    ctx.model.extend(`${this.tablePrefix}.servers`, {
+    ctx.model.extend(`${prefix}servers` as any, {
       id: 'string',
       name: 'string',
       core_type: 'string',
@@ -108,7 +109,7 @@ export class SimpleDatabaseManager {
     });
 
     // Server Access Control List Table
-    ctx.model.extend(`${this.tablePrefix}.server_acl`, {
+    ctx.model.extend(`${prefix}server_acl` as any, {
       id: 'unsigned',
       user_id: 'string',
       server_id: 'string',
@@ -123,7 +124,7 @@ export class SimpleDatabaseManager {
     });
 
     // API Tokens Table
-    ctx.model.extend(`${this.tablePrefix}.api_tokens`, {
+    ctx.model.extend(`${prefix}api_tokens` as any, {
       id: 'unsigned',
       server_id: 'string',
       token: 'string',
@@ -139,7 +140,7 @@ export class SimpleDatabaseManager {
     });
 
     // Audit Logs Table
-    ctx.model.extend(`${this.tablePrefix}.audit_logs`, {
+    ctx.model.extend(`${prefix}audit_logs` as any, {
       id: 'unsigned',
       user_id: 'string',
       server_id: 'string',
@@ -161,13 +162,14 @@ export class SimpleDatabaseManager {
    */
   async createServer(server: Omit<MinecraftServer, 'created_at' | 'updated_at'>): Promise<MinecraftServer> {
     const now = new Date();
+    const prefix = this.tablePrefix.replace(/\.$/, '_');
     const newServer: MinecraftServer = {
       ...server,
       created_at: now,
       updated_at: now
     };
 
-    await this.ctx.database.create(`${this.tablePrefix}.servers`, newServer);
+    await this.ctx.database.create(`${prefix}servers` as any, newServer);
     return newServer;
   }
 
@@ -175,22 +177,25 @@ export class SimpleDatabaseManager {
    * Get server by ID
    */
   async getServer(id: string): Promise<MinecraftServer | null> {
-    const servers = await this.ctx.database.get(`${this.tablePrefix}.servers`, { id });
-    return servers[0] || null;
+    const prefix = this.tablePrefix.replace(/\.$/, '_');
+    const servers = await this.ctx.database.get(`${prefix}servers` as any, { id });
+    return (servers[0] as any) || null;
   }
 
   /**
    * List all servers
    */
   async listServers(): Promise<MinecraftServer[]> {
-    return await this.ctx.database.get(`${this.tablePrefix}.servers`, {});
+    const prefix = this.tablePrefix.replace(/\.$/, '_');
+    return await this.ctx.database.get(`${prefix}servers` as any, {}) as any;
   }
 
   /**
    * Update server
    */
   async updateServer(id: string, updates: Partial<MinecraftServer>): Promise<void> {
-    await this.ctx.database.set(`${this.tablePrefix}.servers`, { id }, {
+    const prefix = this.tablePrefix.replace(/\.$/, '_');
+    await this.ctx.database.set(`${prefix}servers` as any, { id }, {
       ...updates,
       updated_at: new Date()
     });
@@ -200,14 +205,16 @@ export class SimpleDatabaseManager {
    * Delete server
    */
   async deleteServer(id: string): Promise<void> {
-    await this.ctx.database.remove(`${this.tablePrefix}.servers`, { id });
+    const prefix = this.tablePrefix.replace(/\.$/, '_');
+    await this.ctx.database.remove(`${prefix}servers` as any, { id });
   }
 
   /**
    * Create audit log
    */
   async createAuditLog(log: Omit<AuditLog, 'id' | 'timestamp'>): Promise<void> {
-    await this.ctx.database.create(`${this.tablePrefix}.audit_logs`, {
+    const prefix = this.tablePrefix.replace(/\.$/, '_');
+    await this.ctx.database.create(`${prefix}audit_logs` as any, {
       ...log,
       timestamp: new Date()
     });
@@ -217,7 +224,8 @@ export class SimpleDatabaseManager {
    * Get recent audit logs
    */
   async getAuditLogs(limit: number = 100): Promise<AuditLog[]> {
-    const logs = await this.ctx.database.get(`${this.tablePrefix}.audit_logs`, {});
-    return logs.slice(-limit);
+    const prefix = this.tablePrefix.replace(/\.$/, '_');
+    const logs = await this.ctx.database.get(`${prefix}audit_logs` as any, {});
+    return logs.slice(-limit) as any;
   }
 }

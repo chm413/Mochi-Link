@@ -29,6 +29,7 @@ export interface RequestContext {
   banId?: string;
   alertId?: string;
   bindingId?: string;
+  groupId?: string;
   ipAddress: string;
   userAgent?: string;
   timestamp: number;

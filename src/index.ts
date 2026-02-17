@@ -180,7 +180,7 @@ export function apply(ctx: Context, config: PluginConfig) {
             return '暂无服务器';
           }
           
-          return '服务器列表：\n' + servers.map(s => 
+          return '服务器列表：\n' + servers.map((s: any) => 
             `  [${s.id}] ${s.name} (${s.core_type}/${s.core_name}) - ${s.status}`
           ).join('\n');
         } catch (error) {
@@ -199,6 +199,10 @@ export function apply(ctx: Context, config: PluginConfig) {
         
         if (!id || !name) {
           return '用法: mochi.server.add <id> <name> [-t type] [-c core]';
+        }
+        
+        if (!options) {
+          return '选项参数错误';
         }
         
         try {
@@ -309,13 +313,17 @@ export function apply(ctx: Context, config: PluginConfig) {
           return '插件尚未初始化完成';
         }
         
+        if (!options) {
+          return '选项参数错误';
+        }
+        
         try {
           const logs = await dbManager.getAuditLogs(options.limit);
           if (logs.length === 0) {
             return '暂无审计日志';
           }
           
-          return '审计日志：\n' + logs.map(log => 
+          return '审计日志：\n' + logs.map((log: any) => 
             `  [${log.timestamp.toLocaleString()}] ${log.operation} - ${log.result}` +
             (log.user_id ? ` (用户: ${log.user_id})` : '') +
             (log.server_id ? ` (服务器: ${log.server_id})` : '')

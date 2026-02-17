@@ -54,10 +54,10 @@ export interface AuditLog {
 }
 declare module 'koishi' {
     interface Tables {
-        'mochi.servers': MinecraftServer;
-        'mochi.server_acl': ServerACL;
-        'mochi.api_tokens': APIToken;
-        'mochi.audit_logs': AuditLog;
+        'mochi_servers': MinecraftServer;
+        'mochi_server_acl': ServerACL;
+        'mochi_api_tokens': APIToken;
+        'mochi_audit_logs': AuditLog;
     }
 }
 export declare class SimpleDatabaseManager {
