@@ -2,7 +2,7 @@
 
 ## 版本信息
 - **插件名称**: koishi-plugin-mochi-link
-- **当前版本**: 1.0.2
+- **当前版本**: 1.0.3
 - **最后更新**: 2026-02-17
 
 ## 验证结果
@@ -100,6 +100,13 @@ koishi-plugin-mochi-link/
 - ✅ 添加 `engines` 字段指定 Node.js 版本要求
 - ✅ 修复 health-monitoring 服务调用参数问题
 
+### v1.0.3 (2026-02-17) ⭐ 当前版本
+- ✅ 重写插件入口，使用延迟加载避免模块解析错误
+- ✅ 修复 `Cannot find module './database/init'` 错误
+- ✅ 改用纯函数式插件，移除 Service 类继承
+- ✅ 在 `ready` 事件中才加载重型依赖
+- ✅ 简化插件结构，提高加载成功率
+
 ### v1.0.2 (2026-02-17)
 - ✅ 添加缺失的 `lib/plugins/integrations/index.js`
 - ✅ 修复 `.npmignore` 配置，正确包含 README.md
@@ -158,6 +165,11 @@ node test-plugin-load.js
 
 ## 已知问题
 
+### ✅ 已修复（v1.0.3）
+
+- ~~模块加载错误 `Cannot find module './database/init'`~~ - 已通过延迟加载修复
+- ~~插件加载失败~~ - 已通过重写入口文件修复
+
 ### ⚠️ 编译错误（不影响使用）
 
 源代码中存在一些 TypeScript 编译错误，但不影响已编译的 `lib/` 目录使用：
@@ -207,4 +219,4 @@ node test-plugin-load.js
 
 **验证人**: Kiro AI Assistant  
 **验证日期**: 2026-02-17  
-**验证版本**: v1.0.2
+**验证版本**: v1.0.3
