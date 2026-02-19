@@ -1,0 +1,288 @@
+# Mochi-Link (大福连) - 简体中文语言包
+
+commands:
+  mochi:
+    description: Mochi-Link 管理命令
+    messages:
+      welcome: |-
+        Mochi-Link (大福连) - Minecraft 统一管理系统
+        使用 mochi.help 查看可用命令
+  
+  # 服务器管理
+  mochi.server:
+    description: 服务器管理
+    messages:
+      menu: |-
+        服务器管理命令：
+          mochi.server.list - 列出所有服务器
+          mochi.server.add <id> <name> - 添加服务器
+          mochi.server.info <id> - 查看服务器信息
+          mochi.server.remove <id> - 删除服务器
+  
+  mochi.server.list:
+    description: 列出所有服务器
+    messages:
+      no-servers: 暂无服务器
+      list-header: "服务器列表："
+      server-item: "  [{0}] {1} ({2}/{3}) - {4}"
+  
+  mochi.server.add:
+    description: 添加服务器
+    options:
+      type: 服务器类型 (java/bedrock)
+      core: 核心名称
+    messages:
+      usage: "用法: mochi.server.add <id> <name> [-t type] [-c core]"
+      exists: "服务器 {0} 已存在"
+      success: "服务器 {0} ({1}) 创建成功"
+      failed: 创建服务器失败
+  
+  mochi.server.info:
+    description: 查看服务器信息
+    messages:
+      usage: "用法: mochi.server.info <id>"
+      not-found: "服务器 {0} 不存在"
+      info: |-
+        服务器信息：
+          ID: {0}
+          名称: {1}
+          类型: {2}
+          核心: {3}
+          版本: {4}
+          状态: {5}
+          连接模式: {6}
+          创建时间: {7}
+          最后更新: {8}
+      failed: 获取服务器信息失败
+  
+  mochi.server.remove:
+    description: 删除服务器
+    messages:
+      usage: "用法: mochi.server.remove <id>"
+      not-found: "服务器 {0} 不存在"
+      success: "服务器 {0} ({1}) 已删除"
+      failed: 删除服务器失败
+  
+  # 群组绑定
+  mochi.bind:
+    description: 群组绑定管理
+    messages:
+      menu: |-
+        群组绑定管理命令：
+          mochi.bind.add <serverId> - 绑定服务器到当前群组
+          mochi.bind.list - 查看当前群组绑定
+          mochi.bind.remove <bindingId> - 解除绑定
+  
+  mochi.bind.add:
+    description: 绑定服务器到当前群组
+    options:
+      type: 绑定类型 (full/monitor/command)
+    messages:
+      guild-only: 此命令只能在群组中使用
+      usage: "用法: mochi.bind.add <serverId> [-t type]"
+      not-found: "服务器 {0} 不存在"
+      already-bound: "服务器 {0} 已绑定到此群组"
+      success: |-
+        已将服务器 {0} 绑定到当前群组
+        绑定类型: {1}
+        绑定 ID: {2}
+        提示: 现在可以在群组中直接使用命令，无需指定服务器 ID
+      failed: 创建绑定失败
+  
+  mochi.bind.list:
+    description: 查看当前群组的服务器绑定
+    messages:
+      guild-only: 此命令只能在群组中使用
+      no-bindings: |-
+        当前群组暂无绑定的服务器
+        使用 mochi.bind.add <serverId> 绑定服务器
+      list-header: "当前群组绑定的服务器："
+      binding-item: "  [{0}] {1} ({2}) - {3} - {4}"
+      failed: 获取绑定列表失败
+  
+  mochi.bind.remove:
+    description: 解除服务器绑定
+    messages:
+      guild-only: 此命令只能在群组中使用
+      usage: "用法: mochi.bind.remove <bindingId>"
+      not-found: "绑定 {0} 不存在或不属于当前群组"
+      success: "已解除服务器 {0} 的绑定"
+      failed: 解除绑定失败
+  
+  # 白名单管理
+  mochi.whitelist:
+    description: 白名单管理
+    messages:
+      menu: |-
+        白名单管理命令：
+          mochi.whitelist.list <serverId> - 查看白名单
+          mochi.whitelist.add <serverId> <player> - 添加到白名单
+          mochi.whitelist.remove <serverId> <player> - 从白名单移除
+  
+  mochi.whitelist.list:
+    description: 查看服务器白名单
+    messages:
+      usage: |-
+        请指定服务器 ID 或在群组中绑定服务器
+        用法: mochi.whitelist.list <serverId>
+        或在群组中: mochi.bind.add <serverId>
+      not-found: "服务器 {0} 不存在"
+      empty: "服务器 {0} 的白名单为空"
+      list-header: "服务器 {0} 的白名单 ({1} 人)："
+      player-item: "  [{0}] {1}"
+      service-error: |-
+        获取白名单失败: {0}
+        提示: 确保服务器已连接
+      no-service: |-
+        服务器 {0} 的白名单功能需要服务器连接
+        提示: 请确保服务器已通过 WebSocket 连接
+      failed: 获取白名单失败
+  
+  mochi.whitelist.add:
+    description: 添加玩家到白名单
+    messages:
+      usage: |-
+        请指定服务器 ID 或在群组中绑定服务器
+        用法: mochi.whitelist.add <serverId> <player>
+        或在群组中: mochi.whitelist.add <player>
+      no-player: 请指定玩家名称
+      not-found: "服务器 {0} 不存在"
+      success: "已将 {0} 添加到服务器 {1} 的白名单"
+      service-error: "添加到白名单失败: {0}"
+      no-service: |-
+        服务器 {0} 的白名单功能需要服务器连接
+        提示: 请确保服务器已通过 WebSocket 连接
+      failed: 添加到白名单失败
+  
+  mochi.whitelist.remove:
+    description: 从白名单移除玩家
+    messages:
+      usage: |-
+        请指定服务器 ID 或在群组中绑定服务器
+        用法: mochi.whitelist.remove <serverId> <player>
+        或在群组中: mochi.whitelist.remove <player>
+      no-player: 请指定玩家名称
+      not-found: "服务器 {0} 不存在"
+      success: "已将 {0} 从服务器 {1} 的白名单移除"
+      service-error: "从白名单移除失败: {0}"
+      no-service: |-
+        服务器 {0} 的白名单功能需要服务器连接
+        提示: 请确保服务器已通过 WebSocket 连接
+      failed: 从白名单移除失败
+  
+  # 玩家管理
+  mochi.player:
+    description: 玩家管理
+    messages:
+      menu: |-
+        玩家管理命令：
+          mochi.player.list <serverId> - 查看在线玩家
+          mochi.player.info <serverId> <player> - 查看玩家详情
+          mochi.player.kick <serverId> <player> [reason] - 踢出玩家
+  
+  mochi.player.list:
+    description: 查看服务器在线玩家
+    messages:
+      usage: 请指定服务器 ID 或在群组中绑定服务器
+      not-found: "服务器 {0} 不存在"
+      offline: "服务器 {0} 当前离线"
+      empty: "服务器 {0} 当前无在线玩家"
+      list-header: "服务器 {0} 在线玩家 ({1} 人)："
+      player-item: "  [{0}] {1}"
+      player-detail: " - 生命: {0}/20 - 等级: {1} - {2}"
+      service-error: "获取在线玩家失败: {0}"
+      no-service: "服务器 {0} 的玩家查询功能需要服务器连接"
+      failed: 获取在线玩家失败
+  
+  mochi.player.info:
+    description: 查看玩家详细信息
+    messages:
+      usage: |-
+        请指定服务器 ID 或在群组中绑定服务器
+        用法: mochi.player.info <serverId> <player>
+        或在群组中: mochi.player.info <player>
+      no-player: 请指定玩家名称
+      not-found: "服务器 {0} 不存在"
+      info: |-
+        玩家 {0} 在服务器 {1} 的详情功能正在开发中
+        提示: 需要服务器连接后才能获取玩家数据
+      failed: 获取玩家信息失败
+  
+  mochi.player.kick:
+    description: 踢出玩家
+    messages:
+      usage: |-
+        请指定服务器 ID 或在群组中绑定服务器
+        用法: mochi.player.kick <serverId> <player> [reason]
+        或在群组中: mochi.player.kick <player> [reason]
+      no-player: 请指定玩家名称
+      not-found: "服务器 {0} 不存在"
+      offline: "服务器 {0} 当前离线"
+      success: |-
+        已踢出玩家 {0} 从服务器 {1}
+        原因: {2}
+      service-error: "踢出玩家失败: {0}"
+      no-service: |-
+        服务器 {0} 的踢出功能需要服务器连接
+        提示: 需要服务器连接后才能执行
+      failed: 踢出玩家失败
+  
+  # 命令执行
+  mochi.exec:
+    description: 在服务器执行命令
+    options:
+      as: 执行者 (console/player)
+    messages:
+      usage: "用法: mochi.exec <serverId> <command...> [-a executor]"
+      not-found: "服务器 {0} 不存在"
+      offline: "服务器 {0} 当前离线"
+      success: |-
+        已在服务器 {0} 执行命令: {1}
+        执行者: {2}
+        状态: {3}
+      output: "输出:\n{0}"
+      error: "\n错误: {0}"
+      service-error: "执行命令失败: {0}"
+      no-service: "服务器 {0} 的命令执行功能需要服务器连接"
+      failed: 执行命令失败
+  
+  # 审计日志
+  mochi.audit:
+    description: 查看审计日志
+    options:
+      limit: 显示条数
+    messages:
+      no-logs: 暂无审计日志
+      list-header: "审计日志："
+      log-item: "  [{0}] {1} - {2}"
+      log-user: " (用户: {0})"
+      log-server: " (服务器: {0})"
+      failed: 获取审计日志失败
+
+# 通用消息
+common:
+  not-initialized: 插件尚未初始化完成
+  option-error: 选项参数错误
+  success: 成功
+  failure: 失败
+  unknown: 未知
+  none: 无
+
+# 服务器状态
+server-status:
+  online: 在线
+  offline: 离线
+  error: 错误
+
+# 绑定类型
+binding-type:
+  full: 完整
+  monitor: 监控
+  command: 命令
+
+# 游戏模式
+game-mode:
+  survival: 生存
+  creative: 创造
+  adventure: 冒险
+  spectator: 旁观

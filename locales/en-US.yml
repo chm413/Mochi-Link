@@ -1,0 +1,288 @@
+# Mochi-Link - English Language Pack
+
+commands:
+  mochi:
+    description: Mochi-Link management commands
+    messages:
+      welcome: |-
+        Mochi-Link - Minecraft Unified Management System
+        Use mochi.help to see available commands
+  
+  # Server Management
+  mochi.server:
+    description: Server management
+    messages:
+      menu: |-
+        Server management commands:
+          mochi.server.list - List all servers
+          mochi.server.add <id> <name> - Add server
+          mochi.server.info <id> - View server information
+          mochi.server.remove <id> - Remove server
+  
+  mochi.server.list:
+    description: List all servers
+    messages:
+      no-servers: No servers found
+      list-header: "Server list:"
+      server-item: "  [{0}] {1} ({2}/{3}) - {4}"
+  
+  mochi.server.add:
+    description: Add server
+    options:
+      type: Server type (java/bedrock)
+      core: Core name
+    messages:
+      usage: "Usage: mochi.server.add <id> <name> [-t type] [-c core]"
+      exists: "Server {0} already exists"
+      success: "Server {0} ({1}) created successfully"
+      failed: Failed to create server
+  
+  mochi.server.info:
+    description: View server information
+    messages:
+      usage: "Usage: mochi.server.info <id>"
+      not-found: "Server {0} not found"
+      info: |-
+        Server information:
+          ID: {0}
+          Name: {1}
+          Type: {2}
+          Core: {3}
+          Version: {4}
+          Status: {5}
+          Connection mode: {6}
+          Created at: {7}
+          Updated at: {8}
+      failed: Failed to get server information
+  
+  mochi.server.remove:
+    description: Remove server
+    messages:
+      usage: "Usage: mochi.server.remove <id>"
+      not-found: "Server {0} not found"
+      success: "Server {0} ({1}) removed"
+      failed: Failed to remove server
+  
+  # Group Binding
+  mochi.bind:
+    description: Group binding management
+    messages:
+      menu: |-
+        Group binding commands:
+          mochi.bind.add <serverId> - Bind server to current group
+          mochi.bind.list - View current group bindings
+          mochi.bind.remove <bindingId> - Remove binding
+  
+  mochi.bind.add:
+    description: Bind server to current group
+    options:
+      type: Binding type (full/monitor/command)
+    messages:
+      guild-only: This command can only be used in groups
+      usage: "Usage: mochi.bind.add <serverId> [-t type]"
+      not-found: "Server {0} not found"
+      already-bound: "Server {0} is already bound to this group"
+      success: |-
+        Server {0} bound to current group
+        Binding type: {1}
+        Binding ID: {2}
+        Tip: You can now use commands without specifying server ID
+      failed: Failed to create binding
+  
+  mochi.bind.list:
+    description: View current group bindings
+    messages:
+      guild-only: This command can only be used in groups
+      no-bindings: |-
+        No servers bound to current group
+        Use mochi.bind.add <serverId> to bind a server
+      list-header: "Current group bindings:"
+      binding-item: "  [{0}] {1} ({2}) - {3} - {4}"
+      failed: Failed to get binding list
+  
+  mochi.bind.remove:
+    description: Remove server binding
+    messages:
+      guild-only: This command can only be used in groups
+      usage: "Usage: mochi.bind.remove <bindingId>"
+      not-found: "Binding {0} not found or doesn't belong to current group"
+      success: "Binding for server {0} removed"
+      failed: Failed to remove binding
+  
+  # Whitelist Management
+  mochi.whitelist:
+    description: Whitelist management
+    messages:
+      menu: |-
+        Whitelist management commands:
+          mochi.whitelist.list <serverId> - View whitelist
+          mochi.whitelist.add <serverId> <player> - Add to whitelist
+          mochi.whitelist.remove <serverId> <player> - Remove from whitelist
+  
+  mochi.whitelist.list:
+    description: View server whitelist
+    messages:
+      usage: |-
+        Please specify server ID or bind server in group
+        Usage: mochi.whitelist.list <serverId>
+        Or in group: mochi.bind.add <serverId>
+      not-found: "Server {0} not found"
+      empty: "Whitelist for server {0} is empty"
+      list-header: "Whitelist for server {0} ({1} players):"
+      player-item: "  [{0}] {1}"
+      service-error: |-
+        Failed to get whitelist: {0}
+        Tip: Make sure server is connected
+      no-service: |-
+        Whitelist feature for server {0} requires server connection
+        Tip: Make sure server is connected via WebSocket
+      failed: Failed to get whitelist
+  
+  mochi.whitelist.add:
+    description: Add player to whitelist
+    messages:
+      usage: |-
+        Please specify server ID or bind server in group
+        Usage: mochi.whitelist.add <serverId> <player>
+        Or in group: mochi.whitelist.add <player>
+      no-player: Please specify player name
+      not-found: "Server {0} not found"
+      success: "Added {0} to whitelist of server {1}"
+      service-error: "Failed to add to whitelist: {0}"
+      no-service: |-
+        Whitelist feature for server {0} requires server connection
+        Tip: Make sure server is connected via WebSocket
+      failed: Failed to add to whitelist
+  
+  mochi.whitelist.remove:
+    description: Remove player from whitelist
+    messages:
+      usage: |-
+        Please specify server ID or bind server in group
+        Usage: mochi.whitelist.remove <serverId> <player>
+        Or in group: mochi.whitelist.remove <player>
+      no-player: Please specify player name
+      not-found: "Server {0} not found"
+      success: "Removed {0} from whitelist of server {1}"
+      service-error: "Failed to remove from whitelist: {0}"
+      no-service: |-
+        Whitelist feature for server {0} requires server connection
+        Tip: Make sure server is connected via WebSocket
+      failed: Failed to remove from whitelist
+  
+  # Player Management
+  mochi.player:
+    description: Player management
+    messages:
+      menu: |-
+        Player management commands:
+          mochi.player.list <serverId> - View online players
+          mochi.player.info <serverId> <player> - View player details
+          mochi.player.kick <serverId> <player> [reason] - Kick player
+  
+  mochi.player.list:
+    description: View server online players
+    messages:
+      usage: Please specify server ID or bind server in group
+      not-found: "Server {0} not found"
+      offline: "Server {0} is currently offline"
+      empty: "No players online on server {0}"
+      list-header: "Online players on server {0} ({1} players):"
+      player-item: "  [{0}] {1}"
+      player-detail: " - Health: {0}/20 - Level: {1} - {2}"
+      service-error: "Failed to get online players: {0}"
+      no-service: "Player query feature for server {0} requires server connection"
+      failed: Failed to get online players
+  
+  mochi.player.info:
+    description: View player details
+    messages:
+      usage: |-
+        Please specify server ID or bind server in group
+        Usage: mochi.player.info <serverId> <player>
+        Or in group: mochi.player.info <player>
+      no-player: Please specify player name
+      not-found: "Server {0} not found"
+      info: |-
+        Player details feature for {0} on server {1} is under development
+        Tip: Server connection required to get player data
+      failed: Failed to get player information
+  
+  mochi.player.kick:
+    description: Kick player
+    messages:
+      usage: |-
+        Please specify server ID or bind server in group
+        Usage: mochi.player.kick <serverId> <player> [reason]
+        Or in group: mochi.player.kick <player> [reason]
+      no-player: Please specify player name
+      not-found: "Server {0} not found"
+      offline: "Server {0} is currently offline"
+      success: |-
+        Kicked player {0} from server {1}
+        Reason: {2}
+      service-error: "Failed to kick player: {0}"
+      no-service: |-
+        Kick feature for server {0} requires server connection
+        Tip: Server connection required to execute
+      failed: Failed to kick player
+  
+  # Command Execution
+  mochi.exec:
+    description: Execute command on server
+    options:
+      as: Executor (console/player)
+    messages:
+      usage: "Usage: mochi.exec <serverId> <command...> [-a executor]"
+      not-found: "Server {0} not found"
+      offline: "Server {0} is currently offline"
+      success: |-
+        Executed command on server {0}: {1}
+        Executor: {2}
+        Status: {3}
+      output: "Output:\n{0}"
+      error: "\nError: {0}"
+      service-error: "Failed to execute command: {0}"
+      no-service: "Command execution feature for server {0} requires server connection"
+      failed: Failed to execute command
+  
+  # Audit Log
+  mochi.audit:
+    description: View audit logs
+    options:
+      limit: Number of entries to display
+    messages:
+      no-logs: No audit logs found
+      list-header: "Audit logs:"
+      log-item: "  [{0}] {1} - {2}"
+      log-user: " (User: {0})"
+      log-server: " (Server: {0})"
+      failed: Failed to get audit logs
+
+# Common Messages
+common:
+  not-initialized: Plugin not initialized yet
+  option-error: Option parameter error
+  success: Success
+  failure: Failure
+  unknown: Unknown
+  none: None
+
+# Server Status
+server-status:
+  online: Online
+  offline: Offline
+  error: Error
+
+# Binding Type
+binding-type:
+  full: Full
+  monitor: Monitor
+  command: Command
+
+# Game Mode
+game-mode:
+  survival: Survival
+  creative: Creative
+  adventure: Adventure
+  spectator: Spectator

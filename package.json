@@ -1,6 +1,6 @@
 {
   "name": "koishi-plugin-mochi-link",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Mochi-Link (大福连) - Minecraft 统一管理与监控系统",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
@@ -77,6 +77,10 @@
       "en": "Minecraft Unified Management and Monitoring System",
       "zh": "Minecraft 统一管理与监控系统"
     },
+    "locales": [
+      "zh-CN",
+      "en-US"
+    ],
     "service": {
       "required": [
         "database"
