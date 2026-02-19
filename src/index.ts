@@ -207,63 +207,65 @@ export function apply(ctx: Context, config: PluginConfig) {
     });
     
     // Register commands
-    ctx.command('mochi', 'Mochi-Link 管理命令')
+    ctx.command('mochi', 'commands.mochi.description')
       .action(({ session }) => {
-        return 'Mochi-Link (大福连) - Minecraft 统一管理系统\n' +
-               '使用 mochi.help 查看可用命令';
+        return session?.text('commands.mochi.messages.welcome') || 
+               'Mochi-Link (大福连) - Minecraft 统一管理系统\n使用 mochi.help 查看可用命令';
       });
     
-    ctx.command('mochi.server', '服务器管理')
+    ctx.command('mochi.server', 'commands.mochi.server.description')
       .action(({ session }) => {
-        return '服务器管理命令：\n' +
-               '  mochi.server.list - 列出所有服务器\n' +
-               '  mochi.server.add <id> <name> - 添加服务器\n' +
-               '  mochi.server.info <id> - 查看服务器信息\n' +
-               '  mochi.server.remove <id> - 删除服务器';
+        return session?.text('commands.mochi.server.messages.menu') ||
+               '服务器管理命令：\n  mochi.server.list - 列出所有服务器\n  mochi.server.add <id> <name> - 添加服务器\n  mochi.server.info <id> - 查看服务器信息\n  mochi.server.remove <id> - 删除服务器';
       });
     
-    ctx.command('mochi.server.list', '列出所有服务器')
+    ctx.command('mochi.server.list', 'commands.mochi.server.list.description')
       .action(async ({ session }) => {
         if (!isInitialized || !dbManager) {
-          return '插件尚未初始化完成';
+          return session?.text('common.not-initialized') || '插件尚未初始化完成';
         }
         
         try {
           const servers = await dbManager.listServers();
           if (servers.length === 0) {
-            return '暂无服务器';
+            return session?.text('commands.mochi.server.list.messages.no-servers') || '暂无服务器';
           }
           
-          return '服务器列表：\n' + servers.map((s: any) => 
-            `  [${s.id}] ${s.name} (${s.core_type}/${s.core_name}) - ${s.status}`
-          ).join('\n');
+          const header = session?.text('commands.mochi.server.list.messages.list-header') || '服务器列表：';
+          const items = servers.map((s: any) => {
+            const status = session?.text(`server-status.${s.status}`) || s.status;
+            return `  [${s.id}] ${s.name} (${s.core_type}/${s.core_name}) - ${status}`;
+          }).join('\n');
+          return header + '\n' + items;
         } catch (error) {
           logger.error('Failed to list servers:', error);
-          return '获取服务器列表失败';
+          return session?.text('commands.mochi.server.list.messages.failed') || '获取服务器列表失败';
         }
       });
     
-    ctx.command('mochi.server.add <id> <name>', '添加服务器')
-      .option('type', '-t <type:string> 服务器类型 (java/bedrock)', { fallback: 'java' })
-      .option('core', '-c <core:string> 核心名称', { fallback: 'paper' })
+    ctx.command('mochi.server.add <id> <name>', 'commands.mochi.server.add.description')
+      .option('type', '-t <type:string> commands.mochi.server.add.options.type', { fallback: 'java' })
+      .option('core', '-c <core:string> commands.mochi.server.add.options.core', { fallback: 'paper' })
       .action(async ({ session, options }, id, name) => {
         if (!isInitialized || !dbManager) {
-          return '插件尚未初始化完成';
+          return session?.text('common.not-initialized') || '插件尚未初始化完成';
         }
         
         if (!id || !name) {
-          return '用法: mochi.server.add <id> <name> [-t type] [-c core]';
+          return session?.text('commands.mochi.server.add.messages.usage') || 
+                 '用法: mochi.server.add <id> <name> [-t type] [-c core]';
         }
         
         if (!options) {
-          return '选项参数错误';
+          return session?.text('common.option-error') || '选项参数错误';
         }
         
         try {
           // Check if server already exists
           const existing = await dbManager.getServer(id);
           if (existing) {
-            return `服务器 ${id} 已存在`;
+            return session?.text('commands.mochi.server.add.messages.exists', [id]) || 
+                   `服务器 ${id} 已存在`;
           }
           
           // Create server
@@ -287,10 +289,11 @@ export function apply(ctx: Context, config: PluginConfig) {
             result: 'success'
           });
           
-          return `服务器 ${name} (${id}) 创建成功`;
+          return session?.text('commands.mochi.server.add.messages.success', [name, id]) || 
+                 `服务器 ${name} (${id}) 创建成功`;
         } catch (error) {
           logger.error('Failed to create server:', error);
-          return '创建服务器失败';
+          return session?.text('commands.mochi.server.add.messages.failed') || '创建服务器失败';
         }
       });
     

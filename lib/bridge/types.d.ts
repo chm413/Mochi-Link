@@ -144,8 +144,8 @@ export interface BridgeConfig {
 export declare class BridgeError extends Error {
     code: string;
     serverId: string;
-    details?: any | undefined;
-    constructor(message: string, code: string, serverId: string, details?: any | undefined);
+    details?: any;
+    constructor(message: string, code: string, serverId: string, details?: any);
 }
 export declare class UnsupportedOperationError extends BridgeError {
     constructor(operation: string, serverId: string, coreType: string);

@@ -2,7 +2,7 @@
 
 ## 📋 概述
 
-Mochi-Link v1.5.0 添加了完整的多语言支持，目前支持简体中文和英文。
+Mochi-Link v1.5.0 使用 Koishi 内置的 i18n 系统，支持完整的多语言功能。Koishi 会自动加载 `locales/` 目录下的语言文件。
 
 ---
 
@@ -15,17 +15,45 @@ Mochi-Link v1.5.0 添加了完整的多语言支持，目前支持简体中文�
 
 ---
 
-## 📁 文件结构
+## 🎯 Koishi i18n 系统
+
+### 自动加载
+
+Koishi 会自动加载 `locales/` 目录下的所有 `.yml` 文件：
 
 ```
 mochi-link/
 ├── locales/
-│   ├── zh-CN.yml    # 简体中文语言包
-│   └── en-US.yml    # 英文语言包
-├── src/
-│   └── i18n.ts      # 国际化辅助函数
-└── package.json     # 包含 locales 配置
+│   ├── zh-CN.yml    # 自动加载
+│   └── en-US.yml    # 自动加载
+└── package.json     # 声明支持的语言
 ```
+
+### 使用方式
+
+在代码中使用 `session.text()` 方法：
+
+```typescript
+// 简单文本
+session.text('commands.mochi.description')
+
+// 带参数的文本
+session.text('commands.mochi.server.add.messages.success', [name, id])
+
+// 带降级的文本（如果翻译不存在，使用默认值）
+session?.text('common.not-initialized') || '插件尚未初始化完成'
+```
+
+### 命令描述
+
+命令描述直接使用 i18n 键：
+
+```typescript
+ctx.command('mochi', 'commands.mochi.description')
+ctx.command('mochi.server', 'commands.mochi.server.description')
+```
+
+Koishi 会根据用户的语言设置自动显示对应的描述。
 
 ---
 
