@@ -1,4 +1,4 @@
-import * as express from 'express';
+import express from 'express';
 import * as cors from 'cors';
 import * as helmet from 'helmet';
 import * as compression from 'compression';

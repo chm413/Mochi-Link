@@ -2,7 +2,7 @@ package com.mochilink.connector;
 
 import com.mochilink.connector.connection.ConnectionManager;
 import com.mochilink.connector.config.PluginConfig;
-import com.mochilink.connector.handlers.EventHandler;
+import com.mochilink.connector.handlers.ServerEventHandler;
 import com.mochilink.connector.handlers.CommandHandler;
 import com.mochilink.connector.integrations.IntegrationManager;
 import com.mochilink.connector.monitoring.PerformanceMonitor;
@@ -30,7 +30,7 @@ public class MochiLinkPlugin extends JavaPlugin {
     // Core components
     private PluginConfig pluginConfig;
     private ConnectionManager connectionManager;
-    private EventHandler eventHandler;
+    private ServerEventHandler eventHandler;
     private CommandHandler commandHandler;
     private IntegrationManager integrationManager;
     private PerformanceMonitor performanceMonitor;
@@ -106,7 +106,7 @@ public class MochiLinkPlugin extends JavaPlugin {
         connectionManager = new ConnectionManager(this, pluginConfig);
         
         // Initialize event handler
-        eventHandler = new EventHandler(this, connectionManager);
+        eventHandler = new ServerEventHandler(this, connectionManager);
         getServer().getPluginManager().registerEvents(eventHandler, this);
         
         // Initialize command handler
@@ -236,7 +236,7 @@ public class MochiLinkPlugin extends JavaPlugin {
     /**
      * Get event handler
      */
-    public EventHandler getEventHandler() {
+    public ServerEventHandler getEventHandler() {
         return eventHandler;
     }
     

@@ -161,12 +161,17 @@ public class MochiLinkFoliaPlugin extends JavaPlugin {
     private void scheduleFoliaReconnection() {
         int reconnectInterval = pluginConfig.getReconnectInterval();
         
-        getServer().getAsyncScheduler().runDelayed(this, (task) -> {
-            if (!isConnected && isEnabled) {
-                getLogger().info("Attempting to reconnect to management server...");
-                startFoliaConnection();
-            }
-        }, reconnectInterval * 50L); // Convert seconds to ticks (50 ticks per second in Folia)
+        getServer().getAsyncScheduler().runDelayed(
+            this,
+            (task) -> {
+                if (!isConnected && isEnabled) {
+                    getLogger().info("Attempting to reconnect to management server...");
+                    startFoliaConnection();
+                }
+            },
+            reconnectInterval,
+            java.util.concurrent.TimeUnit.SECONDS
+        );
     }
     
     /**

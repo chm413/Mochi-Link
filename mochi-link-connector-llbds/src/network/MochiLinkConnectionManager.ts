@@ -1,4 +1,4 @@
-import * as WebSocket from 'ws';
+import WebSocket from 'ws';
 import { EventEmitter } from 'events';
 import * as winston from 'winston';
 import { LLBDSConfig } from '../config/LLBDSConfig';

@@ -1,0 +1,58 @@
+plugins {
+    id 'java'
+}
+
+group = 'com.mochilink'
+version = '1.0.0'
+description = 'Minecraft Folia server connector plugin for Mochi-Link unified management system'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+    
+    // PaperMC Repository (Folia is hosted here)
+    maven {
+        name = 'papermc-repo'
+        url = 'https://repo.papermc.io/repository/maven-public/'
+    }
+}
+
+configurations {
+    embed
+    implementation.extendsFrom(embed)
+}
+
+dependencies {
+    // Folia API
+    compileOnly 'dev.folia:folia-api:1.20.4-R0.1-SNAPSHOT'
+    
+    // WebSocket Client - embed
+    embed 'org.java-websocket:Java-WebSocket:1.5.3'
+    
+    // JSON Processing - embed
+    embed 'com.google.code.gson:gson:2.10.1'
+    
+    // Logging
+    compileOnly 'org.slf4j:slf4j-api:2.0.9'
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
+jar {
+    from {
+        configurations.embed.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    
+    exclude 'META-INF/*.SF'
+    exclude 'META-INF/*.DSA'
+    exclude 'META-INF/*.RSA'
+}

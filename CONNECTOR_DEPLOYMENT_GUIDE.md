@@ -1,470 +1,590 @@
-# Mochi-Link 连接器部署指南
-# Mochi-Link Connector Deployment Guide
+# 连接器部署指南
+# Connector Deployment Guide
 
-本指南详细说明如何为不同类型的Minecraft服务器部署Mochi-Link连接器插件和模组。
+**版本**: 1.0.0  
+**日期**: 2026-02-20  
+**协议**: U-WBP v2.0
 
-This guide provides detailed instructions for deploying Mochi-Link connector plugins and mods for different types of Minecraft servers.
+---
 
-## 📋 目录 / Table of Contents
+## 概述 / Overview
 
-1. [系统要求 / System Requirements](#系统要求--system-requirements)
-2. [Java版服务器 / Java Edition Servers](#java版服务器--java-edition-servers)
-3. [模组服务器 / Modded Servers](#模组服务器--modded-servers)
-4. [基岩版服务器 / Bedrock Edition Servers](#基岩版服务器--bedrock-edition-servers)
-5. [配置说明 / Configuration](#配置说明--configuration)
-6. [故障排除 / Troubleshooting](#故障排除--troubleshooting)
+本指南提供了所有 Mochi-Link 连接器的详细部署说明。目前已完成 5 个连接器，覆盖 Java Edition 和 Bedrock Edition 的主流服务器平台。
 
-## 🔧 系统要求 / System Requirements
+**已完成的连接器**:
+- ✅ Paper/Spigot (Java Edition)
+- ✅ Folia (Java Edition)
+- ✅ Nukkit/PowerNukkit (Bedrock Edition)
+- ✅ LLBDS (Bedrock Edition)
+- ✅ PocketMine-MP (Bedrock Edition)
 
-### 通用要求 / General Requirements
-- **Mochi-Link管理系统**: 已部署并运行的Mochi-Link服务器
-- **网络连接**: 服务器能够访问Mochi-Link管理系统
-- **权限**: 服务器管理员权限
+---
 
-### Java版要求 / Java Edition Requirements
-- **Java**: JDK/JRE 17或更高版本
-- **服务器版本**: Minecraft 1.20.4+
+## 系统要求 / System Requirements
 
-### 基岩版要求 / Bedrock Edition Requirements
-- **Node.js**: 16.0+（LLBDS）
-- **PHP**: 8.0+（PMMP）
-- **Java**: JDK/JRE 17+（Nukkit）
+### Java Edition 连接器
 
-## 🎮 Java版服务器 / Java Edition Servers
+| 连接器 | Java 版本 | 服务器版本 | 内存 |
+|--------|-----------|------------|------|
+| Paper/Spigot | 17+ | 1.20.4+ | 512MB+ |
+| Folia | 17+ | 1.20.4+ | 1GB+ |
+| Nukkit | 17+ | PowerNukkit 1.6.0.0-PN+ | 512MB+ |
 
-### Paper/Spigot 服务器
+### Bedrock Edition 连接器
 
-#### 1. 下载插件
+| 连接器 | 运行时 | 服务器版本 | 内存 |
+|--------|--------|------------|------|
+| LLBDS | Node.js 16+ | LLBDS 最新版 | 512MB+ |
+| PMMP | PHP 8.0+ | PocketMine-MP 5.x | 512MB+ |
+
+---
+
+## 部署步骤 / Deployment Steps
+
+### 1. Paper/Spigot 连接器
+
+#### 步骤 1: 下载产物
+
 ```bash
-# 从构建输出目录获取
+# 从构建目录复制
 cp build-output/MochiLinkConnector-Paper.jar /path/to/server/plugins/
 ```
 
-#### 2. 安装插件
-1. 将 `MochiLinkConnector-Paper.jar` 复制到服务器的 `plugins/` 目录
-2. 重启服务器
-3. 插件将自动生成配置文件
+#### 步骤 2: 首次启动
 
-#### 3. 配置插件
-编辑 `plugins/MochiLinkConnector/config.yml`:
-
-```yaml
-# Mochi-Link管理系统连接配置
-connection:
-  # 管理系统WebSocket地址
-  host: "localhost"
-  port: 8080
-  # 是否使用SSL/TLS
-  ssl: false
-  # 连接超时时间（毫秒）
-  timeout: 30000
-  
-# 服务器标识
-server:
-  # 服务器唯一ID（在管理系统中注册）
-  id: "my-paper-server"
-  # 服务器显示名称
-  name: "我的Paper服务器"
-  # 服务器类型
-  type: "Paper"
-  
-# 认证配置
-auth:
-  # API令牌（从管理系统获取）
-  token: "your-api-token-here"
-  
-# 自动重连配置
-reconnect:
-  # 是否启用自动重连
-  enabled: true
-  # 重连间隔（秒）
-  interval: 30
-  # 最大重连次数
-  maxAttempts: 10
-  
-# 功能配置
-features:
-  # 是否启用玩家事件推送
-  playerEvents: true
-  # 是否启用服务器状态监控
-  serverMonitoring: true
-  # 是否启用命令执行
-  commandExecution: true
-  # 是否启用性能监控
-  performanceMonitoring: true
+```bash
+cd /path/to/server
+./start.sh  # 或 start.bat (Windows)
 ```
 
-#### 4. 验证安装
+服务器会自动生成配置文件：
+- `plugins/MochiLink/config.yml`
+- `plugins/MochiLink/logs/`
+
+#### 步骤 3: 配置连接
+
+编辑 `plugins/MochiLink/config.yml`:
+
+```yaml
+# 管理服务器连接配置
+server:
+  host: "your-mochilink-server.com"  # 管理服务器地址
+  port: 8080                          # WebSocket 端口
+  token: "your-server-token"          # 认证令牌
+  use-ssl: false                      # 是否使用 SSL/TLS
+
+# 自动重连设置
+auto-reconnect:
+  enabled: true                       # 启用自动重连
+  interval: 30                        # 重连间隔（秒）
+
+# 性能监控
+performance:
+  monitoring-enabled: true            # 启用性能监控
+  report-interval: 60                 # 报告间隔（秒）
+
+# 插件集成（可选）
+integrations:
+  placeholderapi: true                # PlaceholderAPI 集成
+  luckperms: true                     # LuckPerms 集成
+  vault: true                         # Vault 集成
+```
+
+#### 步骤 4: 重启服务器
+
 ```bash
 # 在服务器控制台执行
-/mochilink status
+/stop
+
+# 重新启动
+./start.sh
 ```
 
-### Folia 服务器
-
-#### 1. 安装步骤
-与Paper类似，但使用 `MochiLinkConnector-Folia.jar`
-
-#### 2. 特殊配置
-Folia版本针对多线程架构进行了优化：
-
-```yaml
-# Folia特定配置
-folia:
-  # 是否启用区域感知功能
-  regionAware: true
-  # 线程池大小
-  threadPoolSize: 4
-```
-
-## 🔧 模组服务器 / Modded Servers
-
-### Fabric 服务器
-
-#### 1. 前置要求
-- Fabric Loader 0.15.3+
-- Fabric API 0.91.0+
-
-#### 2. 安装模组
-```bash
-# 复制模组文件
-cp build-output/MochiLinkConnector-Fabric.jar /path/to/server/mods/
-```
-
-#### 3. 配置文件
-配置文件位置: `config/mochi-link-connector-fabric.json`
-
-```json
-{
-  "connection": {
-    "host": "localhost",
-    "port": 8080,
-    "ssl": false,
-    "timeout": 30000
-  },
-  "server": {
-    "id": "my-fabric-server",
-    "name": "我的Fabric服务器",
-    "type": "Fabric"
-  },
-  "auth": {
-    "token": "your-api-token-here"
-  },
-  "fabric": {
-    "useAsyncScheduler": true,
-    "enableMixins": false
-  }
-}
-```
-
-### Forge 服务器
-
-#### 1. 前置要求
-- Minecraft Forge 49.0.31+
-
-#### 2. 安装模组
-```bash
-# 复制模组文件
-cp build-output/MochiLinkConnector-Forge.jar /path/to/server/mods/
-```
-
-#### 3. 配置文件
-配置文件位置: `config/mochi-link-connector-forge.toml`
-
-```toml
-[connection]
-host = "localhost"
-port = 8080
-ssl = false
-timeout = 30000
-
-[server]
-id = "my-forge-server"
-name = "我的Forge服务器"
-type = "Forge"
-
-[auth]
-token = "your-api-token-here"
-
-[forge]
-useEventBus = true
-enableNetworking = true
-```
-
-## 🏗️ 基岩版服务器 / Bedrock Edition Servers
-
-### LLBDS (LiteLoaderBDS) 服务器
-
-#### 1. 前置要求
-- Node.js 16.0+
-- LLBDS 2.0+
-
-#### 2. 安装插件
-```bash
-# 复制插件目录
-cp -r build-output/MochiLinkConnector-LLBDS /path/to/llbds/plugins/
-cd /path/to/llbds/plugins/MochiLinkConnector-LLBDS
-npm install
-```
-
-#### 3. 配置文件
-编辑 `plugins/MochiLinkConnector-LLBDS/config.json`:
-
-```json
-{
-  "connection": {
-    "host": "localhost",
-    "port": 8080,
-    "ssl": false,
-    "timeout": 30000
-  },
-  "server": {
-    "id": "my-llbds-server",
-    "name": "我的LLBDS服务器",
-    "type": "LLBDS"
-  },
-  "auth": {
-    "token": "your-api-token-here"
-  },
-  "llbds": {
-    "useNativeEvents": true,
-    "enableScriptEngine": true
-  }
-}
-```
-
-### Nukkit 服务器
-
-#### 1. 安装插件
-```bash
-# 复制插件文件
-cp build-output/MochiLinkConnector-Nukkit.jar /path/to/nukkit/plugins/
-```
-
-#### 2. 配置文件
-编辑 `plugins/MochiLinkConnector/config.yml`:
-
-```yaml
-connection:
-  host: "localhost"
-  port: 8080
-  ssl: false
-  timeout: 30000
-  
-server:
-  id: "my-nukkit-server"
-  name: "我的Nukkit服务器"
-  type: "Nukkit"
-  
-auth:
-  token: "your-api-token-here"
-  
-nukkit:
-  useAsyncTasks: true
-  enableProtocolSupport: true
-```
-
-### PMMP (PocketMine-MP) 服务器
-
-#### 1. 安装插件
-```bash
-# 复制插件目录
-cp -r build-output/MochiLinkConnector-PMMP /path/to/pmmp/plugins/
-```
-
-#### 2. 配置文件
-编辑 `plugins/MochiLinkConnector-PMMP/config.yml`:
-
-```yaml
-connection:
-  host: "localhost"
-  port: 8080
-  ssl: false
-  timeout: 30000
-  
-server:
-  id: "my-pmmp-server"
-  name: "我的PMMP服务器"
-  type: "PMMP"
-  
-auth:
-  token: "your-api-token-here"
-  
-pmmp:
-  useAsyncTasks: true
-  enableApiVersion: "5.0.0"
-```
-
-## ⚙️ 配置说明 / Configuration
-
-### 通用配置项 / Common Configuration
-
-#### 连接配置 / Connection Configuration
-- `host`: Mochi-Link管理系统的主机地址
-- `port`: WebSocket端口（默认8080）
-- `ssl`: 是否启用SSL/TLS加密
-- `timeout`: 连接超时时间
-
-#### 服务器配置 / Server Configuration
-- `id`: 服务器唯一标识符（必须在管理系统中注册）
-- `name`: 服务器显示名称
-- `type`: 服务器类型（Paper、Folia、Fabric、Forge、LLBDS、Nukkit、PMMP）
-
-#### 认证配置 / Authentication Configuration
-- `token`: API令牌（从Mochi-Link管理系统获取）
-
-### 获取API令牌 / Getting API Token
-
-1. 登录Mochi-Link管理系统
-2. 进入"服务器管理"页面
-3. 点击"添加服务器"
-4. 填写服务器信息并生成令牌
-5. 复制令牌到配置文件中
-
-### 高级配置 / Advanced Configuration
-
-#### SSL/TLS配置
-如果启用SSL，需要确保：
-1. Mochi-Link管理系统配置了有效的SSL证书
-2. 服务器能够验证SSL证书
-3. 防火墙允许HTTPS连接
-
-#### 性能优化
-```yaml
-performance:
-  # 事件处理线程池大小
-  eventThreads: 2
-  # 监控数据上报间隔（秒）
-  monitoringInterval: 30
-  # 缓存大小
-  cacheSize: 1000
-```
-
-## 🔍 故障排除 / Troubleshooting
-
-### 常见问题 / Common Issues
-
-#### 1. 连接失败
-**症状**: 插件无法连接到管理系统
-
-**解决方案**:
-```bash
-# 检查网络连接
-ping your-mochi-link-host
-
-# 检查端口是否开放
-telnet your-mochi-link-host 8080
-
-# 检查防火墙设置
-# Linux
-sudo ufw status
-# Windows
-netsh advfirewall show allprofiles
-```
-
-#### 2. 认证失败
-**症状**: 连接建立但认证失败
-
-**解决方案**:
-1. 验证API令牌是否正确
-2. 检查服务器ID是否在管理系统中注册
-3. 确认令牌未过期
-
-#### 3. 插件加载失败
-**症状**: 服务器启动时插件无法加载
-
-**解决方案**:
-```bash
-# 检查Java版本
-java -version
-
-# 检查插件依赖
-# 对于Paper/Spigot
-ls plugins/
-
-# 对于Fabric
-ls mods/
-```
-
-#### 4. 性能问题
-**症状**: 服务器性能下降
-
-**解决方案**:
-1. 调整监控间隔
-2. 减少事件推送频率
-3. 优化缓存设置
-
-### 日志分析 / Log Analysis
-
-#### Java版插件日志
-```bash
-# 查看插件日志
-tail -f logs/latest.log | grep MochiLink
-
-# 查看详细调试信息
-# 在config.yml中设置
-debug: true
-```
-
-#### 基岩版插件日志
-```bash
-# LLBDS日志
-tail -f logs/server.log | grep MochiLink
-
-# Nukkit日志
-tail -f logs/server.log | grep MochiLink
-
-# PMMP日志
-tail -f server.log | grep MochiLink
-```
-
-### 性能监控 / Performance Monitoring
-
-#### 监控指标
-- CPU使用率
-- 内存使用量
-- 网络延迟
-- 连接状态
-
-#### 监控命令
-```bash
-# 检查连接状态
-/mochilink status
-
-# 查看性能统计
-/mochilink stats
-
-# 测试连接
-/mochilink test
-```
-
-## 📚 更多资源 / Additional Resources
-
-### 文档链接 / Documentation Links
-- [主项目文档](README.md)
-- [API文档](API_DOCUMENTATION.md)
-- [配置参考](CONFIGURATION_REFERENCE.md)
-
-### 支持渠道 / Support Channels
-- GitHub Issues: https://github.com/chm413/Mochi-Link/issues
-- 讨论区: https://github.com/chm413/Mochi-Link/discussions
-
-### 更新说明 / Update Notes
-定期检查更新以获取最新功能和安全修复：
+#### 步骤 5: 验证安装
 
 ```bash
-# 检查版本
-/mochilink version
+# 在服务器控制台或游戏中执行
+/plugins
+# 应该看到 "MochiLink" 插件显示为绿色
 
-# 更新插件
-# 1. 下载最新版本
-# 2. 停止服务器
-# 3. 替换插件文件
-# 4. 启动服务器
+/mlstatus
+# 查看连接状态，应该显示 "Connected"
+
+/mlreconnect
+# 测试重新连接功能
 ```
 
 ---
 
-**注意**: 本指南基于Mochi-Link v1.0.0编写。不同版本可能存在配置差异，请参考对应版本的文档。
+### 2. Folia 连接器
 
-**Note**: This guide is written for Mochi-Link v1.0.0. Different versions may have configuration differences, please refer to the documentation for the corresponding version.
+Folia 连接器的部署步骤与 Paper/Spigot 相同，但需要注意：
+
+**特殊配置**:
+- Folia 使用区域调度器，性能监控会自动适配
+- 不支持某些 Paper 插件集成（如 PlaceholderAPI）
+
+**配置文件**: 与 Paper 相同，但移除不支持的集成选项
+
+```yaml
+server:
+  host: "your-mochilink-server.com"
+  port: 8080
+  token: "your-server-token"
+  use-ssl: false
+
+auto-reconnect:
+  enabled: true
+  interval: 30
+
+performance:
+  monitoring-enabled: true
+  report-interval: 60
+
+# Folia 不支持插件集成
+# integrations 部分可以省略
+```
+
+---
+
+### 3. Nukkit/PowerNukkit 连接器
+
+#### 步骤 1: 下载产物
+
+```bash
+cp build-output/MochiLinkConnector-Nukkit.jar /path/to/nukkit/plugins/
+```
+
+#### 步骤 2: 首次启动
+
+```bash
+cd /path/to/nukkit
+./start.sh  # 或 start.bat (Windows)
+```
+
+#### 步骤 3: 配置连接
+
+编辑 `plugins/MochiLink/config.yml`:
+
+```yaml
+server:
+  host: "your-mochilink-server.com"
+  port: 8080
+  token: "your-server-token"
+  use-ssl: false
+
+auto-reconnect:
+  enabled: true
+  interval: 30
+
+performance:
+  monitoring-enabled: true
+  report-interval: 60
+```
+
+#### 步骤 4: 验证安装
+
+```bash
+# 在服务器控制台执行
+plugins
+# 应该看到 "MochiLink" 插件
+
+mochilink status
+# 查看连接状态
+```
+
+---
+
+### 4. LLBDS 连接器
+
+#### 步骤 1: 复制插件目录
+
+```bash
+cp -r build-output/MochiLinkConnector-LLBDS /path/to/llbds/plugins/
+```
+
+#### 步骤 2: 安装依赖
+
+```bash
+cd /path/to/llbds/plugins/MochiLinkConnector-LLBDS
+npm install
+```
+
+**依赖项**:
+- ws (WebSocket 客户端)
+- express (HTTP 服务器)
+- 其他依赖见 package.json
+
+#### 步骤 3: 创建配置文件
+
+创建 `config/config.json`:
+
+```json
+{
+  "server": {
+    "host": "your-mochilink-server.com",
+    "port": 8080,
+    "token": "your-server-token",
+    "useSsl": false
+  },
+  "autoReconnect": {
+    "enabled": true,
+    "interval": 30
+  },
+  "lse": {
+    "enabled": true,
+    "port": 25580
+  },
+  "performance": {
+    "monitoringEnabled": true,
+    "reportInterval": 60
+  },
+  "httpApi": {
+    "enabled": true,
+    "port": 8081
+  }
+}
+```
+
+#### 步骤 4: 启动连接器
+
+```bash
+# 方式 1: 直接运行
+node index.js
+
+# 方式 2: 使用 PM2（推荐）
+pm2 start index.js --name mochilink-llbds
+
+# 方式 3: 后台运行
+nohup node index.js > logs/connector.log 2>&1 &
+```
+
+#### 步骤 5: 验证安装
+
+```bash
+# 检查日志
+tail -f logs/connector.log
+
+# 测试 HTTP API
+curl http://localhost:8081/api/status
+
+# 测试 LSE 桥接
+telnet localhost 25580
+```
+
+---
+
+### 5. PocketMine-MP 连接器
+
+#### 步骤 1: 复制插件目录
+
+```bash
+cp -r build-output/MochiLinkConnector-PMMP /path/to/pmmp/plugins/
+```
+
+#### 步骤 2: 启动服务器
+
+```bash
+cd /path/to/pmmp
+./start.sh  # 或 start.bat (Windows)
+```
+
+#### 步骤 3: 配置连接
+
+PocketMine-MP 会自动生成配置文件，编辑配置：
+
+```yaml
+server:
+  host: "your-mochilink-server.com"
+  port: 8080
+  token: "your-server-token"
+  use-ssl: false
+
+auto-reconnect:
+  enabled: true
+  interval: 30
+
+performance:
+  monitoring-enabled: true
+  report-interval: 60
+```
+
+#### 步骤 4: 验证安装
+
+```bash
+# 在服务器控制台执行
+plugins
+# 应该看到 "MochiLinkConnector-PMMP" 插件
+```
+
+---
+
+## 网络配置 / Network Configuration
+
+### 防火墙规则
+
+确保以下端口可以访问：
+
+| 服务 | 端口 | 协议 | 方向 |
+|------|------|------|------|
+| WebSocket | 8080 | TCP | 出站 |
+| HTTP API (LLBDS) | 8081 | TCP | 入站 |
+| LSE (LLBDS) | 25580 | TCP | 入站 |
+
+### 代理配置
+
+如果需要通过代理连接，可以配置：
+
+```yaml
+server:
+  host: "your-mochilink-server.com"
+  port: 8080
+  token: "your-server-token"
+  use-ssl: false
+  proxy:
+    enabled: true
+    host: "proxy.example.com"
+    port: 3128
+    username: "proxy-user"
+    password: "proxy-pass"
+```
+
+---
+
+## 安全配置 / Security Configuration
+
+### SSL/TLS 配置
+
+启用 SSL/TLS 加密连接：
+
+```yaml
+server:
+  host: "your-mochilink-server.com"
+  port: 8443  # HTTPS 端口
+  token: "your-server-token"
+  use-ssl: true
+  ssl:
+    verify-certificate: true
+    ca-cert: "/path/to/ca.crt"  # 可选
+```
+
+### 令牌管理
+
+**生成令牌**:
+```bash
+# 使用 OpenSSL 生成随机令牌
+openssl rand -hex 32
+```
+
+**令牌轮换**:
+1. 在管理服务器上生成新令牌
+2. 更新所有连接器的配置文件
+3. 重启连接器或使用 `/mlreconnect` 命令
+
+---
+
+## 监控和日志 / Monitoring and Logging
+
+### 日志位置
+
+| 连接器 | 日志位置 |
+|--------|----------|
+| Paper/Spigot | `plugins/MochiLink/logs/` |
+| Folia | `plugins/MochiLink/logs/` |
+| Nukkit | `plugins/MochiLink/logs/` |
+| LLBDS | `plugins/MochiLinkConnector-LLBDS/logs/` |
+| PMMP | `plugins/MochiLinkConnector-PMMP/logs/` |
+
+### 日志级别
+
+配置日志级别：
+
+```yaml
+logging:
+  level: INFO  # DEBUG, INFO, WARN, ERROR
+  file:
+    enabled: true
+    max-size: 10MB
+    max-files: 5
+  console:
+    enabled: true
+```
+
+### 性能监控
+
+查看性能指标：
+
+```bash
+# Paper/Spigot/Folia/Nukkit
+/mlstatus
+
+# LLBDS (HTTP API)
+curl http://localhost:8081/api/metrics
+```
+
+---
+
+## 故障排除 / Troubleshooting
+
+### 常见问题
+
+#### 1. 连接失败
+
+**症状**: 插件显示 "Disconnected" 状态
+
+**解决方案**:
+1. 检查管理服务器是否运行
+2. 验证服务器地址和端口
+3. 检查防火墙规则
+4. 验证令牌是否正确
+5. 查看日志文件
+
+```bash
+# 查看连接日志
+tail -f plugins/MochiLink/logs/latest.log
+```
+
+#### 2. 插件无法加载
+
+**症状**: 服务器启动时插件未加载
+
+**解决方案**:
+1. 检查 Java/Node.js/PHP 版本
+2. 验证 JAR 文件完整性
+3. 检查依赖是否安装（LLBDS）
+4. 查看服务器启动日志
+
+```bash
+# Paper/Spigot/Folia/Nukkit
+cat logs/latest.log | grep MochiLink
+
+# LLBDS
+cat logs/connector.log
+```
+
+#### 3. 性能问题
+
+**症状**: 服务器延迟增加
+
+**解决方案**:
+1. 调整性能监控间隔
+2. 减少事件上报频率
+3. 检查网络延迟
+4. 优化配置参数
+
+```yaml
+performance:
+  monitoring-enabled: true
+  report-interval: 120  # 增加到 2 分钟
+  event-throttle: 100   # 限制事件频率
+```
+
+#### 4. 内存泄漏
+
+**症状**: 内存使用持续增长
+
+**解决方案**:
+1. 更新到最新版本
+2. 检查日志文件大小
+3. 配置日志轮换
+4. 重启连接器
+
+```yaml
+logging:
+  file:
+    max-size: 5MB      # 减小日志文件大小
+    max-files: 3       # 减少保留文件数
+```
+
+---
+
+## 升级指南 / Upgrade Guide
+
+### 升级步骤
+
+1. **备份配置文件**:
+   ```bash
+   cp plugins/MochiLink/config.yml plugins/MochiLink/config.yml.backup
+   ```
+
+2. **停止服务器**:
+   ```bash
+   /stop
+   ```
+
+3. **替换 JAR 文件**:
+   ```bash
+   cp build-output/MochiLinkConnector-Paper.jar /path/to/server/plugins/
+   ```
+
+4. **检查配置兼容性**:
+   - 对比新旧配置文件
+   - 添加新配置项
+   - 移除废弃配置项
+
+5. **启动服务器**:
+   ```bash
+   ./start.sh
+   ```
+
+6. **验证升级**:
+   ```bash
+   /mlstatus
+   ```
+
+---
+
+## 性能优化 / Performance Optimization
+
+### 推荐配置
+
+**小型服务器** (< 50 玩家):
+```yaml
+performance:
+  monitoring-enabled: true
+  report-interval: 60
+  event-throttle: 50
+```
+
+**中型服务器** (50-200 玩家):
+```yaml
+performance:
+  monitoring-enabled: true
+  report-interval: 90
+  event-throttle: 100
+```
+
+**大型服务器** (> 200 玩家):
+```yaml
+performance:
+  monitoring-enabled: true
+  report-interval: 120
+  event-throttle: 200
+```
+
+---
+
+## 最佳实践 / Best Practices
+
+1. **定期备份配置文件**
+2. **使用 SSL/TLS 加密连接**
+3. **定期轮换认证令牌**
+4. **监控日志文件大小**
+5. **配置自动重连**
+6. **使用防火墙限制访问**
+7. **定期更新到最新版本**
+8. **测试环境先行部署**
+
+---
+
+## 技术支持 / Technical Support
+
+- **GitHub**: https://github.com/chm413/Mochi-Link
+- **Issues**: https://github.com/chm413/Mochi-Link/issues
+- **文档**: 项目根目录的文档文件
+
+---
+
+**版本**: 1.0.0  
+**最后更新**: 2026-02-20  
+**维护者**: chm413

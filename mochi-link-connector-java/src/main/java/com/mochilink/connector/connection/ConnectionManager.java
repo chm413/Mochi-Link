@@ -4,7 +4,7 @@ import com.mochilink.connector.MochiLinkPlugin;
 import com.mochilink.connector.config.PluginConfig;
 import com.mochilink.connector.protocol.MessageHandler;
 import com.mochilink.connector.protocol.UWBPv2Protocol;
-import com.mochilink.connector.websocket.WebSocketClient;
+import com.mochilink.connector.websocket.MochiWebSocketClient;
 
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
@@ -27,7 +27,7 @@ public class ConnectionManager {
     private final PluginConfig config;
     private final Logger logger;
     
-    private WebSocketClient webSocketClient;
+    private MochiWebSocketClient webSocketClient;
     private MessageHandler messageHandler;
     private UWBPv2Protocol protocol;
     
@@ -73,7 +73,7 @@ public class ConnectionManager {
                 URI serverUri = createServerUri();
                 
                 // Create WebSocket client
-                webSocketClient = new WebSocketClient(serverUri, this, messageHandler);
+                webSocketClient = new MochiWebSocketClient(serverUri, this, messageHandler);
                 
                 // Connect with timeout
                 boolean success = webSocketClient.connectBlocking();

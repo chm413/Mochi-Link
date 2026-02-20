@@ -1,0 +1,64 @@
+plugins {
+    id 'java'
+}
+
+group = 'com.mochilink'
+version = '1.0.0'
+description = 'Minecraft Bedrock Edition Nukkit connector plugin for Mochi-Link unified management system'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+    
+    // PowerNukkit Repository (替代 Nukkit)
+    maven {
+        name = 'powernukkit-repo'
+        url = 'https://repo.powernukkit.org/maven-releases/'
+    }
+    
+    // OpenCollab Repository (PowerNukkit 依赖)
+    maven {
+        name = 'opencollab-repo'
+        url = 'https://repo.opencollab.dev/maven-releases/'
+    }
+}
+
+configurations {
+    embed
+    implementation.extendsFrom(embed)
+}
+
+dependencies {
+    // PowerNukkit API (替代 Nukkit)
+    compileOnly 'org.powernukkit:powernukkit:1.6.0.0-PN'
+    
+    // WebSocket Client - embed
+    embed 'org.java-websocket:Java-WebSocket:1.5.3'
+    
+    // JSON Processing - embed
+    embed 'com.google.code.gson:gson:2.10.1'
+    
+    // Logging
+    compileOnly 'org.slf4j:slf4j-api:2.0.9'
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
+jar {
+    from {
+        configurations.embed.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    
+    exclude 'META-INF/*.SF'
+    exclude 'META-INF/*.DSA'
+    exclude 'META-INF/*.RSA'
+}

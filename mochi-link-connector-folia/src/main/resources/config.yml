@@ -1,0 +1,22 @@
+# Mochi-Link Folia Connector Configuration
+# 大福连 Folia 连接器配置
+
+# Server connection settings
+# 服务器连接设置
+server:
+  host: "localhost"
+  port: 8080
+  token: "your-server-token-here"
+  use-ssl: false
+
+# Auto-reconnect settings
+# 自动重连设置
+auto-reconnect:
+  enabled: true
+  interval: 30  # seconds / 秒
+
+# Performance monitoring
+# 性能监控
+performance:
+  monitoring-enabled: true
+  report-interval: 60  # seconds / 秒
