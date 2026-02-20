@@ -48,49 +48,26 @@ export class PluginIntegrationService extends EventEmitter {
 
   /**
    * Create and initialize plugin manager for a server bridge
+   * NOTE: Plugin integration is not yet implemented in basic mode
    */
-  async createPluginManager(bridge: BaseConnectorBridge): Promise<PluginManager> {
+  async createPluginManager(bridge: BaseConnectorBridge): Promise<any> {
     const serverId = bridge.getServerId();
     
-    // Check if manager already exists
-    if (this.pluginManagers.has(serverId)) {
-      return this.pluginManagers.get(serverId)!;
-    }
-
-    // Create plugin configuration
-    const config: PluginConfig = {
-      serverId,
-      bridge,
-      settings: {
-        // Add any plugin-specific settings here
-        planWebPort: 8804, // Default Plan web port
-      }
-    };
-
-    // Create and initialize plugin manager
-    const manager = new PluginManager(config);
-    await manager.initialize();
-
-    // Store the manager
-    this.pluginManagers.set(serverId, manager);
-
-    // Set up event forwarding
-    this.setupEventForwarding(manager, serverId);
-
-    return manager;
+    // Plugin manager is not yet implemented
+    throw new Error('Plugin integration is not yet available in basic mode');
   }
 
   /**
    * Get plugin manager for a server
    */
-  getPluginManager(serverId: string): PluginManager | null {
+  getPluginManager(serverId: string): any | null {
     return this.pluginManagers.get(serverId) || null;
   }
 
   /**
    * Get all plugin managers
    */
-  getAllPluginManagers(): Map<string, PluginManager> {
+  getAllPluginManagers(): Map<string, any> {
     return new Map(this.pluginManagers);
   }
 
@@ -111,7 +88,7 @@ export class PluginIntegrationService extends EventEmitter {
    */
   getPlaceholderAPI(serverId: string): PlaceholderAPIIntegration | null {
     const manager = this.getPluginManager(serverId);
-    return manager ? manager.getIntegration<PlaceholderAPIIntegration>('placeholderapi') : null;
+    return manager ? (manager as any).getIntegration('placeholderapi') : null;
   }
 
   /**
@@ -119,7 +96,7 @@ export class PluginIntegrationService extends EventEmitter {
    */
   getPlan(serverId: string): PlanIntegration | null {
     const manager = this.getPluginManager(serverId);
-    return manager ? manager.getIntegration<PlanIntegration>('plan') : null;
+    return manager ? (manager as any).getIntegration('plan') : null;
   }
 
   /**
@@ -127,7 +104,7 @@ export class PluginIntegrationService extends EventEmitter {
    */
   getLuckPerms(serverId: string): LuckPermsIntegration | null {
     const manager = this.getPluginManager(serverId);
-    return manager ? manager.getIntegration<LuckPermsIntegration>('luckperms') : null;
+    return manager ? (manager as any).getIntegration('luckperms') : null;
   }
 
   /**
@@ -135,7 +112,7 @@ export class PluginIntegrationService extends EventEmitter {
    */
   getVault(serverId: string): VaultIntegration | null {
     const manager = this.getPluginManager(serverId);
-    return manager ? manager.getIntegration<VaultIntegration>('vault') : null;
+    return manager ? (manager as any).getIntegration('vault') : null;
   }
 
   /**
@@ -201,27 +178,11 @@ export class PluginIntegrationService extends EventEmitter {
 
   /**
    * Set up event forwarding from plugin manager
+   * NOTE: Not implemented in basic mode
    */
-  private setupEventForwarding(manager: PluginManager, serverId: string): void {
-    manager.on('initialized', () => {
-      this.emit('pluginManagerInitialized', { serverId });
-    });
-
-    manager.on('integrationInitialized', (data) => {
-      this.emit('pluginIntegrationInitialized', { serverId, ...data });
-    });
-
-    manager.on('integrationError', (data) => {
-      this.emit('pluginIntegrationError', { serverId, ...data });
-    });
-
-    manager.on('availabilityChanged', (data) => {
-      this.emit('pluginAvailabilityChanged', { serverId, ...data });
-    });
-
-    manager.on('cleanup', () => {
-      this.emit('pluginManagerCleanup', { serverId });
-    });
+  private setupEventForwarding(manager: any, serverId: string): void {
+    // Event forwarding is not yet implemented
+    // TODO: Implement when plugin manager is available
   }
 }
 

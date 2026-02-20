@@ -6,7 +6,7 @@
  */
 import { EventEmitter } from 'events';
 import { BaseConnectorBridge } from '../bridge/base';
-import { PluginManager, PluginType, PlaceholderAPIIntegration, PlanIntegration, LuckPermsIntegration, VaultIntegration } from '../plugins';
+import { PluginType, PlaceholderAPIIntegration, PlanIntegration, LuckPermsIntegration, VaultIntegration } from '../plugins';
 export declare class PluginIntegrationService extends EventEmitter {
     private pluginManagers;
     private initialized;
@@ -17,16 +17,17 @@ export declare class PluginIntegrationService extends EventEmitter {
     initialize(): Promise<void>;
     /**
      * Create and initialize plugin manager for a server bridge
+     * NOTE: Plugin integration is not yet implemented in basic mode
      */
-    createPluginManager(bridge: BaseConnectorBridge): Promise<PluginManager>;
+    createPluginManager(bridge: BaseConnectorBridge): Promise<any>;
     /**
      * Get plugin manager for a server
      */
-    getPluginManager(serverId: string): PluginManager | null;
+    getPluginManager(serverId: string): any | null;
     /**
      * Get all plugin managers
      */
-    getAllPluginManagers(): Map<string, PluginManager>;
+    getAllPluginManagers(): Map<string, any>;
     /**
      * Remove plugin manager for a server
      */
@@ -69,6 +70,7 @@ export declare class PluginIntegrationService extends EventEmitter {
     private registerPluginFactories;
     /**
      * Set up event forwarding from plugin manager
+     * NOTE: Not implemented in basic mode
      */
     private setupEventForwarding;
 }

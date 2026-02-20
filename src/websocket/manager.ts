@@ -78,7 +78,7 @@ export class WebSocketConnectionManager extends EventEmitter {
   private authManager: AuthenticationManager;
   private heartbeatManager: HeartbeatManager;
   private protocolHandler: ProtocolHandler;
-  private connectionSecurityManager: ConnectionSecurityManager;
+  private connectionSecurityManager?: ConnectionSecurityManager;
   
   // Connection registry
   private connections = new Map<string, ConnectionEntry>();

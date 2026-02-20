@@ -397,7 +397,7 @@ export class SystemIntegrationService extends EventEmitter {
       throw new Error('Services must be initialized before WebSocket');
     }
 
-    const tokenManager = this.serviceManager.token;
+    const tokenManager = this.serviceManager.token as any;
     
     this.websocketManager = new WebSocketConnectionManager(
       tokenManager,
@@ -510,7 +510,7 @@ export class SystemIntegrationService extends EventEmitter {
       switch (name) {
         case 'database':
           if (this.databaseManager) {
-            await this.databaseManager.testConnection();
+            await (this.databaseManager as any).healthCheck();
           }
           break;
         case 'services':

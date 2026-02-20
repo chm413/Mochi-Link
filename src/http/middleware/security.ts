@@ -50,7 +50,7 @@ export class SecurityMiddleware implements HTTPMiddleware {
             reason: securityCheck.reason,
             userAgent: request.headers['user-agent']
           },
-          request.context.serverId
+          request.context.serverId || 'unknown'
         );
 
         // Send security error response

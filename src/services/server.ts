@@ -1013,7 +1013,7 @@ export class ServerManager {
       // Log plugin availability
       const availablePlugins = pluginManager.getAvailableIntegrations();
       if (availablePlugins.length > 0) {
-        logger.info(`Available plugins for ${serverId}: ${availablePlugins.map(p => p.name).join(', ')}`);
+        logger.info(`Available plugins for ${serverId}: ${availablePlugins.map((p: any) => p.name).join(', ')}`);
       }
       
     } catch (error) {

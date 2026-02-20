@@ -42,7 +42,7 @@ export declare class WebSocketConnectionManager extends EventEmitter {
     private authManager;
     private heartbeatManager;
     private protocolHandler;
-    private connectionSecurityManager;
+    private connectionSecurityManager?;
     private connections;
     private clients;
     private isRunning;
