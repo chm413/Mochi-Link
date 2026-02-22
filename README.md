@@ -249,10 +249,10 @@ npm run test:coverage
 
 ## 🤝 支持
 
-- 📧 邮件：support@example.com
-- 💬 QQ群：123456789
-- 🐛 问题反馈：[GitHub Issues](https://github.com/your-org/koishi-plugin-mochi-link/issues)
-- 📖 文档：[Wiki](https://github.com/your-org/koishi-plugin-mochi-link/wiki)
+- 📧 邮件：chm@ling-hong.top
+- 💬 QQ群：1083149656
+- 🐛 问题反馈：[GitHub Issues](https://github.com/chm413/Mochi-Link/issues)
+- 📖 文档：[Wiki](https://github.com/chm413/Mochi-Link/wiki)
 
 ## 🙏 致谢
 
