@@ -265,18 +265,24 @@ export function apply(ctx: Context, config: PluginConfig) {
                     await session.send(
                       '❌ 注册信息格式错误\n\n' +
                       '📝 正确格式:\n' +
-                      '/mochi register <服务器ID> --name <名称> --host <地址> --port <端口> --core <核心>\n\n' +
+                      '/mochi register <服务器ID> --name <名称> --host <地址> --port <端口> --core <核心> [--type <类型>]\n\n' +
                       '📋 参数说明:\n' +
                       '  <服务器ID>: 唯一标识符（字母、数字、下划线、连字符）\n' +
-                      '  --name: 服务器名称（支持中文和空格）\n' +
+                      '  --name: 服务器名称（支持中文和空格，可用引号包裹）\n' +
                       '  --host: IP地址或域名\n' +
                       '  --port: 端口号（1-65535）\n' +
-                      '  --core: 核心类型（paper/fabric/nukkit/pmmp等）\n' +
+                      '  --core: 核心类型\n' +
+                      '    Java版: paper, spigot, folia, fabric, forge\n' +
+                      '    基岩版: nukkit, pmmp, llbds, bds\n' +
                       '  --type: [可选] 服务器类型（java/bedrock，不填自动识别）\n\n' +
                       '💡 示例:\n' +
-                      '  /mochi register survival --name 生存服 --host 127.0.0.1 --port 25565 --core paper\n' +
-                      '  /mochi register creative --name "创造服务器 1号" --host 192.168.1.100 --port 25566 --core fabric\n' +
-                      '  /mochi register bedrock01 --name 基岩服 --host 127.0.0.1 --port 19132 --core nukkit --type bedrock'
+                      '  Java版:\n' +
+                      '    /mochi register survival --name 生存服 --host 127.0.0.1 --port 25565 --core paper\n' +
+                      '    /mochi register creative --name "创造服务器 1号" --host 192.168.1.100 --port 25566 --core fabric\n' +
+                      '    /mochi register modded --name 模组服 --host 127.0.0.1 --port 25567 --core forge\n\n' +
+                      '  基岩版:\n' +
+                      '    /mochi register bedrock01 --name 基岩服 --host 127.0.0.1 --port 19132 --core nukkit\n' +
+                      '    /mochi register pmmp-server --name PMMP服务器 --host 127.0.0.1 --port 19133 --core pmmp'
                     );
                     return;
                 }
