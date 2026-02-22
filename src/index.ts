@@ -198,7 +198,6 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // Server management - Level 2 (受信任用户)
     ctx.command('mochi.server', '服务器管理')
-      .alias('服务器')
       .userFields(['authority'])
       .action(() => {
         return '服务器管理命令：\n  mochi.server.list - 列出所有服务器\n  mochi.server.add <id> <name> - 添加服务器\n  mochi.server.info <id> - 查看服务器信息\n  mochi.server.remove <id> - 删除服务器';
@@ -206,8 +205,6 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // List servers - Level 1 (所有用户可查看)
     ctx.command('mochi.server.list', '列出所有服务器')
-      .alias('服务器.列表')
-      .alias('服务器列表')
       .userFields(['authority'])
       .action(async ({ session }) => {
         if (!isInitialized || !dbManager) {
@@ -233,8 +230,6 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // Add server - Level 3 (管理员)
     ctx.command('mochi.server.add <id> <name>', '添加服务器')
-      .alias('服务器.添加 <id> <name>')
-      .alias('添加服务器 <id> <name>')
       .userFields(['authority'])
       .option('type', '-t <type:string> commands.mochi.server.add.options.type', { fallback: 'java' })
       .option('core', '-c <core:string> commands.mochi.server.add.options.core', { fallback: 'paper' })
@@ -293,8 +288,6 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // Server info - Level 1 (所有用户可查看)
     ctx.command('mochi.server.info <id>', '查看服务器信息')
-      .alias('服务器.信息 <id>')
-      .alias('服务器信息 <id>')
       .userFields(['authority'])
       .action(async ({ session }, id) => {
         if (!isInitialized || !dbManager) {
@@ -329,8 +322,6 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // Remove server - Level 4 (超级管理员)
     ctx.command('mochi.server.remove <id>', '删除服务器')
-      .alias('服务器.删除 <id>')
-      .alias('删除服务器 <id>')
       .userFields(['authority'])
       .before(({ session }) => {
         if ((session?.user?.authority ?? 0) < 4) {
@@ -372,8 +363,6 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // Audit logs - Level 3 (管理员)
     ctx.command('mochi.audit', '审计日志')
-      .alias('审计')
-      .alias('日志')
       .userFields(['authority'])
       .before(({ session }) => {
         if ((session?.user?.authority ?? 0) < 3) {
@@ -413,7 +402,6 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // Whitelist management - Level 2 (受信任用户)
     ctx.command('mochi.whitelist', '白名单管理')
-      .alias('白名单')
       .userFields(['authority'])
       .action(() => {
         return '白名单管理命令：\n' +
@@ -424,8 +412,6 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // List whitelist - Level 1 (所有用户可查看)
     ctx.command('mochi.whitelist.list [serverId]', '查看白名单')
-      .alias('白名单.列表 [serverId]')
-      .alias('查看白名单 [serverId]')
       .userFields(['authority'])
       .action(async ({ session }, serverId) => {
         if (!isInitialized || !dbManager) {
@@ -477,8 +463,6 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // Add to whitelist - Level 2 (受信任用户)
     ctx.command('mochi.whitelist.add [serverId] <player>', '添加白名单')
-      .alias('白名单.添加 [serverId] <player>')
-      .alias('添加白名单 [serverId] <player>')
       .userFields(['authority'])
       .before(({ session }) => {
         if ((session?.user?.authority ?? 0) < 2) {
@@ -562,8 +546,6 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // Remove from whitelist - Level 2 (受信任用户)
     ctx.command('mochi.whitelist.remove <serverId> <player>', '移除白名单')
-      .alias('白名单.移除 <serverId> <player>')
-      .alias('移除白名单 <serverId> <player>')
       .userFields(['authority'])
       .before(({ session }) => {
         if ((session?.user?.authority ?? 0) < 2) {
@@ -609,7 +591,6 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // Player management - Level 2 (受信任用户)
     ctx.command('mochi.player', '玩家管理')
-      .alias('玩家')
       .userFields(['authority'])
       .action(() => {
         return '玩家管理命令：\n' +
@@ -620,8 +601,6 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // List players - Level 1 (所有用户可查看)
     ctx.command('mochi.player.list [serverId]', '查看在线玩家')
-      .alias('玩家.列表 [serverId]')
-      .alias('在线玩家 [serverId]')
       .userFields(['authority'])
       .action(async ({ session }, serverId) => {
         if (!isInitialized || !dbManager) {
@@ -674,8 +653,6 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // Player info - Level 1 (所有用户可查看)
     ctx.command('mochi.player.info <serverId> <player>', '查看玩家信息')
-      .alias('玩家.信息 <serverId> <player>')
-      .alias('玩家信息 <serverId> <player>')
       .userFields(['authority'])
       .action(async ({ session }, serverId, player) => {
         if (!isInitialized || !dbManager) {
@@ -703,8 +680,6 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // Kick player - Level 3 (管理员)
     ctx.command('mochi.player.kick <serverId> <player> [reason]', '踢出玩家')
-      .alias('玩家.踢出 <serverId> <player> [reason]')
-      .alias('踢出玩家 <serverId> <player> [reason]')
       .userFields(['authority'])
       .before(({ session }) => {
         if ((session?.user?.authority ?? 0) < 3) {
@@ -755,8 +730,6 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // Execute command - Level 4 (超级管理员)
     ctx.command('mochi.exec <serverId> <command...>', '执行服务器命令')
-      .alias('执行 <serverId> <command...>')
-      .alias('mochi.cmd')
       .userFields(['authority'])
       .before(({ session }) => {
         if ((session?.user?.authority ?? 0) < 4) {
@@ -854,7 +827,6 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // Channel binding - Level 2 (受信任用户)
     ctx.command('mochi.bind', '频道绑定管理')
-      .alias('绑定')
       .userFields(['authority'])
       .action(() => {
         return '群组绑定管理命令：\n' +
@@ -865,8 +837,6 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // Add binding - Level 3 (管理员)
     ctx.command('mochi.bind.add <serverId>', '添加频道绑定')
-      .alias('绑定.添加 <serverId>')
-      .alias('添加绑定 <serverId>')
       .userFields(['authority'])
       .before(({ session }) => {
         if ((session?.user?.authority ?? 0) < 3) {
@@ -939,8 +909,6 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // List bindings - Level 1 (所有用户可查看)
     ctx.command('mochi.bind.list', '查看频道绑定')
-      .alias('绑定.列表')
-      .alias('查看绑定')
       .userFields(['authority'])
       .action(async ({ session }) => {
         if (!isInitialized || !dbManager) {
@@ -976,8 +944,6 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // Remove binding - Level 3 (管理员)
     ctx.command('mochi.bind.remove <bindingId:number>', '移除频道绑定')
-      .alias('绑定.移除 <bindingId:number>')
-      .alias('解除绑定 <bindingId:number>')
       .userFields(['authority'])
       .before(({ session }) => {
         if ((session?.user?.authority ?? 0) < 3) {
