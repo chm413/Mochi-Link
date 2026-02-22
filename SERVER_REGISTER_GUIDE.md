@@ -18,31 +18,93 @@
 
 | 参数 | 必填 | 说明 | 示例 |
 |------|------|------|------|
-| `<服务器ID>` | ✅ | 服务器的唯一标识符，只能包含字母、数字、下划线和连字符 | `survival`, `creative-01` |
-| `--name` | ✅ | 服务器的显示名称，可以包含中文和空格 | `生存服`, `创造服务器 1号` |
-| `--host` | ✅ | 服务器的 IP 地址或域名 | `127.0.0.1`, `mc.example.com` |
-| `--port` | ✅ | 服务器的端口号 | `25565`, `19132` |
-| `--core` | ✅ | 服务器核心类型 | `paper`, `fabric`, `nukkit` |
+| `<服务器ID>` | ✅ | 服务器的唯一标识符，只能包含字母、数字、下划线和连字符 | `survival`, `creative-01`, `server_1` |
+| `--name` | ✅ | 服务器的显示名称，支持中文、空格和特殊字符 | `生存服`, `创造服务器 1号`, `"我的世界服务器"` |
+| `--host` | ✅ | 服务器的 IP 地址或域名 | `127.0.0.1`, `mc.example.com`, `192.168.1.100` |
+| `--port` | ✅ | 服务器的端口号（1-65535） | `25565`, `19132`, `25566` |
+| `--core` | ✅ | 服务器核心类型（小写） | `paper`, `fabric`, `nukkit`, `pmmp`, `llbds` |
 | `--type` | ❌ | 服务器类型（java 或 bedrock），不填会自动识别 | `java`, `bedrock` |
+
+#### 名称格式说明
+
+服务器名称支持三种格式：
+
+1. **使用引号包裹**（推荐，支持任意字符）
+   ```
+   --name "我的 Minecraft 服务器"
+   --name '生存服 #1'
+   ```
+
+2. **不使用引号**（自动识别到下一个参数）
+   ```
+   --name 生存服务器 --host 127.0.0.1
+   ```
+   注意：名称会自动识别到下一个 `--` 参数为止
+
+3. **单个词**（无空格）
+   ```
+   --name 生存服 --host 127.0.0.1
+   ```
+
+#### ID 格式规则
+
+服务器 ID 必须遵循以下规则：
+- ✅ 只能包含：字母（a-z, A-Z）、数字（0-9）、下划线（_）、连字符（-）
+- ✅ 示例：`survival`, `creative-01`, `server_1`, `mc-server-2024`
+- ❌ 不能包含：空格、中文、特殊符号（@#$%等）
+- ❌ 错误示例：`生存服`, `server 1`, `mc@server`
 
 #### 示例
 
 **Java 版服务器：**
+
+1. 基本格式（名称无空格）
 ```
 /mochi register survival --name 生存服 --host 127.0.0.1 --port 25565 --core paper
 ```
 
+2. 名称包含空格（使用引号）
 ```
-/mochi register creative --name 创造服务器 --host 192.168.1.100 --port 25566 --core fabric --type java
+/mochi register creative --name "创造服务器 1号" --host 192.168.1.100 --port 25566 --core fabric
+```
+
+3. 名称包含空格（不使用引号，自动识别）
+```
+/mochi register skyblock --name 空岛服务器 --host 192.168.1.101 --port 25567 --core paper
+```
+
+4. 手动指定类型
+```
+/mochi register modded --name 模组服 --host 127.0.0.1 --port 25568 --core forge --type java
 ```
 
 **基岩版服务器：**
+
+1. Nukkit 服务器
 ```
-/mochi register bedrock01 --name 基岩服 --host 127.0.0.1 --port 19132 --core nukkit --type bedrock
+/mochi register bedrock01 --name 基岩服 --host 127.0.0.1 --port 19132 --core nukkit
 ```
 
+2. LLBDS 服务器
 ```
-/mochi register llbds-server --name LLBDS服务器 --host 192.168.1.200 --port 19133 --core llbds
+/mochi register llbds-server --name "LLBDS 服务器" --host 192.168.1.200 --port 19133 --core llbds
+```
+
+3. PMMP 服务器
+```
+/mochi register pmmp01 --name PMMP服务器 --host 127.0.0.1 --port 19134 --core pmmp --type bedrock
+```
+
+**复杂示例：**
+
+1. 域名 + 自定义端口
+```
+/mochi register main --name "主服务器" --host mc.example.com --port 25565 --core paper
+```
+
+2. 内网 IP + 特殊名称
+```
+/mochi register test --name "测试服 [开发中]" --host 192.168.1.50 --port 25570 --core fabric
 ```
 
 ### 方式二：使用命令（传统方式）
@@ -134,10 +196,26 @@ mochi.server.list
 ### Q: 注册时提示"格式错误"怎么办？
 
 A: 请检查：
-1. 命令格式是否正确，特别是 `--` 符号
-2. 参数之间是否有空格
-3. 服务器 ID 是否包含特殊字符（只允许字母、数字、下划线、连字符）
-4. 端口号是否为纯数字
+1. **命令格式**：确保以 `/mochi register` 开头
+2. **参数符号**：使用两个连字符 `--`，不是一个 `-`
+3. **参数顺序**：服务器 ID 必须在第一个位置
+4. **ID 格式**：只能包含字母、数字、下划线、连字符（不能有空格或中文）
+5. **端口号**：必须是 1-65535 之间的纯数字
+6. **参数间隔**：参数之间要有空格
+7. **名称格式**：
+   - 如果名称包含空格，建议使用引号：`--name "我的服务器"`
+   - 或确保名称后面紧跟下一个 `--` 参数
+
+**正确示例：**
+```
+/mochi register survival --name 生存服 --host 127.0.0.1 --port 25565 --core paper
+```
+
+**错误示例及修正：**
+- ❌ `/mochi register 生存服 -name ...` → ✅ 使用英文 ID，使用 `--name`
+- ❌ `/mochi register survival -name ...` → ✅ 使用 `--name`（两个连字符）
+- ❌ `/mochi register survival --name生存服...` → ✅ `--name` 后要有空格
+- ❌ `/mochi register survival --name 生存服--host...` → ✅ 参数之间要有空格
 
 ### Q: 注册时提示"服务器已存在"怎么办？
 
@@ -179,11 +257,65 @@ A: 目前支持：
 
 ## 自动识别功能
 
+### 服务器类型自动识别
+
 系统会根据 `--core` 参数自动识别服务器类型：
 
-- 包含 `nukkit`, `pmmp`, `bds`, `llbds` 的会被识别为基岩版
-- 其他的会被识别为 Java 版
-- 也可以手动指定 `--type java` 或 `--type bedrock`
+**自动识别为基岩版的核心：**
+- `nukkit`, `powernukkit`, `cloudburst` - Nukkit 系列
+- `pmmp` - PocketMine-MP
+- `bds` - 官方基岩版服务器
+- `llbds` - LiteLoaderBDS
+
+**其他核心自动识别为 Java 版：**
+- `paper`, `spigot` - Paper/Spigot 系列
+- `folia` - Folia（Paper 的多线程版本）
+- `fabric` - Fabric 模组加载器
+- `forge` - Forge 模组加载器
+- `mohist`, `arclight` - 混合端
+
+**手动指定类型：**
+如果自动识别不准确，可以手动指定：
+```
+--type java    # 强制指定为 Java 版
+--type bedrock # 强制指定为基岩版
+```
+
+### 名称自动识别
+
+系统支持三种名称格式，会自动识别：
+
+1. **引号包裹**（最安全）
+   ```
+   --name "我的 Minecraft 服务器"
+   ```
+   系统会提取引号内的所有内容作为名称
+
+2. **自动识别到下一个参数**
+   ```
+   --name 我的服务器 --host 127.0.0.1
+   ```
+   系统会自动识别从 `--name` 后到下一个 `--` 之间的所有内容
+
+3. **单个词**
+   ```
+   --name 生存服 --host 127.0.0.1
+   ```
+   如果名称是单个词（无空格），可以直接写
+
+### ID 和名称的区别
+
+| 项目 | 服务器 ID | 服务器名称 |
+|------|----------|-----------|
+| 用途 | 系统内部唯一标识 | 显示给用户看的名称 |
+| 格式限制 | 只能是字母、数字、下划线、连字符 | 可以包含中文、空格、特殊字符 |
+| 是否唯一 | 必须唯一，不能重复 | 可以重复 |
+| 示例 | `survival`, `creative-01` | `生存服`, `创造服务器 1号` |
+| 修改 | 不能修改（需要删除重建） | 可以修改（未来版本） |
+
+**最佳实践：**
+- ID 使用英文，简短易记：`survival`, `creative`, `skyblock`
+- 名称使用中文，描述清晰：`生存服务器`, `创造模式`, `空岛生存`
 
 ## 安全提示
 
