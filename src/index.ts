@@ -423,8 +423,8 @@ export function apply(ctx: Context, config: PluginConfig) {
     // Add server - Level 3 (管理员)
     ctx.command('mochi.server.add <id> <name>', '添加服务器')
       .userFields(['authority'])
-      .option('type', '-t <type:string> commands.mochi.server.add.options.type', { fallback: 'java' })
-      .option('core', '-c <core:string> commands.mochi.server.add.options.core', { fallback: 'paper' })
+      .option('type', '-t <type:string> 服务器类型 (java/bedrock)', { fallback: 'java' })
+      .option('core', '-c <core:string> 核心类型 (paper/fabric/forge/folia/nukkit/pmmp/llbds)', { fallback: 'paper' })
       .before(({ session }) => {
         if ((session?.user?.authority ?? 0) < 3) {
           return '权限不足：需要管理员权限（等级 3）';
@@ -436,7 +436,8 @@ export function apply(ctx: Context, config: PluginConfig) {
         }
         
         if (!id || !name) {
-          return '用法: mochi.server.add <id> <name> [-t type] [-c core]';
+          return '用法: mochi.server.add <id> <name> [-t type] [-c core]\n' +
+                 '示例: mochi.server.add survival 生存服 -t java -c paper';
         }
         
         if (!options) {
@@ -471,7 +472,9 @@ export function apply(ctx: Context, config: PluginConfig) {
             result: 'success'
           });
           
-          return `服务器 ${name} (${id}) 创建成功`;
+          return `服务器 ${name} (${id}) 创建成功\n` +
+                 `类型: ${options.type}\n` +
+                 `核心: ${options.core}`;
         } catch (error) {
           logger.error('Failed to create server:', error);
           return '创建服务器失败';
@@ -563,7 +566,7 @@ export function apply(ctx: Context, config: PluginConfig) {
           return '权限不足：需要管理员权限（等级 3）';
         }
       })
-      .option('limit', '-l <limit:number> commands.mochi.audit.options.limit', { fallback: 10 })
+      .option('limit', '-l <limit:number> 显示条数 (默认10)', { fallback: 10 })
       .action(async ({ session, options }) => {
         if (!isInitialized || !dbManager) {
           return '插件尚未初始化完成';
@@ -579,7 +582,7 @@ export function apply(ctx: Context, config: PluginConfig) {
             return '暂无审计日志';
           }
           
-          return '审计日志：\n' + logs.map((log: any) => 
+          return `审计日志 (最近 ${logs.length} 条)：\n` + logs.map((log: any) => 
             `  [${log.timestamp.toLocaleString()}] ${log.operation} - ${log.result}` +
             (log.user_id ? ` (用户: ${log.user_id})` : '') +
             (log.server_id ? ` (服务器: ${log.server_id})` : '')
@@ -918,14 +921,15 @@ export function apply(ctx: Context, config: PluginConfig) {
           return '权限不足：需要超级管理员权限（等级 4）';
         }
       })
-      .option('as', '-a <executor:string> commands.mochi.exec.options.as', { fallback: 'console' })
+      .option('as', '-a <executor:string> 执行者身份 (console/player，默认console)', { fallback: 'console' })
       .action(async ({ session, options }, serverId, ...commandParts) => {
         if (!isInitialized || !dbManager) {
           return '插件尚未初始化完成';
         }
         
         if (!serverId || !commandParts || commandParts.length === 0) {
-          return '用法: mochi.exec <serverId> <command...> [-a executor]';
+          return '用法: mochi.exec <serverId> <command...> [-a executor]\n' +
+                 '示例: mochi.exec survival say Hello -a console';
         }
         
         if (!options) {
@@ -1019,7 +1023,7 @@ export function apply(ctx: Context, config: PluginConfig) {
           return '权限不足：需要管理员权限（等级 3）';
         }
       })
-      .option('type', '-t <type:string> commands.mochi.bind.add.options.type', { fallback: 'full' })
+      .option('type', '-t <type:string> 绑定类型 (full/chat/event，默认full)', { fallback: 'full' })
       .action(async ({ session, options }, serverId) => {
         if (!isInitialized || !dbManager) {
           return '插件尚未初始化完成';
@@ -1030,7 +1034,8 @@ export function apply(ctx: Context, config: PluginConfig) {
         }
         
         if (!serverId) {
-          return '用法: mochi.bind.add <serverId> [-t type]';
+          return '用法: mochi.bind.add <serverId> [-t type]\n' +
+                 '示例: mochi.bind.add survival -t full';
         }
         
         if (!options) {
