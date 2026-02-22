@@ -389,17 +389,11 @@ export function apply(ctx: Context, config: PluginConfig) {
     ctx.command('mochi', 'Minecraft 统一管理系统')
       .alias('大福连')
       .alias('墨池')
-      .userFields(['authority'])
-      .action(() => {
-        return 'Mochi-Link (大福连) - Minecraft 统一管理系统\n使用 mochi.help 查看可用命令';
-      });
+      .userFields(['authority']);
     
     // Server management - Level 2 (受信任用户)
     ctx.command('mochi.server', '服务器管理')
-      .userFields(['authority'])
-      .action(() => {
-        return '服务器管理命令：\n  mochi.server.list - 列出所有服务器\n  mochi.server.add <id> <name> - 添加服务器\n  mochi.server.info <id> - 查看服务器信息\n  mochi.server.remove <id> - 删除服务器';
-      });
+      .userFields(['authority']);
     
     // List servers - Level 1 (所有用户可查看)
     ctx.command('mochi.server.list', '列出所有服务器')
@@ -602,13 +596,7 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // Whitelist management - Level 2 (受信任用户)
     ctx.command('mochi.whitelist', '白名单管理')
-      .userFields(['authority'])
-      .action(() => {
-        return '白名单管理命令：\n' +
-               '  mochi.whitelist.list <serverId> - 查看白名单\n' +
-               '  mochi.whitelist.add <serverId> <player> - 添加到白名单\n' +
-               '  mochi.whitelist.remove <serverId> <player> - 从白名单移除';
-      });
+      .userFields(['authority']);
     
     // List whitelist - Level 1 (所有用户可查看)
     ctx.command('mochi.whitelist.list [serverId]', '查看白名单')
@@ -791,13 +779,7 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // Player management - Level 2 (受信任用户)
     ctx.command('mochi.player', '玩家管理')
-      .userFields(['authority'])
-      .action(() => {
-        return '玩家管理命令：\n' +
-               '  mochi.player.list <serverId> - 查看在线玩家\n' +
-               '  mochi.player.info <serverId> <player> - 查看玩家详情\n' +
-               '  mochi.player.kick <serverId> <player> [reason] - 踢出玩家';
-      });
+      .userFields(['authority']);
     
     // List players - Level 1 (所有用户可查看)
     ctx.command('mochi.player.list [serverId]', '查看在线玩家')
@@ -1027,13 +1009,7 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // Channel binding - Level 2 (受信任用户)
     ctx.command('mochi.bind', '频道绑定管理')
-      .userFields(['authority'])
-      .action(() => {
-        return '群组绑定管理命令：\n' +
-               '  mochi.bind.add <serverId> - 绑定服务器到当前群组\n' +
-               '  mochi.bind.list - 查看当前群组绑定\n' +
-               '  mochi.bind.remove <bindingId> - 解除绑定';
-      });
+      .userFields(['authority']);
     
     // Add binding - Level 3 (管理员)
     ctx.command('mochi.bind.add <serverId>', '添加频道绑定')
