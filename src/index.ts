@@ -192,18 +192,16 @@ export function apply(ctx: Context, config: PluginConfig) {
       .alias('大福连')
       .alias('墨池')
       .userFields(['authority'])
-      .action(({ session }) => {
-        return session?.text('commands.mochi.messages.welcome') || 
-               'Mochi-Link (大福连) - Minecraft 统一管理系统\n使用 mochi.help 查看可用命令';
+      .action(() => {
+        return 'Mochi-Link (大福连) - Minecraft 统一管理系统\n使用 mochi.help 查看可用命令';
       });
     
     // Server management - Level 2 (受信任用户)
     ctx.command('mochi.server', '服务器管理')
       .alias('服务器')
       .userFields(['authority'])
-      .action(({ session }) => {
-        return session?.text('commands.mochi.server.messages.menu') ||
-               '服务器管理命令：\n  mochi.server.list - 列出所有服务器\n  mochi.server.add <id> <name> - 添加服务器\n  mochi.server.info <id> - 查看服务器信息\n  mochi.server.remove <id> - 删除服务器';
+      .action(() => {
+        return '服务器管理命令：\n  mochi.server.list - 列出所有服务器\n  mochi.server.add <id> <name> - 添加服务器\n  mochi.server.info <id> - 查看服务器信息\n  mochi.server.remove <id> - 删除服务器';
       });
     
     // List servers - Level 1 (所有用户可查看)
@@ -213,24 +211,23 @@ export function apply(ctx: Context, config: PluginConfig) {
       .userFields(['authority'])
       .action(async ({ session }) => {
         if (!isInitialized || !dbManager) {
-          return session?.text('common.not-initialized') || '插件尚未初始化完成';
+          return '插件尚未初始化完成';
         }
         
         try {
           const servers = await dbManager.listServers();
           if (servers.length === 0) {
-            return session?.text('commands.mochi.server.list.messages.no-servers') || '暂无服务器';
+            return '暂无服务器';
           }
           
-          const header = session?.text('commands.mochi.server.list.messages.list-header') || '服务器列表：';
+          const header = '服务器列表：';
           const items = servers.map((s: any) => {
-            const status = session?.text(`server-status.${s.status}`) || s.status;
-            return `  [${s.id}] ${s.name} (${s.core_type}/${s.core_name}) - ${status}`;
+            return `  [${s.id}] ${s.name} (${s.core_type}/${s.core_name}) - ${s.status}`;
           }).join('\n');
           return header + '\n' + items;
         } catch (error) {
           logger.error('Failed to list servers:', error);
-          return session?.text('commands.mochi.server.list.messages.failed') || '获取服务器列表失败';
+          return '获取服务器列表失败';
         }
       });
     
@@ -248,24 +245,22 @@ export function apply(ctx: Context, config: PluginConfig) {
       })
       .action(async ({ session, options }, id, name) => {
         if (!isInitialized || !dbManager) {
-          return session?.text('common.not-initialized') || '插件尚未初始化完成';
+          return '插件尚未初始化完成';
         }
         
         if (!id || !name) {
-          return session?.text('commands.mochi.server.add.messages.usage') || 
-                 '用法: mochi.server.add <id> <name> [-t type] [-c core]';
+          return '用法: mochi.server.add <id> <name> [-t type] [-c core]';
         }
         
         if (!options) {
-          return session?.text('common.option-error') || '选项参数错误';
+          return '选项参数错误';
         }
         
         try {
           // Check if server already exists
           const existing = await dbManager.getServer(id);
           if (existing) {
-            return session?.text('commands.mochi.server.add.messages.exists', [id]) || 
-                   `服务器 ${id} 已存在`;
+            return `服务器 ${id} 已存在`;
           }
           
           // Create server
@@ -289,11 +284,10 @@ export function apply(ctx: Context, config: PluginConfig) {
             result: 'success'
           });
           
-          return session?.text('commands.mochi.server.add.messages.success', [name, id]) || 
-                 `服务器 ${name} (${id}) 创建成功`;
+          return `服务器 ${name} (${id}) 创建成功`;
         } catch (error) {
           logger.error('Failed to create server:', error);
-          return session?.text('commands.mochi.server.add.messages.failed') || '创建服务器失败';
+          return '创建服务器失败';
         }
       });
     
@@ -421,9 +415,8 @@ export function apply(ctx: Context, config: PluginConfig) {
     ctx.command('mochi.whitelist', '白名单管理')
       .alias('白名单')
       .userFields(['authority'])
-      .action(({ session }) => {
-        return session?.text('commands.mochi.whitelist.messages.menu') ||
-               '白名单管理命令：\n' +
+      .action(() => {
+        return '白名单管理命令：\n' +
                '  mochi.whitelist.list <serverId> - 查看白名单\n' +
                '  mochi.whitelist.add <serverId> <player> - 添加到白名单\n' +
                '  mochi.whitelist.remove <serverId> <player> - 从白名单移除';
@@ -618,9 +611,8 @@ export function apply(ctx: Context, config: PluginConfig) {
     ctx.command('mochi.player', '玩家管理')
       .alias('玩家')
       .userFields(['authority'])
-      .action(({ session }) => {
-        return session?.text('commands.mochi.player.messages.menu') ||
-               '玩家管理命令：\n' +
+      .action(() => {
+        return '玩家管理命令：\n' +
                '  mochi.player.list <serverId> - 查看在线玩家\n' +
                '  mochi.player.info <serverId> <player> - 查看玩家详情\n' +
                '  mochi.player.kick <serverId> <player> [reason] - 踢出玩家';
@@ -864,9 +856,8 @@ export function apply(ctx: Context, config: PluginConfig) {
     ctx.command('mochi.bind', '频道绑定管理')
       .alias('绑定')
       .userFields(['authority'])
-      .action(({ session }) => {
-        return session?.text('commands.mochi.bind.messages.menu') ||
-               '群组绑定管理命令：\n' +
+      .action(() => {
+        return '群组绑定管理命令：\n' +
                '  mochi.bind.add <serverId> - 绑定服务器到当前群组\n' +
                '  mochi.bind.list - 查看当前群组绑定\n' +
                '  mochi.bind.remove <bindingId> - 解除绑定';
