@@ -438,6 +438,100 @@ export function apply(ctx: Context, config: PluginConfig) {
         }
       });
     
+    // Server token - Level 3 (管理员)
+    ctx.command('mochi.server.token <id>', '查看服务器连接令牌')
+      .userFields(['authority'])
+      .option('regenerate', '-r 重新生成令牌', { fallback: false })
+      .before(({ session }) => {
+        if ((session?.user?.authority ?? 0) < 3) {
+          return '权限不足：需要管理员权限（等级 3）';
+        }
+      })
+      .action(async ({ session, options }, id) => {
+        if (!isInitialized || !dbManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!id) {
+          return '用法: mochi.server.token <id> [-r]\n' +
+                 '示例: mochi.server.token survival';
+        }
+        
+        if (!options) {
+          return '选项参数错误';
+        }
+        
+        try {
+          const server = await dbManager.getServer(id);
+          if (!server) {
+            return `服务器 ${id} 不存在`;
+          }
+          
+          // 检查是否需要重新生成令牌
+          if (options.regenerate) {
+            // 生成新的令牌
+            const crypto = await import('crypto');
+            const newToken = crypto.randomBytes(32).toString('hex');
+            
+            // 更新服务器令牌
+            await dbManager.updateServer(id, {
+              auth_token: newToken
+            });
+            
+            // 记录审计日志
+            await dbManager.createAuditLog({
+              user_id: session?.userId,
+              server_id: id,
+              operation: 'server.token.regenerate',
+              operation_data: JSON.stringify({ server_name: server.name }),
+              result: 'success'
+            });
+            
+            return `✅ 令牌已重新生成\n\n` +
+                   `🔐 服务器连接令牌:\n` +
+                   `  服务器: ${server.name} (${id})\n` +
+                   `  令牌: ${newToken}\n\n` +
+                   `⚠️ 警告:\n` +
+                   `  • 旧令牌已失效，请立即更新连接器配置\n` +
+                   `  • 请妥善保管令牌，不要泄露给他人\n` +
+                   `  • 令牌用于服务器连接认证`;
+          }
+          
+          // 查看现有令牌
+          if (!server.auth_token) {
+            // 如果没有令牌，自动生成一个
+            const crypto = await import('crypto');
+            const newToken = crypto.randomBytes(32).toString('hex');
+            
+            await dbManager.updateServer(id, {
+              auth_token: newToken
+            });
+            
+            return `✅ 令牌已生成\n\n` +
+                   `🔐 服务器连接令牌:\n` +
+                   `  服务器: ${server.name} (${id})\n` +
+                   `  令牌: ${newToken}\n\n` +
+                   `📝 使用说明:\n` +
+                   `  1. 在连接器配置文件中设置此令牌\n` +
+                   `  2. 令牌用于服务器连接认证\n` +
+                   `  3. 请妥善保管，不要泄露\n\n` +
+                   `💡 提示: 使用 -r 选项可以重新生成令牌`;
+          }
+          
+          return `🔐 服务器连接令牌:\n` +
+                 `  服务器: ${server.name} (${id})\n` +
+                 `  令牌: ${server.auth_token}\n\n` +
+                 `📝 使用说明:\n` +
+                 `  1. 在连接器配置文件中设置此令牌\n` +
+                 `  2. 令牌用于服务器连接认证\n` +
+                 `  3. 请妥善保管，不要泄露\n\n` +
+                 `💡 提示: 使用 -r 选项可以重新生成令牌`;
+        } catch (error) {
+          logger.error('Failed to get server token:', error);
+          return '获取服务器令牌失败';
+        }
+      });
+    
     // Remove server - Level 4 (超级管理员)
     ctx.command('mochi.server.remove <id>', '删除服务器')
       .userFields(['authority'])
