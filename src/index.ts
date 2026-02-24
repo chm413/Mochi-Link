@@ -279,7 +279,7 @@ export function apply(ctx: Context, config: PluginConfig) {
     // Register server - Level 3 (管理员) - 完整注册（包含连接信息）
     ctx.command('mochi.server.register <id> <name>', '注册服务器（完整信息）')
       .userFields(['authority'])
-      .option('host', '-h <host:string> 服务器地址', { fallback: '127.0.0.1' })
+      .option('host', '--host <host:string> 服务器地址', { fallback: '127.0.0.1' })
       .option('port', '-p <port:number> 服务器端口', { fallback: 25565 })
       .option('type', '-t <type:string> 服务器类型 (java/bedrock)', { fallback: 'java' })
       .option('core', '-c <core:string> 核心类型 (paper/fabric/forge/folia/nukkit/pmmp/llbds)', { fallback: 'paper' })
@@ -294,8 +294,8 @@ export function apply(ctx: Context, config: PluginConfig) {
         }
         
         if (!id || !name) {
-          return '用法: mochi.server.register <id> <name> [-h host] [-p port] [-t type] [-c core]\n' +
-                 '示例: mochi.server.register survival 生存服 -h 127.0.0.1 -p 25565 -t java -c paper';
+          return '用法: mochi.server.register <id> <name> [--host host] [-p port] [-t type] [-c core]\n' +
+                 '示例: mochi.server.register survival 生存服 --host 127.0.0.1 -p 25565 -t java -c paper';
         }
         
         if (!options) {
