@@ -20,6 +20,7 @@ export interface MinecraftServer {
   connection_config: string; // JSON string
   status: 'online' | 'offline' | 'error';
   owner_id?: string;
+  auth_token?: string; // 服务器连接认证令牌
   tags?: string; // JSON array string
   created_at: Date;
   updated_at: Date;
@@ -113,6 +114,7 @@ export class SimpleDatabaseManager {
       connection_config: 'text',
       status: { type: 'string', initial: 'offline' },
       owner_id: 'string',
+      auth_token: 'string',
       tags: 'text',
       created_at: 'timestamp',
       updated_at: 'timestamp',

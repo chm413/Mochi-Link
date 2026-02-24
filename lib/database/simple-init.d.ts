@@ -14,6 +14,7 @@ export interface MinecraftServer {
     connection_config: string;
     status: 'online' | 'offline' | 'error';
     owner_id?: string;
+    auth_token?: string;
     tags?: string;
     created_at: Date;
     updated_at: Date;
