@@ -85,8 +85,8 @@ public class ConnectionManager {
                     // Start heartbeat
                     startHeartbeat();
                     
-                    // Send authentication message
-                    sendAuthentication();
+                    // Note: Authentication is now handled via URL parameters (serverId and token)
+                    // The server will authenticate the connection automatically
                     
                     logger.info("Successfully connected to management server");
                     return true;
@@ -211,9 +211,16 @@ public class ConnectionManager {
             String scheme = config.isForwardSsl() ? "wss" : "ws";
             String host = config.getForwardHost();
             int port = config.getForwardPort();
+            String serverId = config.getServerId();
+            String token = config.getApiToken();
             
-            // Create WebSocket endpoint URL
-            String url = String.format("%s://%s:%d/ws/minecraft", scheme, host, port);
+            // Create WebSocket endpoint URL with serverId and token parameters
+            String url = String.format("%s://%s:%d/ws?serverId=%s&token=%s", 
+                scheme, host, port, 
+                java.net.URLEncoder.encode(serverId, "UTF-8"),
+                java.net.URLEncoder.encode(token, "UTF-8"));
+            
+            logger.info("Connecting to: " + scheme + "://" + host + ":" + port + "/ws");
             
             return new URI(url);
         } catch (Exception e) {
