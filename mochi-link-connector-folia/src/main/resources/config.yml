@@ -4,9 +4,19 @@
 # Server connection settings
 # 服务器连接设置
 server:
+  # Mochi-Link 管理系统地址
   host: "localhost"
   port: 8080
+  
+  # 服务器唯一 ID（必须与 Koishi 中注册的 ID 完全一致）
+  # Server ID (must match the ID registered in Koishi)
+  id: "my-folia-server"
+  
+  # API 令牌（从 Koishi 获取）
+  # API token (obtained from Koishi)
   token: "your-server-token-here"
+  
+  # 是否使用 SSL/TLS
   use-ssl: false
 
 # Auto-reconnect settings

@@ -15,6 +15,7 @@ public class FoliaPluginConfig {
     // Server connection settings
     private String serverHost;
     private int serverPort;
+    private String serverId;
     private String serverToken;
     private boolean useSsl;
     
@@ -41,8 +42,18 @@ public class FoliaPluginConfig {
         // Load server connection settings
         serverHost = config.getString("server.host", "localhost");
         serverPort = config.getInt("server.port", 8080);
+        serverId = config.getString("server.id", "my-folia-server");
         serverToken = config.getString("server.token", "");
         useSsl = config.getBoolean("server.use-ssl", false);
+        
+        // Validate required settings
+        if (serverId.isEmpty() || "my-folia-server".equals(serverId)) {
+            plugin.getLogger().warning("Server ID is not configured! Please set server.id in config.yml");
+        }
+        
+        if (serverToken.isEmpty() || "your-server-token-here".equals(serverToken)) {
+            plugin.getLogger().warning("Server token is not configured! Please set server.token in config.yml");
+        }
         
         // Load auto-reconnect settings
         autoReconnectEnabled = config.getBoolean("auto-reconnect.enabled", true);
@@ -58,6 +69,7 @@ public class FoliaPluginConfig {
     // Getters
     public String getServerHost() { return serverHost; }
     public int getServerPort() { return serverPort; }
+    public String getServerId() { return serverId; }
     public String getServerToken() { return serverToken; }
     public boolean isUseSsl() { return useSsl; }
     public boolean isAutoReconnectEnabled() { return autoReconnectEnabled; }
@@ -66,10 +78,18 @@ public class FoliaPluginConfig {
     public int getReportInterval() { return reportInterval; }
     
     /**
-     * Get WebSocket URL
+     * Get WebSocket URL with serverId and token parameters
      */
     public String getWebSocketUrl() {
         String protocol = useSsl ? "wss" : "ws";
-        return String.format("%s://%s:%d/ws", protocol, serverHost, serverPort);
+        try {
+            String encodedServerId = java.net.URLEncoder.encode(serverId, "UTF-8");
+            String encodedToken = java.net.URLEncoder.encode(serverToken, "UTF-8");
+            return String.format("%s://%s:%d/ws?serverId=%s&token=%s", 
+                protocol, serverHost, serverPort, encodedServerId, encodedToken);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to encode URL parameters: " + e.getMessage());
+            return String.format("%s://%s:%d/ws", protocol, serverHost, serverPort);
+        }
     }
 }
