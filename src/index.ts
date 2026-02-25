@@ -6,6 +6,9 @@
 
 import { Context, Schema, Logger } from 'koishi';
 import { PluginConfig } from './types';
+import type { SimpleDatabaseManager } from './database/simple-init';
+import type { MochiWebSocketServer } from './websocket/server';
+import type { WebSocketConnection } from './websocket/connection';
 
 // ============================================================================
 // Helper Functions
@@ -121,9 +124,9 @@ export function apply(ctx: Context, config: PluginConfig) {
     const logger = ctx.logger('mochi-link');
     
     // Service instances
-    let dbManager: any = null;
+    let dbManager: SimpleDatabaseManager | null = null;
     let serviceManager: any = null;
-    let wsManager: any = null;
+    let wsManager: MochiWebSocketServer | null = null;
     let isInitialized = false;
     
     /**
@@ -153,6 +156,51 @@ export function apply(ctx: Context, config: PluginConfig) {
             dbManager = new SimpleDatabaseManager(ctx, config.database?.prefix || 'mochi');
             
             await dbManager.initialize();
+            logger.info('Database initialized successfully');
+            
+            // Initialize WebSocket server
+            try {
+                const { SimpleTokenManager } = await import('./websocket/token-manager');
+                const { MochiWebSocketServer } = await import('./websocket/server');
+                const { AuthenticationManager } = await import('./websocket/auth');
+                
+                const tokenManager = new SimpleTokenManager(ctx, config.database?.prefix || 'mochi');
+                const authManager = new AuthenticationManager(tokenManager);
+                
+                wsManager = new MochiWebSocketServer(authManager, {
+                    port: config.websocket?.port || 8080,
+                    host: config.websocket?.host || '0.0.0.0',
+                    ssl: config.websocket?.ssl,
+                    authenticationRequired: true,
+                    maxConnections: config.security?.maxConnections || 100,
+                    heartbeatInterval: 30000,
+                    heartbeatTimeout: 5000
+                });
+                
+                await wsManager.start();
+                logger.info(`WebSocket server started on ${config.websocket?.host || '0.0.0.0'}:${config.websocket?.port || 8080}`);
+                
+                // Setup WebSocket event handlers
+                wsManager.on('connection', (connection: WebSocketConnection) => {
+                    logger.info(`Server connected: ${connection.serverId}`);
+                });
+                
+                wsManager.on('authenticated', (connection: WebSocketConnection) => {
+                    logger.info(`Server authenticated: ${connection.serverId}`);
+                });
+                
+                wsManager.on('disconnection', (connection: WebSocketConnection, code: number, reason: string) => {
+                    logger.info(`Server disconnected: ${connection.serverId} (${code}: ${reason})`);
+                });
+                
+                wsManager.on('error', (error: Error) => {
+                    logger.error('WebSocket server error:', error);
+                });
+                
+            } catch (wsError) {
+                logger.error('Failed to start WebSocket server:', wsError);
+                logger.warn('Plugin will continue without WebSocket support');
+            }
             
             isInitialized = true;
             logger.info('Mochi-Link plugin initialized successfully');
@@ -165,6 +213,17 @@ export function apply(ctx: Context, config: PluginConfig) {
     ctx.on('dispose', async () => {
         try {
             logger.info('Stopping Mochi-Link plugin...');
+            
+            // Stop WebSocket server
+            if (wsManager) {
+                try {
+                    await wsManager.stop();
+                    logger.info('WebSocket server stopped');
+                } catch (error) {
+                    logger.error('Error stopping WebSocket server:', error);
+                }
+            }
+            
             isInitialized = false;
             logger.info('Mochi-Link plugin stopped successfully');
         } catch (error) {
@@ -250,13 +309,19 @@ export function apply(ctx: Context, config: PluginConfig) {
           await dbManager.createServer({
             id,
             name,
-            core_type: options.type as 'java' | 'bedrock',
-            core_name: options.core,
+            core_type: (options.type || 'java') as 'java' | 'bedrock',
+            core_name: options.core || 'paper',
             connection_mode: 'reverse',
             connection_config: JSON.stringify({}),
             status: 'offline',
             owner_id: session?.userId
           });
+          
+          // Generate API token for the server
+          const crypto = await import('crypto');
+          const token = crypto.randomBytes(32).toString('hex');
+          const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+          await dbManager.createAPIToken(id, token, tokenHash);
           
           // Create audit log
           await dbManager.createAuditLog({
@@ -267,9 +332,18 @@ export function apply(ctx: Context, config: PluginConfig) {
             result: 'success'
           });
           
-          return `服务器 ${name} (${id}) 创建成功\n` +
-                 `类型: ${options.type}\n` +
-                 `核心: ${options.core}`;
+          return `✅ 服务器创建成功！\n\n` +
+                 `📋 服务器信息:\n` +
+                 `  🆔 ID: ${id}\n` +
+                 `  📝 名称: ${name}\n` +
+                 `  🎮 类型: ${options.type}\n` +
+                 `  ⚙️ 核心: ${options.core}\n\n` +
+                 `🔐 连接令牌:\n` +
+                 `  ${token}\n\n` +
+                 `📝 下一步:\n` +
+                 `  1. 在连接器配置中使用此令牌\n` +
+                 `  2. 使用 mochi.server.token ${id} 可随时查看令牌\n` +
+                 `  3. 使用 mochi.server.token ${id} -r 可重新生成令牌`;
         } catch (error) {
           logger.error('Failed to create server:', error);
           return '创建服务器失败';
@@ -349,6 +423,12 @@ export function apply(ctx: Context, config: PluginConfig) {
             owner_id: session?.userId
           });
           
+          // 生成 API token
+          const crypto = await import('crypto');
+          const token = crypto.randomBytes(32).toString('hex');
+          const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+          await dbManager.createAPIToken(id, token, tokenHash);
+          
           // 创建审计日志
           await dbManager.createAuditLog({
             user_id: session?.userId,
@@ -388,12 +468,22 @@ export function apply(ctx: Context, config: PluginConfig) {
                  `  ⚙️ 核心: ${core}\n` +
                  `  🌐 地址: ${host}:${port}\n` +
                  `  👤 所有者: ${session?.username || session?.userId}\n\n` +
+                 `� 连接令牌:\n` +
+                 `  ${token}\n\n` +
+                 `📦 连接配置:\n` +
+                 `  WebSocket URL: ws://your-host:${config.websocket?.port || 8080}/ws?serverId=${id}&token=${token}\n\n` +
                  `📦 下一步:\n` +
                  `  1️⃣ 在服务器上安装连接器: ${connector}\n` +
-                 `  2️⃣ 配置连接器连接到 Koishi (WebSocket 端口: ${config.websocket?.port || 8080})\n` +
+                 `  2️⃣ 在连接器配置中设置:\n` +
+                 `     - serverId: ${id}\n` +
+                 `     - token: ${token}\n` +
+                 `     - url: ws://your-host:${config.websocket?.port || 8080}/ws\n` +
                  `  3️⃣ 启动服务器，等待连接建立\n` +
                  `  4️⃣ 使用 mochi.server.list 查看连接状态\n\n` +
-                 `💡 提示: 连接器配置文件中的 server-id 必须设置为 "${id}"`;
+                 `💡 提示:\n` +
+                 `  • 使用 mochi.server.token ${id} 可随时查看令牌\n` +
+                 `  • 使用 mochi.server.token ${id} -r 可重新生成令牌\n` +
+                 `  • 请妥善保管令牌，不要泄露`;
         } catch (error) {
           logger.error('Failed to register server:', error);
           return `❌ 注册服务器失败\n\n` +
@@ -467,16 +557,19 @@ export function apply(ctx: Context, config: PluginConfig) {
             return `服务器 ${id} 不存在`;
           }
           
+          const crypto = await import('crypto');
+          
           // 检查是否需要重新生成令牌
           if (options.regenerate) {
-            // 生成新的令牌
-            const crypto = await import('crypto');
-            const newToken = crypto.randomBytes(32).toString('hex');
+            // 删除旧令牌
+            await dbManager.deleteServerAPITokens(id);
             
-            // 更新服务器令牌
-            await dbManager.updateServer(id, {
-              auth_token: newToken
-            });
+            // 生成新的令牌
+            const newToken = crypto.randomBytes(32).toString('hex');
+            const tokenHash = crypto.createHash('sha256').update(newToken).digest('hex');
+            
+            // 创建新令牌
+            await dbManager.createAPIToken(id, newToken, tokenHash);
             
             // 记录审计日志
             await dbManager.createAuditLog({
@@ -494,18 +587,20 @@ export function apply(ctx: Context, config: PluginConfig) {
                    `⚠️ 警告:\n` +
                    `  • 旧令牌已失效，请立即更新连接器配置\n` +
                    `  • 请妥善保管令牌，不要泄露给他人\n` +
-                   `  • 令牌用于服务器连接认证`;
+                   `  • 令牌用于服务器连接认证\n\n` +
+                   `📝 连接配置:\n` +
+                   `  URL: ws://your-host:${config.websocket?.port || 8080}/ws?serverId=${id}&token=${newToken}`;
           }
           
           // 查看现有令牌
-          if (!server.auth_token) {
+          const tokens = await dbManager.getAPITokens(id);
+          
+          if (tokens.length === 0) {
             // 如果没有令牌，自动生成一个
-            const crypto = await import('crypto');
             const newToken = crypto.randomBytes(32).toString('hex');
+            const tokenHash = crypto.createHash('sha256').update(newToken).digest('hex');
             
-            await dbManager.updateServer(id, {
-              auth_token: newToken
-            });
+            await dbManager.createAPIToken(id, newToken, tokenHash);
             
             return `✅ 令牌已生成\n\n` +
                    `🔐 服务器连接令牌:\n` +
@@ -515,20 +610,39 @@ export function apply(ctx: Context, config: PluginConfig) {
                    `  1. 在连接器配置文件中设置此令牌\n` +
                    `  2. 令牌用于服务器连接认证\n` +
                    `  3. 请妥善保管，不要泄露\n\n` +
+                   `📝 连接配置:\n` +
+                   `  URL: ws://your-host:${config.websocket?.port || 8080}/ws?serverId=${id}&token=${newToken}\n\n` +
                    `💡 提示: 使用 -r 选项可以重新生成令牌`;
           }
           
+          // 显示所有令牌
+          const tokenList = tokens.map((t: any, i: number) => {
+            const expiryInfo = t.expiresAt 
+              ? `\n  过期时间: ${new Date(t.expiresAt).toLocaleString()}`
+              : '';
+            const lastUsedInfo = t.lastUsed
+              ? `\n  最后使用: ${new Date(t.lastUsed).toLocaleString()}`
+              : '';
+            const ipWhitelistInfo = t.ipWhitelist && t.ipWhitelist.length > 0
+              ? `\n  IP 白名单: ${t.ipWhitelist.join(', ')}`
+              : '';
+            
+            return `令牌 #${i + 1}:\n` +
+                   `  ID: ${t.id}\n` +
+                   `  令牌: ${t.token}\n` +
+                   `  创建时间: ${new Date(t.createdAt).toLocaleString()}` +
+                   expiryInfo + lastUsedInfo + ipWhitelistInfo;
+          }).join('\n\n');
+          
           return `🔐 服务器连接令牌:\n` +
-                 `  服务器: ${server.name} (${id})\n` +
-                 `  令牌: ${server.auth_token}\n\n` +
-                 `📝 使用说明:\n` +
-                 `  1. 在连接器配置文件中设置此令牌\n` +
-                 `  2. 令牌用于服务器连接认证\n` +
-                 `  3. 请妥善保管，不要泄露\n\n` +
+                 `  服务器: ${server.name} (${id})\n\n` +
+                 tokenList + '\n\n' +
+                 `📝 连接配置:\n` +
+                 `  URL: ws://your-host:${config.websocket?.port || 8080}/ws?serverId=${id}&token=${tokens[0].token}\n\n` +
                  `💡 提示: 使用 -r 选项可以重新生成令牌`;
         } catch (error) {
           logger.error('Failed to get server token:', error);
-          return '获取服务器令牌失败';
+          return '获取服务器令牌失败: ' + (error instanceof Error ? error.message : String(error));
         }
       });
     
@@ -1075,7 +1189,7 @@ export function apply(ctx: Context, config: PluginConfig) {
           const binding = await dbManager.createGroupBinding({
             group_id: session.guildId,
             server_id: serverId,
-            binding_type: options.type,
+            binding_type: (options.type || 'full') as 'full' | 'monitor' | 'command',
             config: JSON.stringify({}),
             created_by: session.userId || 'unknown',
             status: 'active'

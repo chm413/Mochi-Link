@@ -5,6 +5,7 @@
  */
 
 import { Context } from 'koishi';
+import { APIToken } from '../types';
 
 // ============================================================================
 // Database Types
@@ -20,7 +21,6 @@ export interface MinecraftServer {
   connection_config: string; // JSON string
   status: 'online' | 'offline' | 'error';
   owner_id?: string;
-  auth_token?: string; // 服务器连接认证令牌
   tags?: string; // JSON array string
   created_at: Date;
   updated_at: Date;
@@ -36,18 +36,6 @@ export interface ServerACL {
   granted_by: string;
   granted_at: Date;
   expires_at?: Date;
-}
-
-export interface APIToken {
-  id: number;
-  server_id: string;
-  token: string;
-  token_hash: string;
-  ip_whitelist?: string; // JSON array string
-  encryption_config?: string; // JSON string
-  created_at: Date;
-  expires_at?: Date;
-  last_used?: Date;
 }
 
 export interface AuditLog {
@@ -114,7 +102,6 @@ export class SimpleDatabaseManager {
       connection_config: 'text',
       status: { type: 'string', initial: 'offline' },
       owner_id: 'string',
-      auth_token: 'string',
       tags: 'text',
       created_at: 'timestamp',
       updated_at: 'timestamp',
@@ -317,5 +304,80 @@ export class SimpleDatabaseManager {
       status: 'active'
     });
     return bindings as any;
+  }
+
+  /**
+   * Create API token for a server
+   */
+  async createAPIToken(serverId: string, token: string, tokenHash: string, options?: {
+    ipWhitelist?: string[];
+    encryptionConfig?: any;
+    expiresAt?: Date;
+  }): Promise<APIToken> {
+    const prefix = this.tablePrefix.replace(/\.$/, '_');
+    const now = new Date();
+    
+    const tokenData: any = {
+      server_id: serverId,
+      token: token,
+      token_hash: tokenHash,
+      ip_whitelist: options?.ipWhitelist ? JSON.stringify(options.ipWhitelist) : null,
+      encryption_config: options?.encryptionConfig ? JSON.stringify(options.encryptionConfig) : null,
+      created_at: now,
+      expires_at: options?.expiresAt || null,
+      last_used: null
+    };
+    
+    const result = await this.ctx.database.create(`${prefix}api_tokens` as any, tokenData);
+    
+    return {
+      id: result.id,
+      serverId: serverId,
+      token: token,
+      tokenHash: tokenHash,
+      ipWhitelist: options?.ipWhitelist,
+      encryptionConfig: options?.encryptionConfig,
+      createdAt: now,
+      expiresAt: options?.expiresAt,
+      lastUsed: undefined
+    };
+  }
+
+  /**
+   * Get API tokens for a server
+   */
+  async getAPITokens(serverId: string): Promise<APIToken[]> {
+    const prefix = this.tablePrefix.replace(/\.$/, '_');
+    const tokens = await this.ctx.database.get(`${prefix}api_tokens` as any, { 
+      server_id: serverId
+    });
+    
+    return tokens.map((t: any) => ({
+      id: t.id,
+      serverId: t.server_id,
+      token: t.token,
+      tokenHash: t.token_hash,
+      ipWhitelist: t.ip_whitelist ? JSON.parse(t.ip_whitelist) : undefined,
+      encryptionConfig: t.encryption_config ? JSON.parse(t.encryption_config) : undefined,
+      createdAt: t.created_at,
+      expiresAt: t.expires_at,
+      lastUsed: t.last_used
+    })) as APIToken[];
+  }
+
+  /**
+   * Delete API token
+   */
+  async deleteAPIToken(tokenId: number): Promise<void> {
+    const prefix = this.tablePrefix.replace(/\.$/, '_');
+    await this.ctx.database.remove(`${prefix}api_tokens` as any, { id: tokenId });
+  }
+
+  /**
+   * Delete all API tokens for a server
+   */
+  async deleteServerAPITokens(serverId: string): Promise<void> {
+    const prefix = this.tablePrefix.replace(/\.$/, '_');
+    await this.ctx.database.remove(`${prefix}api_tokens` as any, { server_id: serverId });
   }
 }

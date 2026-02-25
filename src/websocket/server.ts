@@ -293,11 +293,13 @@ export class MochiWebSocketServer extends EventEmitter {
       return;
     }
 
-    // Extract server ID from query parameters or headers
+    // Extract server ID and token from query parameters or headers
     const url = new URL(request.url || '', `http://${request.headers.host}`);
     const serverId = url.searchParams.get('serverId') || 
                     request.headers['x-server-id'] as string ||
                     `unknown-${Date.now()}`;
+    const token = url.searchParams.get('token') || 
+                 request.headers['x-auth-token'] as string;
 
     // Check if server is already connected
     if (this.connections.has(serverId)) {
@@ -325,7 +327,27 @@ export class MochiWebSocketServer extends EventEmitter {
 
       // Start authentication process if required
       if (this.config.authenticationRequired) {
-        await this.initiateAuthentication(connection);
+        // If token is provided in connection, validate it immediately
+        if (token) {
+          const result = await this.authManager.authenticateWithToken(
+            serverId,
+            token,
+            request.socket.remoteAddress
+          );
+          
+          if (result.success) {
+            connectionInfo.authenticated = true;
+            connection.setAuthenticated(true);
+            this.emit('authenticated', connection);
+          } else {
+            ws.close(1008, result.error || 'Authentication failed');
+            this.connections.delete(serverId);
+            return;
+          }
+        } else {
+          // No token provided, initiate challenge-response authentication
+          await this.initiateAuthentication(connection);
+        }
       } else {
         connectionInfo.authenticated = true;
         connection.setAuthenticated(true);

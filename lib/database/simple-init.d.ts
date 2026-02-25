@@ -4,6 +4,7 @@
  * Simplified database initialization for basic mode
  */
 import { Context } from 'koishi';
+import { APIToken } from '../types';
 export interface MinecraftServer {
     id: string;
     name: string;
@@ -14,7 +15,6 @@ export interface MinecraftServer {
     connection_config: string;
     status: 'online' | 'offline' | 'error';
     owner_id?: string;
-    auth_token?: string;
     tags?: string;
     created_at: Date;
     updated_at: Date;
@@ -29,17 +29,6 @@ export interface ServerACL {
     granted_by: string;
     granted_at: Date;
     expires_at?: Date;
-}
-export interface APIToken {
-    id: number;
-    server_id: string;
-    token: string;
-    token_hash: string;
-    ip_whitelist?: string;
-    encryption_config?: string;
-    created_at: Date;
-    expires_at?: Date;
-    last_used?: Date;
 }
 export interface AuditLog {
     id: number;
@@ -129,4 +118,24 @@ export declare class SimpleDatabaseManager {
      * Get all bindings for a server
      */
     getServerBindings(serverId: string): Promise<GroupBinding[]>;
+    /**
+     * Create API token for a server
+     */
+    createAPIToken(serverId: string, token: string, tokenHash: string, options?: {
+        ipWhitelist?: string[];
+        encryptionConfig?: any;
+        expiresAt?: Date;
+    }): Promise<APIToken>;
+    /**
+     * Get API tokens for a server
+     */
+    getAPITokens(serverId: string): Promise<APIToken[]>;
+    /**
+     * Delete API token
+     */
+    deleteAPIToken(tokenId: number): Promise<void>;
+    /**
+     * Delete all API tokens for a server
+     */
+    deleteServerAPITokens(serverId: string): Promise<void>;
 }
