@@ -870,7 +870,13 @@ export function apply(ctx: Context, config: PluginConfig) {
           // 调用实际的白名单服务
           if (serviceManager?.whitelist) {
             try {
-              await serviceManager.whitelist.addToWhitelist(targetServerId, targetPlayer);
+              await serviceManager.whitelist.addToWhitelist(
+                targetServerId, 
+                targetPlayer,  // playerId
+                targetPlayer,  // playerName (使用相同的值)
+                session?.userId || 'system',  // executor
+                undefined  // reason (可选)
+              );
               
               // 记录审计日志
               await dbManager.createAuditLog({
@@ -1128,8 +1134,8 @@ export function apply(ctx: Context, config: PluginConfig) {
                 command,
                 session?.userId || 'system',
                 {
-                  executeAs: options.as === 'player' ? 'player' : 'console',
-                  timeout: 30000
+                  timeout: 30000,
+                  requirePermission: false  // 已经在命令层检查过权限
                 }
               );
               
