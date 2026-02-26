@@ -10,6 +10,7 @@ import type { SimpleDatabaseManager } from './database/simple-init';
 import type { MochiWebSocketServer } from './websocket/server';
 import type { WebSocketConnection } from './websocket/connection';
 import { ServiceManager } from './services';
+import type { HTTPServer } from './http/server';
 
 // ============================================================================
 // Helper Functions
@@ -128,6 +129,7 @@ export function apply(ctx: Context, config: PluginConfig) {
     let dbManager: SimpleDatabaseManager | null = null;
     let serviceManager: ServiceManager | null = null;
     let wsManager: MochiWebSocketServer | null = null;
+    let httpServer: HTTPServer | null = null;
     let isInitialized = false;
     
     /**
@@ -245,6 +247,19 @@ export function apply(ctx: Context, config: PluginConfig) {
                 logger.warn('Plugin will continue without WebSocket support');
             }
             
+            // Initialize HTTP API server (if configured)
+            if (config.http && serviceManager) {
+                try {
+                    const { HTTPServer } = await import('./http/server');
+                    httpServer = new HTTPServer(ctx, config.http, serviceManager);
+                    await httpServer.start();
+                    logger.info(`HTTP API server started on ${config.http.host || 'localhost'}:${config.http.port || 3000}`);
+                } catch (httpError) {
+                    logger.error('Failed to start HTTP API server:', httpError);
+                    logger.warn('Plugin will continue without HTTP API support');
+                }
+            }
+            
             isInitialized = true;
             logger.info('Mochi-Link plugin initialized successfully');
         } catch (error) {
@@ -257,6 +272,16 @@ export function apply(ctx: Context, config: PluginConfig) {
         try {
             logger.info('Stopping Mochi-Link plugin...');
             
+            // Stop HTTP server
+            if (httpServer) {
+                try {
+                    await httpServer.stop();
+                    logger.info('HTTP API server stopped');
+                } catch (error) {
+                    logger.error('Error stopping HTTP API server:', error);
+                }
+            }
+            
             // Stop WebSocket server
             if (wsManager) {
                 try {
@@ -264,6 +289,16 @@ export function apply(ctx: Context, config: PluginConfig) {
                     logger.info('WebSocket server stopped');
                 } catch (error) {
                     logger.error('Error stopping WebSocket server:', error);
+                }
+            }
+            
+            // Cleanup service manager
+            if (serviceManager) {
+                try {
+                    await serviceManager.cleanup();
+                    logger.info('Service manager cleaned up');
+                } catch (error) {
+                    logger.error('Error cleaning up service manager:', error);
                 }
             }
             
@@ -366,14 +401,17 @@ export function apply(ctx: Context, config: PluginConfig) {
           const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
           await dbManager.createAPIToken(id, token, tokenHash);
           
-          // Create audit log
-          await dbManager.createAuditLog({
-            user_id: session?.userId,
-            server_id: id,
-            operation: 'server.create',
-            operation_data: JSON.stringify({ name, type: options.type, core: options.core }),
-            result: 'success'
-          });
+          // Create audit log using service
+          if (serviceManager?.audit) {
+            await serviceManager.audit.logger.logServerOperation(
+              id,
+              'create',
+              { name, type: options.type, core: options.core },
+              'success',
+              undefined,
+              { userId: session?.userId }
+            );
+          }
           
           return `✅ 服务器创建成功！\n\n` +
                  `📋 服务器信息:\n` +
@@ -472,21 +510,24 @@ export function apply(ctx: Context, config: PluginConfig) {
           const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
           await dbManager.createAPIToken(id, token, tokenHash);
           
-          // 创建审计日志
-          await dbManager.createAuditLog({
-            user_id: session?.userId,
-            server_id: id,
-            operation: 'server.register',
-            operation_data: JSON.stringify({
+          // 创建审计日志使用服务
+          if (serviceManager?.audit) {
+            await serviceManager.audit.logger.logServerOperation(
               id,
-              name,
-              host: host,
-              port: port,
-              type: finalType,
-              core: core
-            }),
-            result: 'success'
-          });
+              'register',
+              {
+                id,
+                name,
+                host: host,
+                port: port,
+                type: finalType,
+                core: core
+              },
+              'success',
+              undefined,
+              { userId: session?.userId }
+            );
+          }
           
           // 根据核心类型推荐连接器
           const connectorMap: Record<string, string> = {
@@ -614,14 +655,17 @@ export function apply(ctx: Context, config: PluginConfig) {
             // 创建新令牌
             await dbManager.createAPIToken(id, newToken, tokenHash);
             
-            // 记录审计日志
-            await dbManager.createAuditLog({
-              user_id: session?.userId,
-              server_id: id,
-              operation: 'server.token.regenerate',
-              operation_data: JSON.stringify({ server_name: server.name }),
-              result: 'success'
-            });
+            // 记录审计日志使用服务
+            if (serviceManager?.audit) {
+              await serviceManager.audit.logger.logServerOperation(
+                id,
+                'token.regenerate',
+                { server_name: server.name },
+                'success',
+                undefined,
+                { userId: session?.userId }
+              );
+            }
             
             return `✅ 令牌已重新生成\n\n` +
                    `🔐 服务器连接令牌:\n` +
@@ -714,14 +758,17 @@ export function apply(ctx: Context, config: PluginConfig) {
           
           await dbManager.deleteServer(id);
           
-          // Create audit log
-          await dbManager.createAuditLog({
-            user_id: session?.userId,
-            server_id: id,
-            operation: 'server.delete',
-            operation_data: JSON.stringify({ name: server.name }),
-            result: 'success'
-          });
+          // Create audit log using service
+          if (serviceManager?.audit) {
+            await serviceManager.audit.logger.logServerOperation(
+              id,
+              'delete',
+              { name: server.name },
+              'success',
+              undefined,
+              { userId: session?.userId }
+            );
+          }
           
           return `服务器 ${server.name} (${id}) 已删除`;
         } catch (error) {
@@ -740,7 +787,7 @@ export function apply(ctx: Context, config: PluginConfig) {
       })
       .option('limit', '-l <limit:number> 显示条数 (默认10)', { fallback: 10 })
       .action(async ({ session, options }) => {
-        if (!isInitialized || !dbManager) {
+        if (!isInitialized || !serviceManager) {
           return '插件尚未初始化完成';
         }
         
@@ -749,15 +796,16 @@ export function apply(ctx: Context, config: PluginConfig) {
         }
         
         try {
-          const logs = await dbManager.getAuditLogs(options.limit);
+          // 使用 AuditService 查询日志
+          const logs = await serviceManager.audit.query.getRecentLogs(options.limit);
           if (logs.length === 0) {
             return '暂无审计日志';
           }
           
           return `审计日志 (最近 ${logs.length} 条)：\n` + logs.map((log: any) => 
-            `  [${log.timestamp.toLocaleString()}] ${log.operation} - ${log.result}` +
-            (log.user_id ? ` (用户: ${log.user_id})` : '') +
-            (log.server_id ? ` (服务器: ${log.server_id})` : '')
+            `  [${log.createdAt.toLocaleString()}] ${log.operation} - ${log.result}` +
+            (log.userId ? ` (用户: ${log.userId})` : '') +
+            (log.serverId ? ` (服务器: ${log.serverId})` : '')
           ).join('\n');
         } catch (error) {
           logger.error('Failed to get audit logs:', error);
@@ -878,28 +926,33 @@ export function apply(ctx: Context, config: PluginConfig) {
                 undefined  // reason (可选)
               );
               
-              // 记录审计日志
-              await dbManager.createAuditLog({
-                user_id: session?.userId,
-                server_id: targetServerId,
-                operation: 'whitelist.add',
-                operation_data: JSON.stringify({ player: targetPlayer }),
-                result: 'success'
-              });
+              // 记录审计日志使用服务
+              if (serviceManager?.audit) {
+                await serviceManager.audit.logger.logServerOperation(
+                  targetServerId,
+                  'whitelist.add',
+                  { player: targetPlayer },
+                  'success',
+                  undefined,
+                  { userId: session?.userId }
+                );
+              }
               
               return `已将 ${targetPlayer} 添加到服务器 ${server.name} 的白名单`;
             } catch (error) {
               logger.error('Failed to add to whitelist:', error);
               
-              // 记录失败的审计日志
-              await dbManager.createAuditLog({
-                user_id: session?.userId,
-                server_id: targetServerId,
-                operation: 'whitelist.add',
-                operation_data: JSON.stringify({ player: targetPlayer }),
-                result: 'failure',
-                error_message: (error as Error).message
-              });
+              // 记录失败的审计日志使用服务
+              if (serviceManager?.audit) {
+                await serviceManager.audit.logger.logServerOperation(
+                  targetServerId,
+                  'whitelist.add',
+                  { player: targetPlayer },
+                  'failure',
+                  (error as Error).message,
+                  { userId: session?.userId }
+                );
+              }
               
               return `添加到白名单失败: ${(error as Error).message}`;
             }
@@ -936,14 +989,17 @@ export function apply(ctx: Context, config: PluginConfig) {
             return `服务器 ${serverId} 不存在`;
           }
           
-          // 记录审计日志
-          await dbManager.createAuditLog({
-            user_id: session?.userId,
-            server_id: serverId,
-            operation: 'whitelist.remove',
-            operation_data: JSON.stringify({ player }),
-            result: 'success'
-          });
+          // 记录审计日志使用服务
+          if (serviceManager?.audit) {
+            await serviceManager.audit.logger.logServerOperation(
+              serverId,
+              'whitelist.remove',
+              { player },
+              'success',
+              undefined,
+              { userId: session?.userId }
+            );
+          }
           
           // TODO: 调用实际的白名单服务
           return `已将 ${player} 从服务器 ${server.name} 的白名单移除\n` +
@@ -1068,14 +1124,17 @@ export function apply(ctx: Context, config: PluginConfig) {
             return `服务器 ${server.name} 当前离线`;
           }
           
-          // 记录审计日志
-          await dbManager.createAuditLog({
-            user_id: session?.userId,
-            server_id: serverId,
-            operation: 'player.kick',
-            operation_data: JSON.stringify({ player, reason: reason || '无' }),
-            result: 'success'
-          });
+          // 记录审计日志使用服务
+          if (serviceManager?.audit) {
+            await serviceManager.audit.logger.logServerOperation(
+              serverId,
+              'player.kick',
+              { player, reason: reason || '无' },
+              'success',
+              undefined,
+              { userId: session?.userId }
+            );
+          }
           
           // TODO: 调用实际的玩家服务
           return `已踢出玩家 ${player} 从服务器 ${server.name}\n` +
@@ -1139,14 +1198,17 @@ export function apply(ctx: Context, config: PluginConfig) {
                 }
               );
               
-              // 记录审计日志
-              await dbManager.createAuditLog({
-                user_id: session?.userId,
-                server_id: serverId,
-                operation: 'command.execute',
-                operation_data: JSON.stringify({ command, executor: options.as }),
-                result: 'success'
-              });
+              // 记录审计日志使用服务
+              if (serviceManager?.audit) {
+                await serviceManager.audit.logger.logServerOperation(
+                  serverId,
+                  'command.execute',
+                  { command, executor: options.as },
+                  'success',
+                  undefined,
+                  { userId: session?.userId }
+                );
+              }
               
               let response = `已在服务器 ${server.name} 执行命令: ${command}\n`;
               response += `执行者: ${options.as}\n`;
@@ -1164,15 +1226,17 @@ export function apply(ctx: Context, config: PluginConfig) {
             } catch (error) {
               logger.error('Failed to execute command:', error);
               
-              // 记录失败的审计日志
-              await dbManager.createAuditLog({
-                user_id: session?.userId,
-                server_id: serverId,
-                operation: 'command.execute',
-                operation_data: JSON.stringify({ command, executor: options.as }),
-                result: 'failure',
-                error_message: (error as Error).message
-              });
+              // 记录失败的审计日志使用服务
+              if (serviceManager?.audit) {
+                await serviceManager.audit.logger.logServerOperation(
+                  serverId,
+                  'command.execute',
+                  { command, executor: options.as },
+                  'failure',
+                  (error as Error).message,
+                  { userId: session?.userId }
+                );
+              }
               
               return `执行命令失败: ${(error as Error).message}`;
             }
@@ -1227,39 +1291,64 @@ export function apply(ctx: Context, config: PluginConfig) {
             return `服务器 ${serverId} 不存在`;
           }
           
-          // 检查是否已绑定
-          const existingBindings = await dbManager.getGroupBindings(session.guildId);
-          const alreadyBound = existingBindings.find((b: any) => b.server_id === serverId);
-          if (alreadyBound) {
-            return `服务器 ${server.name} 已绑定到此群组`;
+          // 使用 BindingManager 创建绑定
+          if (serviceManager?.binding) {
+            try {
+              const binding = await serviceManager.binding.createBinding(
+                session.userId || 'unknown',
+                {
+                  groupId: session.guildId,
+                  serverId: serverId,
+                  bindingType: (options.type || 'full') as any,
+                  config: {}
+                }
+              );
+              
+              return `已将服务器 ${server.name} 绑定到当前群组\n` +
+                     `绑定类型: ${options.type}\n` +
+                     `绑定 ID: ${binding.id}\n` +
+                     `提示: 现在可以在群组中直接使用命令，无需指定服务器 ID`;
+            } catch (error) {
+              logger.error('Failed to create binding:', error);
+              return `创建绑定失败: ${(error as Error).message}`;
+            }
+          } else {
+            // 降级到直接数据库操作
+            const existingBindings = await dbManager.getGroupBindings(session.guildId);
+            const alreadyBound = existingBindings.find((b: any) => b.server_id === serverId);
+            if (alreadyBound) {
+              return `服务器 ${server.name} 已绑定到此群组`;
+            }
+            
+            const binding = await dbManager.createGroupBinding({
+              group_id: session.guildId,
+              server_id: serverId,
+              binding_type: (options.type || 'full') as 'full' | 'monitor' | 'command',
+              config: JSON.stringify({}),
+              created_by: session.userId || 'unknown',
+              status: 'active'
+            });
+            
+            // 记录审计日志
+            if (serviceManager?.audit) {
+              await serviceManager.audit.logger.logServerOperation(
+                serverId,
+                'binding.create',
+                { 
+                  groupId: session.guildId, 
+                  bindingType: options.type 
+                },
+                'success',
+                undefined,
+                { userId: session.userId }
+              );
+            }
+            
+            return `已将服务器 ${server.name} 绑定到当前群组\n` +
+                   `绑定类型: ${options.type}\n` +
+                   `绑定 ID: ${binding.id}\n` +
+                   `提示: 现在可以在群组中直接使用命令，无需指定服务器 ID`;
           }
-          
-          // 创建绑定
-          const binding = await dbManager.createGroupBinding({
-            group_id: session.guildId,
-            server_id: serverId,
-            binding_type: (options.type || 'full') as 'full' | 'monitor' | 'command',
-            config: JSON.stringify({}),
-            created_by: session.userId || 'unknown',
-            status: 'active'
-          });
-          
-          // 记录审计日志
-          await dbManager.createAuditLog({
-            user_id: session.userId,
-            server_id: serverId,
-            operation: 'binding.create',
-            operation_data: JSON.stringify({ 
-              groupId: session.guildId, 
-              bindingType: options.type 
-            }),
-            result: 'success'
-          });
-          
-          return `已将服务器 ${server.name} 绑定到当前群组\n` +
-                 `绑定类型: ${options.type}\n` +
-                 `绑定 ID: ${binding.id}\n` +
-                 `提示: 现在可以在群组中直接使用命令，无需指定服务器 ID`;
         } catch (error) {
           logger.error('Failed to create binding:', error);
           return '创建绑定失败';
@@ -1323,32 +1412,45 @@ export function apply(ctx: Context, config: PluginConfig) {
         }
         
         try {
-          // 验证绑定属于当前群组
-          const bindings = await dbManager.getGroupBindings(session.guildId);
-          const binding = bindings.find((b: any) => b.id === bindingId);
-          
-          if (!binding) {
-            return `绑定 ${bindingId} 不存在或不属于当前群组`;
+          // 使用 BindingManager 删除绑定
+          if (serviceManager?.binding) {
+            try {
+              await serviceManager.binding.deleteBinding(session.userId || 'unknown', bindingId);
+              return `已解除绑定 ${bindingId}`;
+            } catch (error) {
+              logger.error('Failed to remove binding:', error);
+              return `解除绑定失败: ${(error as Error).message}`;
+            }
+          } else {
+            // 降级到直接数据库操作
+            const bindings = await dbManager.getGroupBindings(session.guildId);
+            const binding = bindings.find((b: any) => b.id === bindingId);
+            
+            if (!binding) {
+              return `绑定 ${bindingId} 不存在或不属于当前群组`;
+            }
+            
+            const server = await dbManager.getServer(binding.server_id);
+            
+            await dbManager.deleteGroupBinding(bindingId);
+            
+            // 记录审计日志
+            if (serviceManager?.audit) {
+              await serviceManager.audit.logger.logServerOperation(
+                binding.server_id,
+                'binding.delete',
+                { 
+                  groupId: session.guildId,
+                  bindingId 
+                },
+                'success',
+                undefined,
+                { userId: session.userId }
+              );
+            }
+            
+            return `已解除服务器 ${server?.name || binding.server_id} 的绑定`;
           }
-          
-          const server = await dbManager.getServer(binding.server_id);
-          
-          // 删除绑定
-          await dbManager.deleteGroupBinding(bindingId);
-          
-          // 记录审计日志
-          await dbManager.createAuditLog({
-            user_id: session.userId,
-            server_id: binding.server_id,
-            operation: 'binding.delete',
-            operation_data: JSON.stringify({ 
-              groupId: session.guildId,
-              bindingId 
-            }),
-            result: 'success'
-          });
-          
-          return `已解除服务器 ${server?.name || binding.server_id} 的绑定`;
         } catch (error) {
           logger.error('Failed to remove binding:', error);
           return '解除绑定失败';
