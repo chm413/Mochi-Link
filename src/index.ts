@@ -9,66 +9,11 @@ import { PluginConfig } from './types';
 import type { SimpleDatabaseManager } from './database/simple-init';
 import type { MochiWebSocketServer } from './websocket/server';
 import type { WebSocketConnection } from './websocket/connection';
+import { ServiceManager } from './services';
 
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-/**
- * Handle server events (player join/quit, chat, etc.)
- */
-async function handleServerEvent(message: any, connection: any): Promise<void> {
-    const { op, data } = message;
-    
-    // Log event for debugging
-    console.log(`[Event] ${connection.serverId}: ${op}`, data);
-    
-    // Handle specific events
-    switch (op) {
-        case 'player.join':
-            console.log(`Player ${data.playerName} joined ${connection.serverId}`);
-            break;
-        case 'player.quit':
-            console.log(`Player ${data.playerName} left ${connection.serverId}`);
-            break;
-        case 'player.chat':
-            console.log(`[${connection.serverId}] <${data.playerName}> ${data.message}`);
-            break;
-        case 'server.status':
-            console.log(`Server ${connection.serverId} status:`, data);
-            break;
-        default:
-            console.log(`Unknown event: ${op}`);
-    }
-}
-
-/**
- * Handle server requests (need response)
- */
-async function handleServerRequest(message: any, connection: any): Promise<void> {
-    const { id, op, data } = message;
-    
-    console.log(`[Request] ${connection.serverId}: ${op}`, data);
-    
-    // Send response
-    const response = {
-        type: 'response',
-        id: `response-${Date.now()}`,
-        requestId: id,
-        op: op,
-        success: true,
-        data: { message: 'Request received' },
-        timestamp: Date.now(),
-        serverId: connection.serverId,
-        version: '2.0'
-    };
-    
-    try {
-        await connection.send(response);
-    } catch (error) {
-        console.error(`Failed to send response to ${connection.serverId}:`, error);
-    }
-}
 
 // ============================================================================
 // Plugin Configuration Schema
@@ -181,7 +126,7 @@ export function apply(ctx: Context, config: PluginConfig) {
     
     // Service instances
     let dbManager: SimpleDatabaseManager | null = null;
-    let serviceManager: any = null;
+    let serviceManager: ServiceManager | null = null;
     let wsManager: MochiWebSocketServer | null = null;
     let isInitialized = false;
     
@@ -214,6 +159,11 @@ export function apply(ctx: Context, config: PluginConfig) {
             await dbManager.initialize();
             logger.info('Database initialized successfully');
             
+            // Initialize service manager
+            serviceManager = new ServiceManager(ctx);
+            await serviceManager.initialize();
+            logger.info('Service manager initialized successfully');
+            
             // Initialize WebSocket server
             try {
                 const { SimpleTokenManager } = await import('./websocket/token-manager');
@@ -236,22 +186,21 @@ export function apply(ctx: Context, config: PluginConfig) {
                 await wsManager.start();
                 logger.info(`WebSocket server started on ${config.websocket?.host || '0.0.0.0'}:${config.websocket?.port || 8080}`);
                 
-                // Setup WebSocket event handlers
+                // Setup WebSocket event handlers using service manager
                 wsManager.on('connection', (connection: WebSocketConnection) => {
                     logger.info(`Server connected: ${connection.serverId}`);
                 });
                 
-                wsManager.on('authenticated', (connection: WebSocketConnection) => {
+                wsManager.on('authenticated', async (connection: WebSocketConnection) => {
                     logger.info(`Server authenticated: ${connection.serverId}`);
                     
-                    // Update server status to online
-                    if (dbManager) {
-                        dbManager.updateServer(connection.serverId, { 
-                            status: 'online',
-                            last_seen: new Date()
-                        }).catch(error => {
+                    // Update server status to online using service manager
+                    if (serviceManager) {
+                        try {
+                            await serviceManager.server.updateServerStatus(connection.serverId, 'online');
+                        } catch (error) {
                             logger.error(`Failed to update server status: ${error}`);
-                        });
+                        }
                     }
                 });
                 
@@ -259,40 +208,31 @@ export function apply(ctx: Context, config: PluginConfig) {
                     try {
                         logger.debug(`Received message from ${connection.serverId}:`, message);
                         
-                        // Handle different message types
-                        if (message.type === 'event') {
-                            // Handle server events
-                            await handleServerEvent(message, connection);
-                        } else if (message.type === 'request') {
-                            // Handle server requests
-                            await handleServerRequest(message, connection);
-                        } else if (message.type === 'response') {
-                            // Handle server responses
-                            logger.debug(`Received response from ${connection.serverId}:`, message);
-                        }
-                        
-                        // Update last seen time
-                        if (dbManager) {
-                            await dbManager.updateServer(connection.serverId, {
-                                last_seen: new Date()
+                        // Route message through message router service
+                        if (serviceManager) {
+                            await serviceManager.messageRouter.handleServerEvent({
+                                serverId: connection.serverId,
+                                eventType: message.op || message.type,
+                                data: message.data || message,
+                                timestamp: message.timestamp || Date.now()
                             });
                         }
+                        
                     } catch (error) {
                         logger.error(`Error handling message from ${connection.serverId}:`, error);
                     }
                 });
                 
-                wsManager.on('disconnection', (connection: WebSocketConnection, code: number, reason: string) => {
+                wsManager.on('disconnection', async (connection: WebSocketConnection, code: number, reason: string) => {
                     logger.info(`Server disconnected: ${connection.serverId} (${code}: ${reason})`);
                     
-                    // Update server status to offline
-                    if (dbManager) {
-                        dbManager.updateServer(connection.serverId, { 
-                            status: 'offline',
-                            last_seen: new Date()
-                        }).catch(error => {
+                    // Update server status to offline using service manager
+                    if (serviceManager) {
+                        try {
+                            await serviceManager.server.updateServerStatus(connection.serverId, 'offline');
+                        } catch (error) {
                             logger.error(`Failed to update server status: ${error}`);
-                        });
+                        }
                     }
                 });
                 
