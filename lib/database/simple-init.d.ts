@@ -53,6 +53,34 @@ export interface GroupBinding {
     updated_at: Date;
     status: 'active' | 'inactive';
 }
+export interface PendingOperation {
+    id: number;
+    server_id: string;
+    operation_type: string;
+    target: string;
+    parameters: string;
+    status: 'pending' | 'completed' | 'failed';
+    created_at: Date;
+    updated_at?: Date;
+}
+export interface PlayerCache {
+    id: number;
+    uuid?: string;
+    xuid?: string;
+    name: string;
+    last_server_id: string;
+    last_seen: Date;
+    created_at: Date;
+    updated_at: Date;
+}
+export interface ServerBinding {
+    id: number;
+    group_id: string;
+    server_id: string;
+    binding_type: 'chat' | 'event' | 'command' | 'monitoring';
+    config: string;
+    created_at: Date;
+}
 declare module 'koishi' {
     interface Tables {
         'mochi_servers': MinecraftServer;
@@ -60,6 +88,9 @@ declare module 'koishi' {
         'mochi_api_tokens': APIToken;
         'mochi_audit_logs': AuditLog;
         'mochi_group_bindings': GroupBinding;
+        'mochi_pending_operations': PendingOperation;
+        'mochi_player_cache': PlayerCache;
+        'mochi_server_bindings': ServerBinding;
     }
 }
 export declare class SimpleDatabaseManager {

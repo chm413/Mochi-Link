@@ -63,6 +63,37 @@ export interface GroupBinding {
   status: 'active' | 'inactive';
 }
 
+export interface PendingOperation {
+  id: number;
+  server_id: string;
+  operation_type: string;
+  target: string;
+  parameters: string; // JSON string
+  status: 'pending' | 'completed' | 'failed';
+  created_at: Date;
+  updated_at?: Date;
+}
+
+export interface PlayerCache {
+  id: number;
+  uuid?: string;
+  xuid?: string;
+  name: string;
+  last_server_id: string;
+  last_seen: Date;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface ServerBinding {
+  id: number;
+  group_id: string;
+  server_id: string;
+  binding_type: 'chat' | 'event' | 'command' | 'monitoring';
+  config: string; // JSON string
+  created_at: Date;
+}
+
 // ============================================================================
 // Extend Koishi Tables
 // ============================================================================
@@ -74,6 +105,9 @@ declare module 'koishi' {
     'mochi_api_tokens': APIToken;
     'mochi_audit_logs': AuditLog;
     'mochi_group_bindings': GroupBinding;
+    'mochi_pending_operations': PendingOperation;
+    'mochi_player_cache': PlayerCache;
+    'mochi_server_bindings': ServerBinding;
   }
 }
 
@@ -169,6 +203,49 @@ export class SimpleDatabaseManager {
       created_at: 'timestamp',
       updated_at: 'timestamp',
       status: { type: 'string', initial: 'active' }
+    }, {
+      primary: 'id',
+      autoInc: true
+    });
+
+    // Pending Operations Table
+    ctx.model.extend(`${prefix}pending_operations` as any, {
+      id: 'unsigned',
+      server_id: 'string',
+      operation_type: 'string',
+      target: 'string',
+      parameters: 'text',
+      status: { type: 'string', initial: 'pending' },
+      created_at: 'timestamp',
+      updated_at: 'timestamp'
+    }, {
+      primary: 'id',
+      autoInc: true
+    });
+
+    // Player Cache Table
+    ctx.model.extend(`${prefix}player_cache` as any, {
+      id: 'unsigned',
+      uuid: 'string',
+      xuid: 'string',
+      name: 'string',
+      last_server_id: 'string',
+      last_seen: 'timestamp',
+      created_at: 'timestamp',
+      updated_at: 'timestamp'
+    }, {
+      primary: 'id',
+      autoInc: true
+    });
+
+    // Server Bindings Table
+    ctx.model.extend(`${prefix}server_bindings` as any, {
+      id: 'unsigned',
+      group_id: 'string',
+      server_id: 'string',
+      binding_type: 'string',
+      config: 'text',
+      created_at: 'timestamp'
     }, {
       primary: 'id',
       autoInc: true
