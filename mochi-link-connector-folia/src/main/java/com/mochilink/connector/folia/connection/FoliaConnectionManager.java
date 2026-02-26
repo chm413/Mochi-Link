@@ -114,7 +114,7 @@ public class FoliaConnectionManager {
             JsonObject data = new JsonObject();
             data.addProperty("protocolVersion", "2.0");
             data.addProperty("serverType", "connector");
-            data.addProperty("serverId", plugin.getServer().getName());
+            data.addProperty("serverId", config.getServerId());  // Use configured server ID
             
             JsonObject serverInfo = new JsonObject();
             serverInfo.addProperty("name", plugin.getServer().getName());

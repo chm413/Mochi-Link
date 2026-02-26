@@ -14,6 +14,62 @@ import type { WebSocketConnection } from './websocket/connection';
 // Helper Functions
 // ============================================================================
 
+/**
+ * Handle server events (player join/quit, chat, etc.)
+ */
+async function handleServerEvent(message: any, connection: any): Promise<void> {
+    const { op, data } = message;
+    
+    // Log event for debugging
+    console.log(`[Event] ${connection.serverId}: ${op}`, data);
+    
+    // Handle specific events
+    switch (op) {
+        case 'player.join':
+            console.log(`Player ${data.playerName} joined ${connection.serverId}`);
+            break;
+        case 'player.quit':
+            console.log(`Player ${data.playerName} left ${connection.serverId}`);
+            break;
+        case 'player.chat':
+            console.log(`[${connection.serverId}] <${data.playerName}> ${data.message}`);
+            break;
+        case 'server.status':
+            console.log(`Server ${connection.serverId} status:`, data);
+            break;
+        default:
+            console.log(`Unknown event: ${op}`);
+    }
+}
+
+/**
+ * Handle server requests (need response)
+ */
+async function handleServerRequest(message: any, connection: any): Promise<void> {
+    const { id, op, data } = message;
+    
+    console.log(`[Request] ${connection.serverId}: ${op}`, data);
+    
+    // Send response
+    const response = {
+        type: 'response',
+        id: `response-${Date.now()}`,
+        requestId: id,
+        op: op,
+        success: true,
+        data: { message: 'Request received' },
+        timestamp: Date.now(),
+        serverId: connection.serverId,
+        version: '2.0'
+    };
+    
+    try {
+        await connection.send(response);
+    } catch (error) {
+        console.error(`Failed to send response to ${connection.serverId}:`, error);
+    }
+}
+
 // ============================================================================
 // Plugin Configuration Schema
 // ============================================================================
@@ -187,10 +243,57 @@ export function apply(ctx: Context, config: PluginConfig) {
                 
                 wsManager.on('authenticated', (connection: WebSocketConnection) => {
                     logger.info(`Server authenticated: ${connection.serverId}`);
+                    
+                    // Update server status to online
+                    if (dbManager) {
+                        dbManager.updateServer(connection.serverId, { 
+                            status: 'online',
+                            last_seen: new Date()
+                        }).catch(error => {
+                            logger.error(`Failed to update server status: ${error}`);
+                        });
+                    }
+                });
+                
+                wsManager.on('message', async (message: any, connection: WebSocketConnection) => {
+                    try {
+                        logger.debug(`Received message from ${connection.serverId}:`, message);
+                        
+                        // Handle different message types
+                        if (message.type === 'event') {
+                            // Handle server events
+                            await handleServerEvent(message, connection);
+                        } else if (message.type === 'request') {
+                            // Handle server requests
+                            await handleServerRequest(message, connection);
+                        } else if (message.type === 'response') {
+                            // Handle server responses
+                            logger.debug(`Received response from ${connection.serverId}:`, message);
+                        }
+                        
+                        // Update last seen time
+                        if (dbManager) {
+                            await dbManager.updateServer(connection.serverId, {
+                                last_seen: new Date()
+                            });
+                        }
+                    } catch (error) {
+                        logger.error(`Error handling message from ${connection.serverId}:`, error);
+                    }
                 });
                 
                 wsManager.on('disconnection', (connection: WebSocketConnection, code: number, reason: string) => {
                     logger.info(`Server disconnected: ${connection.serverId} (${code}: ${reason})`);
+                    
+                    // Update server status to offline
+                    if (dbManager) {
+                        dbManager.updateServer(connection.serverId, { 
+                            status: 'offline',
+                            last_seen: new Date()
+                        }).catch(error => {
+                            logger.error(`Failed to update server status: ${error}`);
+                        });
+                    }
                 });
                 
                 wsManager.on('error', (error: Error) => {
