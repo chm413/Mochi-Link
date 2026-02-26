@@ -1,5 +1,5 @@
 /**
- * Mochi-Link (大福连) - Group-Server Binding Management Service
+ * Mochi-Link (����) - Group-Server Binding Management Service
  *
  * This service manages the many-to-many binding relationships between
  * chat groups and Minecraft servers, including routing rules and monitoring.

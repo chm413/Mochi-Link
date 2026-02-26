@@ -1,11 +1,12 @@
-/**
- * Mochi-Link (大福连) - Group-Server Binding Management Service
+﻿/**
+ * Mochi-Link (����) - Group-Server Binding Management Service
  * 
  * This service manages the many-to-many binding relationships between
  * chat groups and Minecraft servers, including routing rules and monitoring.
  */
 
 import { Context } from 'koishi';
+import { TableNames } from '../database/table-names';
 import { DatabaseServerBinding } from '../types';
 import { AuditService } from './audit';
 import { PermissionManager } from './permission';
@@ -162,7 +163,7 @@ export class BindingManager {
     }
 
     // Validate server exists
-    const servers = await this.ctx.database.get('minecraft_servers', { id: options.serverId });
+    const servers = await this.ctx.database.get(TableNames.minecraftServers as any, { id: options.serverId });
     if (servers.length === 0) {
       throw new MochiLinkError(
         `Server ${options.serverId} not found`,
@@ -171,7 +172,7 @@ export class BindingManager {
     }
 
     // Check for duplicate binding
-    const existing = await this.ctx.database.get('server_bindings', {
+    const existing = await this.ctx.database.get(TableNames.serverBindings as any, {
       group_id: options.groupId,
       server_id: options.serverId,
       binding_type: options.bindingType
@@ -193,10 +194,10 @@ export class BindingManager {
       created_at: new Date()
     };
 
-    await this.ctx.database.create('server_bindings', bindingData);
+    await this.ctx.database.create(TableNames.serverBindings as any, bindingData);
     
     // Get the created binding (since create doesn't return the created record)
-    const createdBindings = await this.ctx.database.get('server_bindings', {
+    const createdBindings = await this.ctx.database.get(TableNames.serverBindings as any, {
       group_id: options.groupId,
       server_id: options.serverId,
       binding_type: options.bindingType
@@ -206,7 +207,7 @@ export class BindingManager {
       throw new MochiLinkError('Failed to create binding', 'CREATION_FAILED');
     }
     
-    const binding = createdBindings[0];
+    const binding = createdBindings[0] as any;
     
     // Convert to application model
     const serverBinding = this.dbBindingToModel(binding);
@@ -238,7 +239,7 @@ export class BindingManager {
     this.logger.info(`Updating binding: ID ${bindingId}`);
 
     // Get existing binding
-    const existingBindings = await this.ctx.database.get('server_bindings', { id: bindingId });
+    const existingBindings = await this.ctx.database.get(TableNames.serverBindings as any, { id: bindingId });
     if (existingBindings.length === 0) {
       throw new MochiLinkError(`Binding ${bindingId} not found`, 'BINDING_NOT_FOUND');
     }
@@ -272,10 +273,10 @@ export class BindingManager {
       updateData.binding_type = options.bindingType;
     }
 
-    await this.ctx.database.set('server_bindings', bindingId, updateData);
+    await this.ctx.database.set(TableNames.serverBindings as any, bindingId, updateData);
 
     // Get updated binding
-    const [updated] = await this.ctx.database.get('server_bindings', bindingId);
+    const [updated] = await this.ctx.database.get(TableNames.serverBindings as any, bindingId);
     const serverBinding = this.dbBindingToModel(updated);
 
     // Clear caches
@@ -300,7 +301,7 @@ export class BindingManager {
     this.logger.info(`Deleting binding: ID ${bindingId}`);
 
     // Get existing binding
-    const existingBindings = await this.ctx.database.get('server_bindings', { id: bindingId });
+    const existingBindings = await this.ctx.database.get(TableNames.serverBindings as any, { id: bindingId });
     if (existingBindings.length === 0) {
       throw new MochiLinkError(`Binding ${bindingId} not found`, 'BINDING_NOT_FOUND');
     }
@@ -320,7 +321,7 @@ export class BindingManager {
     }
 
     // Delete binding
-    await this.ctx.database.remove('server_bindings', bindingId);
+    await this.ctx.database.remove(TableNames.serverBindings as any, bindingId);
 
     // Clear caches
     this.clearCaches();
@@ -345,7 +346,7 @@ export class BindingManager {
       return cached;
     }
 
-    const bindings = await this.ctx.database.get('server_bindings', { id: bindingId });
+    const bindings = await this.ctx.database.get(TableNames.serverBindings as any, { id: bindingId });
     if (bindings.length === 0) {
       return null;
     }
@@ -370,17 +371,17 @@ export class BindingManager {
     if (query.bindingType) conditions.binding_type = query.bindingType;
 
     // Get total count
-    const allBindings = await this.ctx.database.get('server_bindings', conditions);
+    const allBindings = await this.ctx.database.get(TableNames.serverBindings as any, conditions);
     const total = allBindings.length;
 
     // Get bindings with pagination
-    const dbBindings = await this.ctx.database.get('server_bindings', conditions, {
+    const dbBindings = await this.ctx.database.get(TableNames.serverBindings as any, conditions, {
       limit: query.limit || 50,
       offset: query.offset || 0,
       sort: { created_at: 'desc' }
     });
 
-    const bindings = dbBindings.map(binding => this.dbBindingToModel(binding));
+    const bindings = dbBindings.map(binding => this.dbBindingToModel(binding as any));
 
     return { bindings, total };
   }
@@ -399,7 +400,7 @@ export class BindingManager {
       return cached;
     }
 
-    const bindings = await this.ctx.database.get('server_bindings', { group_id: groupId });
+    const bindings = await this.ctx.database.get(TableNames.serverBindings as any, { group_id: groupId });
     
     // Group by binding type
     const routeMap = new Map<BindingType, string[]>();
@@ -439,7 +440,7 @@ export class BindingManager {
       conditions.binding_type = bindingType;
     }
 
-    const bindings = await this.ctx.database.get('server_bindings', conditions);
+    const bindings = await this.ctx.database.get(TableNames.serverBindings as any, conditions);
     return [...new Set(bindings.map(b => b.server_id))];
   }
 
@@ -452,7 +453,7 @@ export class BindingManager {
       conditions.binding_type = bindingType;
     }
 
-    const bindings = await this.ctx.database.get('server_bindings', conditions);
+    const bindings = await this.ctx.database.get(TableNames.serverBindings as any, conditions);
     return [...new Set(bindings.map(b => b.group_id))];
   }
 
@@ -472,7 +473,7 @@ export class BindingManager {
       conditions.binding_type = bindingType;
     }
 
-    const bindings = await this.ctx.database.get('server_bindings', conditions);
+    const bindings = await this.ctx.database.get(TableNames.serverBindings as any, conditions);
     return bindings.length > 0;
   }
 
@@ -484,7 +485,7 @@ export class BindingManager {
    * Update binding activity timestamp
    */
   async updateBindingActivity(groupId: string, serverId: string, bindingType: BindingType): Promise<void> {
-    const binding = await this.ctx.database.get('server_bindings', {
+    const binding = await this.ctx.database.get(TableNames.serverBindings as any, {
       group_id: groupId,
       server_id: serverId,
       binding_type: bindingType
@@ -507,7 +508,7 @@ export class BindingManager {
   async monitorBindingHealth(): Promise<void> {
     this.logger.debug('Monitoring binding health...');
 
-    const allBindings = await this.ctx.database.get('server_bindings', {});
+    const allBindings = await this.ctx.database.get(TableNames.serverBindings as any, {});
     const now = Date.now();
     const inactiveThreshold = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -536,7 +537,7 @@ export class BindingManager {
       return this.statsCache;
     }
 
-    const allBindings = await this.ctx.database.get('server_bindings', {});
+    const allBindings = await this.ctx.database.get(TableNames.serverBindings as any, {});
     
     const stats: BindingStats = {
       totalBindings: allBindings.length,
@@ -617,7 +618,7 @@ export class BindingManager {
   async deleteGroupBindings(userId: string, groupId: string): Promise<number> {
     this.logger.info(`Deleting all bindings for group ${groupId}`);
 
-    const bindings = await this.ctx.database.get('server_bindings', { group_id: groupId });
+    const bindings = await this.ctx.database.get(TableNames.serverBindings as any, { group_id: groupId });
     let deletedCount = 0;
 
     for (const binding of bindings) {
@@ -639,7 +640,7 @@ export class BindingManager {
   async deleteServerBindings(userId: string, serverId: string): Promise<number> {
     this.logger.info(`Deleting all bindings for server ${serverId}`);
 
-    const bindings = await this.ctx.database.get('server_bindings', { server_id: serverId });
+    const bindings = await this.ctx.database.get(TableNames.serverBindings as any, { server_id: serverId });
     let deletedCount = 0;
 
     for (const binding of bindings) {
@@ -713,7 +714,7 @@ export class BindingManager {
   }> {
     try {
       // Test database connectivity
-      await this.ctx.database.get('server_bindings', {}, { limit: 1 });
+      await this.ctx.database.get(TableNames.serverBindings as any, {}, { limit: 1 });
       
       const stats = await this.getBindingStats();
       

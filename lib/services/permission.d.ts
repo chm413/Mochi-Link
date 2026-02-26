@@ -1,5 +1,5 @@
 /**
- * Mochi-Link (大福连) - Permission Management Service
+ * Mochi-Link (����) - Permission Management Service
  *
  * This file implements the comprehensive permission management system that integrates
  * with Koishi's permission system and provides server-specific permission control.

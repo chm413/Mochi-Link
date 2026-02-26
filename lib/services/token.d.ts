@@ -1,5 +1,5 @@
 /**
- * Mochi-Link (大福连) - API Token Management Service
+ * Mochi-Link (����) - API Token Management Service
  *
  * This file implements the comprehensive API token management system that handles
  * token generation, validation, refresh, IP whitelist management, and encryption configuration.

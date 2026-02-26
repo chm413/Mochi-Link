@@ -1,11 +1,12 @@
-/**
- * Mochi-Link (大福连) - Permission Management Service
+﻿/**
+ * Mochi-Link (����) - Permission Management Service
  * 
  * This file implements the comprehensive permission management system that integrates
  * with Koishi's permission system and provides server-specific permission control.
  */
 
 import { Context, User } from 'koishi';
+import { TableNames } from '../database/table-names';
 import { ACLOperations, AuditOperations } from '../database/operations';
 import { ServerRole, Permission, ServerACL, PermissionDeniedError } from '../types';
 
@@ -410,7 +411,7 @@ export class PermissionManager {
     serverId: string
   ): Promise<PermissionCheckResult> {
     try {
-      const servers = await this.ctx.database.get('minecraft_servers', { 
+      const servers = await this.ctx.database.get(TableNames.minecraftServers as any, { 
         id: serverId, 
         owner_id: userId 
       });
@@ -545,7 +546,7 @@ export class PermissionManager {
     const acls = await this.aclOps.getServerACLs(serverId);
     
     // Add server owner
-    const servers = await this.ctx.database.get('minecraft_servers', { id: serverId });
+    const servers = await this.ctx.database.get(TableNames.minecraftServers as any, { id: serverId });
     const result = [];
 
     if (servers.length > 0) {

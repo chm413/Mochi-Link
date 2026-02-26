@@ -1,11 +1,12 @@
-/**
- * Mochi-Link (大福连) - Caching Service and Data Preloading
+﻿/**
+ * Mochi-Link (����) - Caching Service and Data Preloading
  * 
  * This module provides comprehensive caching mechanisms, data preloading,
  * and cache management for the Minecraft Unified Management System.
  */
 
 import { Context } from 'koishi';
+import { TableNames } from '../database/table-names';
 import { EventEmitter } from 'events';
 
 // ============================================================================
@@ -342,7 +343,7 @@ export class CacheService extends EventEmitter {
   private async preloadServerConfigs(): Promise<void> {
     try {
       // Get recently active servers
-      const recentServers = await this.ctx.database.get('minecraft_servers', {
+      const recentServers = await this.ctx.database.get(TableNames.minecraftServers as any, {
         last_seen: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Last 24 hours
       });
 
@@ -364,7 +365,7 @@ export class CacheService extends EventEmitter {
   private async preloadUserPermissions(): Promise<void> {
     try {
       // Get active user permissions
-      const activeACLs = await this.ctx.database.get('server_acl', {
+      const activeACLs = await this.ctx.database.get(TableNames.serverAcl as any, {
         $or: [
           { expires_at: null },
           { expires_at: { $gt: new Date() } }
@@ -403,7 +404,7 @@ export class CacheService extends EventEmitter {
   private async preloadPlayerInfo(): Promise<void> {
     try {
       // Get recently seen players
-      const recentPlayers = await this.ctx.database.get('player_cache', {
+      const recentPlayers = await this.ctx.database.get(TableNames.playerCache as any, {
         last_seen: { $gt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } // Last 7 days
       }, {
         limit: this.config.preloadBatchSize

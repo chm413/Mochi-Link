@@ -6,6 +6,7 @@
  */
 
 import { Context } from 'koishi';
+import { TableNames } from '../database/table-names';
 import { 
   PendingOperation, 
   OperationStatus,
@@ -731,7 +732,7 @@ export class WhitelistManager {
   }
 
   // ============================================================================
-  // Bidirectional Synchronization (Koishi ↔ Server)
+  // Bidirectional Synchronization (Koishi ? Server)
   // ============================================================================
 
   /**
@@ -1228,7 +1229,7 @@ export class WhitelistManager {
   private async loadWhitelistFromDatabase(serverId: string): Promise<WhitelistEntry[]> {
     try {
       // Load whitelist entries from player_cache table
-      const cacheEntries = await this.ctx.database.get('player_cache', {
+      const cacheEntries = await this.ctx.database.get(TableNames.playerCache as any, {
         last_server_id: serverId
       });
       
@@ -1253,14 +1254,14 @@ export class WhitelistManager {
       // In a full implementation, you might want a dedicated whitelist table
       
       // Clear existing whitelist entries for this server
-      await this.ctx.database.remove('pending_operations', {
+      await this.ctx.database.remove(TableNames.pendingOperations as any, {
         server_id: serverId,
         operation_type: 'whitelist_state'
       });
       
       // Save current whitelist state
       if (entries.length > 0) {
-        await this.ctx.database.create('pending_operations', {
+        await this.ctx.database.create(TableNames.pendingOperations as any, {
           server_id: serverId,
           operation_type: 'whitelist_state',
           target: 'whitelist',
@@ -1275,7 +1276,7 @@ export class WhitelistManager {
 
   private async savePendingOperationToDatabase(serverId: string, operation: WhitelistOperation): Promise<void> {
     try {
-      await this.ctx.database.create('pending_operations', {
+      await this.ctx.database.create(TableNames.pendingOperations as any, {
         server_id: serverId,
         operation_type: `whitelist_${operation.type}`,
         target: operation.playerId,
@@ -1294,7 +1295,7 @@ export class WhitelistManager {
 
   private async clearPendingOperationsFromDatabase(serverId: string): Promise<void> {
     try {
-      await this.ctx.database.remove('pending_operations', {
+      await this.ctx.database.remove(TableNames.pendingOperations as any, {
         server_id: serverId,
         operation_type: { $regex: /^whitelist_(add|remove)$/ }
       });
@@ -1306,7 +1307,7 @@ export class WhitelistManager {
   private async loadPendingOperationsFromDatabase(): Promise<void> {
     try {
       // Load whitelist operations
-      const pendingOps = await this.ctx.database.get('pending_operations', {
+      const pendingOps = await this.ctx.database.get(TableNames.pendingOperations as any, {
         status: 'pending',
         operation_type: { $regex: /^whitelist_(add|remove)$/ }
       });
@@ -1342,7 +1343,7 @@ export class WhitelistManager {
       }
       
       // Load ban operations
-      const pendingBanOps = await this.ctx.database.get('pending_operations', {
+      const pendingBanOps = await this.ctx.database.get(TableNames.pendingOperations as any, {
         status: 'pending',
         operation_type: { $regex: /^ban_(ban|unban)$/ }
       });
@@ -1408,7 +1409,7 @@ export class WhitelistManager {
         (operationData as any).playerName = operation.playerName;
       }
       
-      await this.ctx.database.create('audit_logs', {
+      await this.ctx.database.create(TableNames.auditLogs as any, {
         user_id: operation.executor,
         server_id: serverId,
         operation: `${('banType' in operation) ? 'ban' : 'whitelist'}_${operation.type}`,
@@ -1428,7 +1429,7 @@ export class WhitelistManager {
   private async loadBansFromDatabase(serverId: string): Promise<BanEntry[]> {
     try {
       // Load ban entries from pending_operations table
-      const banOps = await this.ctx.database.get('pending_operations', {
+      const banOps = await this.ctx.database.get(TableNames.pendingOperations as any, {
         server_id: serverId,
         operation_type: 'ban_state'
       });
@@ -1462,7 +1463,7 @@ export class WhitelistManager {
   private async saveBansToDatabase(serverId: string, bans: BanEntry[]): Promise<void> {
     try {
       // Save current ban state
-      await this.ctx.database.create('pending_operations', {
+      await this.ctx.database.create(TableNames.pendingOperations as any, {
         server_id: serverId,
         operation_type: 'ban_state',
         target: 'bans',
@@ -1480,7 +1481,7 @@ export class WhitelistManager {
 
   private async savePendingBanOperationToDatabase(serverId: string, operation: BanOperation): Promise<void> {
     try {
-      await this.ctx.database.create('pending_operations', {
+      await this.ctx.database.create(TableNames.pendingOperations as any, {
         server_id: serverId,
         operation_type: `ban_${operation.type}`,
         target: operation.target,
@@ -1501,7 +1502,7 @@ export class WhitelistManager {
 
   private async clearPendingBanOperationsFromDatabase(serverId: string): Promise<void> {
     try {
-      await this.ctx.database.remove('pending_operations', {
+      await this.ctx.database.remove(TableNames.pendingOperations as any, {
         server_id: serverId,
         operation_type: { $regex: /^ban_(ban|unban)$/ }
       });

@@ -1,5 +1,5 @@
 /**
- * Mochi-Link (大福连) - Caching Service and Data Preloading
+ * Mochi-Link (����) - Caching Service and Data Preloading
  *
  * This module provides comprehensive caching mechanisms, data preloading,
  * and cache management for the Minecraft Unified Management System.

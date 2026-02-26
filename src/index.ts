@@ -154,6 +154,11 @@ export function apply(ctx: Context, config: PluginConfig) {
         try {
             logger.info('Starting Mochi-Link plugin...');
             
+            // Initialize table names with prefix
+            const { TableNames } = await import('./database/table-names');
+            TableNames.initialize(config.database?.prefix || 'mochi');
+            logger.info(`Table names initialized with prefix: ${config.database?.prefix || 'mochi'}`);
+            
             // Initialize database
             const { SimpleDatabaseManager } = await import('./database/simple-init');
             dbManager = new SimpleDatabaseManager(ctx, config.database?.prefix || 'mochi');

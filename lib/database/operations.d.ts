@@ -1,5 +1,5 @@
 /**
- * Mochi-Link (大福连) - Database Operations
+ * Mochi-Link (����) - Database Operations
  *
  * This file contains the database CRUD operations and business logic
  * for managing servers, permissions, tokens, and audit logs.

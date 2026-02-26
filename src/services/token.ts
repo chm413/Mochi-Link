@@ -1,11 +1,12 @@
-/**
- * Mochi-Link (大福连) - API Token Management Service
+﻿/**
+ * Mochi-Link (����) - API Token Management Service
  * 
  * This file implements the comprehensive API token management system that handles
  * token generation, validation, refresh, IP whitelist management, and encryption configuration.
  */
 
 import { Context } from 'koishi';
+import { TableNames } from '../database/table-names';
 import { TokenOperations, AuditOperations } from '../database/operations';
 import { APIToken, EncryptionConfig } from '../types';
 import * as crypto from 'crypto';
@@ -453,7 +454,7 @@ export class TokenManager {
   async getTokenStats(): Promise<TokenStats> {
     // This would require additional database queries
     // For now, we'll implement a basic version
-    const allTokens = await this.ctx.database.get('api_tokens', {});
+    const allTokens = await this.ctx.database.get(TableNames.apiTokens as any, {});
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
