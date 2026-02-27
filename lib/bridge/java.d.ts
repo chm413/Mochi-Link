@@ -12,7 +12,8 @@ export declare class JavaConnectorBridge {
     isConnectedToBridge(): boolean;
     getServerInfo(): Promise<any>;
     getPerformanceMetrics(): Promise<any>;
-    executeCommand(command: string): Promise<any>;
+    executeCommand(command: string, timeout?: number): Promise<any>;
+    protected doExecuteCommand(command: string, timeout?: number): Promise<any>;
     getOnlinePlayers(): Promise<any[]>;
     getPlayerDetail(playerId: string): Promise<any>;
     getCapabilities(): string[];

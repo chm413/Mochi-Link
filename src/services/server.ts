@@ -993,6 +993,98 @@ export class ServerManager {
   }
 
   /**
+   * Create a bridge for a WebSocket connection
+   */
+  async createWebSocketBridge(serverId: string, connection: any): Promise<void> {
+    const logger = this.ctx.logger('mochi-link:server');
+    
+    try {
+      // Get server configuration
+      const server = await this.getServer(serverId);
+      if (!server) {
+        throw new Error(`Server ${serverId} not found in database`);
+      }
+
+      // Import bridge classes
+      const { JavaConnectorBridge } = await import('../bridge/java');
+      
+      // Create bridge based on core type
+      let bridge: any; // Use any for now since JavaConnectorBridge doesn't extend BaseConnectorBridge
+      
+      const bridgeConfig = {
+        serverId: server.id,
+        coreName: server.coreName,
+        coreVersion: server.coreVersion,
+        coreType: server.coreType
+      };
+      
+      // Create connection adapter for WebSocket
+      const connectionAdapter = {
+        sendCommand: async (command: string, timeout?: number) => {
+          // Send command through WebSocket connection
+          try {
+            const response = await connection.sendRequest({
+              type: 'request',
+              op: 'command.execute',
+              data: {
+                command,
+                executor: 'console',
+                command_id: `cmd-${Date.now()}`
+              },
+              timeout: timeout || 30000
+            });
+            
+            return {
+              success: response.success !== false,
+              output: response.data?.output || [],
+              executionTime: response.data?.executionTime || 0,
+              error: response.error
+            };
+          } catch (error) {
+            return {
+              success: false,
+              output: [],
+              executionTime: 0,
+              error: error instanceof Error ? error.message : String(error)
+            };
+          }
+        },
+        isConnected: () => connection.isConnected && connection.isConnected(),
+        connect: async () => { /* Already connected */ },
+        disconnect: async () => { await connection.close(); }
+      };
+      
+      // Create Java bridge (works for Folia, Paper, Spigot, etc.)
+      bridge = new JavaConnectorBridge(bridgeConfig, connectionAdapter);
+      
+      // Store bridge
+      this.bridges.set(serverId, bridge as any);
+      
+      logger.info(`WebSocket bridge created for server ${serverId} (${server.coreType})`);
+      
+    } catch (error) {
+      logger.error(`Failed to create WebSocket bridge for ${serverId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Remove bridge for a server
+   */
+  async removeBridge(serverId: string): Promise<void> {
+    const logger = this.ctx.logger('mochi-link:server');
+    
+    try {
+      // Remove bridge
+      this.bridges.delete(serverId);
+      
+      logger.info(`Bridge removed for server ${serverId}`);
+    } catch (error) {
+      logger.error(`Failed to remove bridge for ${serverId}:`, error);
+    }
+  }
+
+  /**
    * Set up plugin integration for a server bridge
    */
   async setupPluginIntegration(serverId: string, bridge: BaseConnectorBridge): Promise<void> {

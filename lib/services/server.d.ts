@@ -207,6 +207,14 @@ export declare class ServerManager {
      */
     getBridge(serverId: string): BaseConnectorBridge | null;
     /**
+     * Create a bridge for a WebSocket connection
+     */
+    createWebSocketBridge(serverId: string, connection: any): Promise<void>;
+    /**
+     * Remove bridge for a server
+     */
+    removeBridge(serverId: string): Promise<void>;
+    /**
      * Set up plugin integration for a server bridge
      */
     setupPluginIntegration(serverId: string, bridge: BaseConnectorBridge): Promise<void>;

@@ -34,10 +34,6 @@ export declare abstract class BaseConnectorBridge extends EventEmitter {
      */
     abstract getPerformanceMetrics(): Promise<PerformanceMetrics>;
     /**
-     * Execute a command on the server
-     */
-    abstract executeCommand(command: string, timeout?: number): Promise<CommandResult>;
-    /**
      * Get list of online players
      */
     abstract getOnlinePlayers(): Promise<Player[]>;
@@ -73,6 +69,10 @@ export declare abstract class BaseConnectorBridge extends EventEmitter {
      * Get the core type
      */
     getCoreType(): CoreType;
+    /**
+     * Execute a console command on the server
+     */
+    executeCommand(command: string, timeout?: number): Promise<CommandResult>;
     /**
      * Perform an action on a player
      */
@@ -125,6 +125,7 @@ export declare abstract class BaseConnectorBridge extends EventEmitter {
      * Perform a plugin operation
      */
     performPluginOperation(operation: PluginOperation): Promise<PluginOperationResult>;
+    protected doExecuteCommand(_command: string, _timeout?: number): Promise<CommandResult>;
     protected doPlayerAction(_action: PlayerAction): Promise<PlayerActionResult>;
     protected doGetWhitelist(): Promise<WhitelistEntry[]>;
     protected doAddToWhitelist(_playerId: string, _playerName: string, _reason?: string): Promise<boolean>;

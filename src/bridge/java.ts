@@ -62,9 +62,9 @@ export class JavaConnectorBridge {
     };
   }
 
-  async executeCommand(command: string): Promise<any> {
+  async executeCommand(command: string, timeout?: number): Promise<any> {
     if (this.connectionAdapter && this.connectionAdapter.sendCommand) {
-      return await this.connectionAdapter.sendCommand(command);
+      return await this.connectionAdapter.sendCommand(command, timeout);
     }
     
     return {
@@ -72,6 +72,10 @@ export class JavaConnectorBridge {
       output: [`Executed: ${command}`],
       executionTime: 100
     };
+  }
+
+  protected async doExecuteCommand(command: string, timeout?: number): Promise<any> {
+    return await this.executeCommand(command, timeout);
   }
 
   async getOnlinePlayers(): Promise<any[]> {

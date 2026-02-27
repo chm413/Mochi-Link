@@ -201,12 +201,17 @@ export function apply(ctx: Context, config: PluginConfig) {
                 wsManager.on('authenticated', async (connection: WebSocketConnection) => {
                     logger.info(`Server authenticated: ${connection.serverId}`);
                     
-                    // Update server status to online using service manager
+                    // Update server status to online and create bridge
                     if (serviceManager) {
                         try {
                             await serviceManager.server.updateServerStatus(connection.serverId, 'online');
+                            
+                            // Create WebSocket bridge for command execution
+                            await serviceManager.server.createWebSocketBridge(connection.serverId, connection);
+                            
+                            logger.info(`Bridge created for server ${connection.serverId}`);
                         } catch (error) {
-                            logger.error(`Failed to update server status: ${error}`);
+                            logger.error(`Failed to setup server ${connection.serverId}:`, error);
                         }
                     }
                 });
@@ -233,12 +238,17 @@ export function apply(ctx: Context, config: PluginConfig) {
                 wsManager.on('disconnection', async (connection: WebSocketConnection, code: number, reason: string) => {
                     logger.info(`Server disconnected: ${connection.serverId} (${code}: ${reason})`);
                     
-                    // Update server status to offline using service manager
+                    // Update server status to offline and remove bridge
                     if (serviceManager) {
                         try {
                             await serviceManager.server.updateServerStatus(connection.serverId, 'offline');
+                            
+                            // Remove bridge
+                            await serviceManager.server.removeBridge(connection.serverId);
+                            
+                            logger.info(`Bridge removed for server ${connection.serverId}`);
                         } catch (error) {
-                            logger.error(`Failed to update server status: ${error}`);
+                            logger.error(`Failed to cleanup server ${connection.serverId}:`, error);
                         }
                     }
                 });

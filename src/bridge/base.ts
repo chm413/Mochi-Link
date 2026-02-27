@@ -80,11 +80,6 @@ export abstract class BaseConnectorBridge extends EventEmitter {
   abstract getPerformanceMetrics(): Promise<PerformanceMetrics>;
 
   /**
-   * Execute a command on the server
-   */
-  abstract executeCommand(command: string, timeout?: number): Promise<CommandResult>;
-
-  /**
    * Get list of online players
    */
   abstract getOnlinePlayers(): Promise<Player[]>;
@@ -155,6 +150,25 @@ export abstract class BaseConnectorBridge extends EventEmitter {
   }
 
   // ============================================================================
+  // Command Execution Methods
+  // ============================================================================
+
+  /**
+   * Execute a console command on the server
+   */
+  async executeCommand(command: string, timeout?: number): Promise<CommandResult> {
+    this.requireCapability('command_execution');
+    
+    try {
+      const result = await this.doExecuteCommand(command, timeout);
+      this.updateLastUpdate();
+      return result;
+    } catch (error) {
+      throw new Error(`Command execution failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  // ============================================================================
   // Player Management Methods
   // ============================================================================
 
@@ -179,6 +193,9 @@ export abstract class BaseConnectorBridge extends EventEmitter {
       return result;
     }
   }
+  // ============================================================================
+  // Command Execution Methods
+  // ============================================================================
 
   /**
    * Get whitelist entries
@@ -335,6 +352,10 @@ export abstract class BaseConnectorBridge extends EventEmitter {
   // ============================================================================
   // Protected Methods - To be implemented by subclasses
   // ============================================================================
+
+  protected async doExecuteCommand(_command: string, _timeout?: number): Promise<CommandResult> {
+    throw new UnsupportedOperationError('executeCommand', this.config.serverId, this.config.coreType);
+  }
 
   protected async doPlayerAction(_action: PlayerAction): Promise<PlayerActionResult> {
     throw new UnsupportedOperationError('playerAction', this.config.serverId, this.config.coreType);
