@@ -1009,7 +1009,7 @@ export class ServerManager {
       const { JavaConnectorBridge } = await import('../bridge/java');
       
       // Create bridge based on core type
-      let bridge: any; // Use any for now since JavaConnectorBridge doesn't extend BaseConnectorBridge
+      let bridge: any;
       
       const bridgeConfig = {
         serverId: server.id,
@@ -1018,21 +1018,69 @@ export class ServerManager {
         coreType: server.coreType
       };
       
+      // Create a pending requests map for request-response pattern
+      const pendingRequests = new Map<string, {
+        resolve: (value: any) => void;
+        reject: (error: any) => void;
+        timeout: NodeJS.Timeout;
+      }>();
+      
+      // Listen for responses from the server
+      connection.on('message', (message: any) => {
+        if (message.type === 'response' && message.requestId) {
+          const pending = pendingRequests.get(message.requestId);
+          if (pending) {
+            clearTimeout(pending.timeout);
+            pendingRequests.delete(message.requestId);
+            
+            if (message.success === false || message.error) {
+              pending.reject(new Error(message.error || 'Request failed'));
+            } else {
+              pending.resolve(message);
+            }
+          }
+        }
+      });
+      
       // Create connection adapter for WebSocket
       const connectionAdapter = {
         sendCommand: async (command: string, timeout?: number) => {
           // Send command through WebSocket connection
           try {
-            const response = await connection.sendRequest({
+            const requestId = `cmd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            const requestTimeout = timeout || 30000;
+            
+            // Create promise for response
+            const responsePromise = new Promise<any>((resolve, reject) => {
+              const timeoutHandle = setTimeout(() => {
+                pendingRequests.delete(requestId);
+                reject(new Error('Command execution timeout'));
+              }, requestTimeout);
+              
+              pendingRequests.set(requestId, {
+                resolve,
+                reject,
+                timeout: timeoutHandle
+              });
+            });
+            
+            // Send request message
+            await connection.send({
               type: 'request',
+              id: requestId,
               op: 'command.execute',
               data: {
                 command,
                 executor: 'console',
-                command_id: `cmd-${Date.now()}`
+                command_id: requestId
               },
-              timeout: timeout || 30000
+              timestamp: Date.now(),
+              serverId: server.id,
+              version: '2.0'
             });
+            
+            // Wait for response
+            const response = await responsePromise;
             
             return {
               success: response.success !== false,
@@ -1049,7 +1097,7 @@ export class ServerManager {
             };
           }
         },
-        isConnected: () => connection.isConnected && connection.isConnected(),
+        isConnected: () => connection.isReady && connection.isReady(),
         connect: async () => { /* Already connected */ },
         disconnect: async () => { await connection.close(); }
       };
