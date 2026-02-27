@@ -1043,7 +1043,7 @@ export class ServerManager {
       });
       
       // Create connection adapter for WebSocket
-      const connectionAdapter = {
+      const connectionAdapter: any = {
         sendCommand: async (command: string, timeout?: number) => {
           // Send command through WebSocket connection
           try {
@@ -1097,10 +1097,19 @@ export class ServerManager {
             };
           }
         },
-        isConnected: () => connection.isReady && connection.isReady(),
-        connect: async () => { /* Already connected */ },
-        disconnect: async () => { await connection.close(); }
+        connect: async () => { 
+          // Already connected via WebSocket
+        },
+        disconnect: async () => { 
+          await connection.close(); 
+        }
       };
+      
+      // Add isConnected as both property and method for compatibility
+      Object.defineProperty(connectionAdapter, 'isConnected', {
+        get: () => connection.isReady ? connection.isReady() : false,
+        enumerable: true
+      });
       
       // Create Java bridge (works for Folia, Paper, Spigot, etc.)
       bridge = new JavaConnectorBridge(bridgeConfig, connectionAdapter);
