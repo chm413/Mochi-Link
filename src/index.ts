@@ -594,21 +594,24 @@ export function apply(ctx: Context, config: PluginConfig) {
 
     
     // Server info - Level 1 (所有用户可查看)
-    ctx.command('mochi.server.info <id>', '查看服务器信息')
+    ctx.command('mochi.server.info [id]', '查看服务器信息')
       .userFields(['authority'])
       .action(async ({ session }, id) => {
         if (!isInitialized || !dbManager) {
           return '插件尚未初始化完成';
         }
         
-        if (!id) {
-          return '用法: mochi.server.info <id>';
+        const targetServerId = await getServerId(session, id);
+        
+        if (!targetServerId) {
+          return '请指定服务器 ID 或在群组中绑定服务器\n' +
+                 '用法: mochi.server.info [id]';
         }
         
         try {
-          const server = await dbManager.getServer(id);
+          const server = await dbManager.getServer(targetServerId);
           if (!server) {
-            return `服务器 ${id} 不存在`;
+            return `服务器 ${targetServerId} 不存在`;
           }
           
           return `服务器信息：\n` +
@@ -982,34 +985,49 @@ export function apply(ctx: Context, config: PluginConfig) {
       });
     
     // Remove from whitelist - Level 2 (受信任用户)
-    ctx.command('mochi.whitelist.remove <serverId> <player>', '移除白名单')
+    ctx.command('mochi.whitelist.remove [serverId] <player>', '移除白名单')
       .userFields(['authority'])
       .before(({ session }) => {
         if ((session?.user?.authority ?? 0) < 2) {
           return '权限不足：需要受信任用户权限（等级 2）';
         }
       })
-      .action(async ({ session }, serverId, player) => {
+      .action(async ({ session }, serverIdOrPlayer, player) => {
         if (!isInitialized || !dbManager) {
           return '插件尚未初始化完成';
         }
         
-        if (!serverId || !player) {
-          return '用法: mochi.whitelist.remove <serverId> <player>';
+        let targetServerId: string | null;
+        let targetPlayer: string;
+        
+        if (!player) {
+          // 只有一个参数，从群组绑定获取serverId
+          targetServerId = await getServerId(session);
+          targetPlayer = serverIdOrPlayer;
+        } else {
+          // 有两个参数
+          targetServerId = await getServerId(session, serverIdOrPlayer);
+          targetPlayer = player;
+        }
+        
+        if (!targetServerId) {
+          return '请指定服务器 ID 或在群组中绑定服务器\n' +
+                 '用法: mochi.whitelist.remove [serverId] <player>\n' +
+                 '或在群组中: mochi.bind.add <serverId>';
         }
         
         try {
-          const server = await dbManager.getServer(serverId);
+          const server = await dbManager.getServer(targetServerId);
           if (!server) {
-            return `服务器 ${serverId} 不存在`;
+            return `服务器 ${targetServerId} 不存在`;
           }
           
           // 记录审计日志使用服务
           if (serviceManager?.audit) {
             await serviceManager.audit.logger.logServerOperation(
-              serverId,
+              targetServerId,
               'whitelist.remove',
-              { player },
+              { player: targetPlayer },
               'success',
               undefined,
               { userId: session?.userId }
@@ -1017,7 +1035,7 @@ export function apply(ctx: Context, config: PluginConfig) {
           }
           
           // TODO: 调用实际的白名单服务
-          return `已将 ${player} 从服务器 ${server.name} 的白名单移除\n` +
+          return `已将 ${targetPlayer} 从服务器 ${server.name} 的白名单移除\n` +
                  `提示: 需要服务器连接后才能同步到游戏`;
         } catch (error) {
           logger.error('Failed to remove from whitelist:', error);
@@ -1086,21 +1104,35 @@ export function apply(ctx: Context, config: PluginConfig) {
       });
     
     // Player info - Level 1 (所有用户可查看)
-    ctx.command('mochi.player.info <serverId> <player>', '查看玩家信息')
+    ctx.command('mochi.player.info [serverId] <player>', '查看玩家信息')
       .userFields(['authority'])
-      .action(async ({ session }, serverId, player) => {
+      .action(async ({ session }, serverIdOrPlayer, player) => {
         if (!isInitialized || !dbManager) {
           return '插件尚未初始化完成';
         }
         
-        if (!serverId || !player) {
-          return '用法: mochi.player.info <serverId> <player>';
+        let targetServerId: string | null;
+        let targetPlayer: string;
+        
+        if (!player) {
+          // 只有一个参数，从群组绑定获取serverId
+          targetServerId = await getServerId(session);
+          targetPlayer = serverIdOrPlayer;
+        } else {
+          // 有两个参数
+          targetServerId = await getServerId(session, serverIdOrPlayer);
+          targetPlayer = player;
+        }
+        
+        if (!targetServerId) {
+          return '请指定服务器 ID 或在群组中绑定服务器\n' +
+                 '用法: mochi.player.info [serverId] <player>';
         }
         
         try {
-          const server = await dbManager.getServer(serverId);
+          const server = await dbManager.getServer(targetServerId);
           if (!server) {
-            return `服务器 ${serverId} 不存在`;
+            return `服务器 ${targetServerId} 不存在`;
           }
           
           // TODO: 调用实际的玩家服务
@@ -1113,26 +1145,58 @@ export function apply(ctx: Context, config: PluginConfig) {
       });
     
     // Kick player - Level 3 (管理员)
-    ctx.command('mochi.player.kick <serverId> <player> [reason]', '踢出玩家')
+    ctx.command('mochi.player.kick [serverId] <player> [reason]', '踢出玩家')
       .userFields(['authority'])
       .before(({ session }) => {
         if ((session?.user?.authority ?? 0) < 3) {
           return '权限不足：需要管理员权限（等级 3）';
         }
       })
-      .action(async ({ session }, serverId, player, reason) => {
+      .action(async ({ session }, serverIdOrPlayer, playerOrReason, reason) => {
         if (!isInitialized || !dbManager) {
           return '插件尚未初始化完成';
         }
         
-        if (!serverId || !player) {
-          return '用法: mochi.player.kick <serverId> <player> [reason]';
+        let targetServerId: string | null;
+        let targetPlayer: string;
+        let kickReason: string | undefined;
+        
+        if (!playerOrReason) {
+          // 只有一个参数
+          targetServerId = await getServerId(session);
+          targetPlayer = serverIdOrPlayer;
+          kickReason = undefined;
+        } else if (!reason) {
+          // 两个参数，可能是 serverId+player 或 player+reason
+          // 尝试从绑定获取serverId
+          const boundServerId = await getServerId(session);
+          if (boundServerId) {
+            // 有绑定，第一个参数是player，第二个是reason
+            targetServerId = boundServerId;
+            targetPlayer = serverIdOrPlayer;
+            kickReason = playerOrReason;
+          } else {
+            // 无绑定，第一个是serverId，第二个是player
+            targetServerId = serverIdOrPlayer;
+            targetPlayer = playerOrReason;
+            kickReason = undefined;
+          }
+        } else {
+          // 三个参数
+          targetServerId = await getServerId(session, serverIdOrPlayer);
+          targetPlayer = playerOrReason;
+          kickReason = reason;
+        }
+        
+        if (!targetServerId) {
+          return '请指定服务器 ID 或在群组中绑定服务器\n' +
+                 '用法: mochi.player.kick [serverId] <player> [reason]';
         }
         
         try {
-          const server = await dbManager.getServer(serverId);
+          const server = await dbManager.getServer(targetServerId);
           if (!server) {
-            return `服务器 ${serverId} 不存在`;
+            return `服务器 ${targetServerId} 不存在`;
           }
           
           if (server.status !== 'online') {
@@ -1142,9 +1206,9 @@ export function apply(ctx: Context, config: PluginConfig) {
           // 记录审计日志使用服务
           if (serviceManager?.audit) {
             await serviceManager.audit.logger.logServerOperation(
-              serverId,
+              targetServerId,
               'player.kick',
-              { player, reason: reason || '无' },
+              { player: targetPlayer, reason: kickReason || '无' },
               'success',
               undefined,
               { userId: session?.userId }
@@ -1152,8 +1216,8 @@ export function apply(ctx: Context, config: PluginConfig) {
           }
           
           // TODO: 调用实际的玩家服务
-          return `已踢出玩家 ${player} 从服务器 ${server.name}\n` +
-                 `原因: ${reason || '无'}\n` +
+          return `已踢出玩家 ${targetPlayer} 从服务器 ${server.name}\n` +
+                 `原因: ${kickReason || '无'}\n` +
                  `提示: 需要服务器连接后才能执行`;
         } catch (error) {
           logger.error('Failed to kick player:', error);
@@ -1166,7 +1230,7 @@ export function apply(ctx: Context, config: PluginConfig) {
     // ========================================================================
     
     // Execute command - Level 4 (超级管理员)
-    ctx.command('mochi.exec <serverId> <command...>', '执行服务器命令')
+    ctx.command('mochi.exec [serverId] <command...>', '执行服务器命令')
       .userFields(['authority'])
       .before(({ session }) => {
         if ((session?.user?.authority ?? 0) < 4) {
@@ -1174,26 +1238,39 @@ export function apply(ctx: Context, config: PluginConfig) {
         }
       })
       .option('as', '-a <executor:string> 执行者身份 (console/player，默认console)', { fallback: 'console' })
-      .action(async ({ session, options }, serverId, ...commandParts) => {
+      .action(async ({ session, options }, serverIdOrCommand, ...commandParts) => {
         if (!isInitialized || !dbManager) {
           return '插件尚未初始化完成';
         }
         
-        if (!serverId || !commandParts || commandParts.length === 0) {
-          return '用法: mochi.exec <serverId> <command...> [-a executor]\n' +
-                 '示例: mochi.exec survival say Hello -a console';
+        let targetServerId: string | null;
+        let command: string;
+        
+        // 判断第一个参数是serverId还是command
+        if (commandParts.length === 0) {
+          // 只有一个参数，从群组绑定获取serverId
+          targetServerId = await getServerId(session);
+          command = serverIdOrCommand || '';
+        } else {
+          // 有多个参数，第一个可能是serverId
+          targetServerId = await getServerId(session, serverIdOrCommand);
+          command = commandParts.join(' ');
+        }
+        
+        if (!targetServerId || !command) {
+          return '用法: mochi.exec [serverId] <command...> [-a executor]\n' +
+                 '示例: mochi.exec survival say Hello -a console\n' +
+                 '或在群组绑定后: mochi.exec say Hello -a console';
         }
         
         if (!options) {
           return '选项参数错误';
         }
         
-        const command = commandParts.join(' ');
-        
         try {
-          const server = await dbManager.getServer(serverId);
+          const server = await dbManager.getServer(targetServerId);
           if (!server) {
-            return `服务器 ${serverId} 不存在`;
+            return `服务器 ${targetServerId} 不存在`;
           }
           
           if (server.status !== 'online') {
@@ -1204,7 +1281,7 @@ export function apply(ctx: Context, config: PluginConfig) {
           if (serviceManager?.command) {
             try {
               const result = await serviceManager.command.executeCommand(
-                serverId,
+                targetServerId,
                 command,
                 session?.userId || 'system',
                 {
@@ -1216,7 +1293,7 @@ export function apply(ctx: Context, config: PluginConfig) {
               // 记录审计日志使用服务
               if (serviceManager?.audit) {
                 await serviceManager.audit.logger.logServerOperation(
-                  serverId,
+                  targetServerId,
                   'command.execute',
                   { command, executor: options.as },
                   'success',
@@ -1244,7 +1321,7 @@ export function apply(ctx: Context, config: PluginConfig) {
               // 记录失败的审计日志使用服务
               if (serviceManager?.audit) {
                 await serviceManager.audit.logger.logServerOperation(
-                  serverId,
+                  targetServerId,
                   'command.execute',
                   { command, executor: options.as },
                   'failure',
