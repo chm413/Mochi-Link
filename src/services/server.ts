@@ -1057,10 +1057,13 @@ export class ServerManager {
       // Create Java bridge (works for Folia, Paper, Spigot, etc.)
       bridge = new JavaConnectorBridge(bridgeConfig, connectionAdapter);
       
+      // Mark bridge as connected since WebSocket is already authenticated
+      await bridge.connect();
+      
       // Store bridge
       this.bridges.set(serverId, bridge as any);
       
-      logger.info(`WebSocket bridge created for server ${serverId} (${server.coreType})`);
+      logger.info(`WebSocket bridge created and connected for server ${serverId} (${server.coreType})`);
       
     } catch (error) {
       logger.error(`Failed to create WebSocket bridge for ${serverId}:`, error);
