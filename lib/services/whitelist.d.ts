@@ -65,6 +65,7 @@ export interface BanSyncStatus {
 }
 export declare class WhitelistManager {
     private ctx;
+    private getBridgeFn;
     private whitelistCache;
     private pendingOperations;
     private syncStatus;
@@ -73,7 +74,7 @@ export declare class WhitelistManager {
     private banSyncStatus;
     private syncInterval;
     private maxRetries;
-    constructor(ctx: Context);
+    constructor(ctx: Context, getBridge: (serverId: string) => any);
     /**
      * Get whitelist for a specific server
      */

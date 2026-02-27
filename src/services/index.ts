@@ -208,8 +208,16 @@ export class ServiceManager {
     this.token = new TokenManager(ctx);
     this.pluginIntegration = new PluginIntegrationService();
     this.server = new ServerManager(ctx, this.db, this.audit, this.permission, this.token, this.pluginIntegration);
-    this.player = new PlayerInformationService(ctx);
-    this.whitelist = new WhitelistManager(ctx);
+    
+    // Pass getBridge function to services that need bridge access
+    this.player = new PlayerInformationService(
+      ctx,
+      (serverId: string) => this.server.getBridge(serverId)
+    );
+    this.whitelist = new WhitelistManager(
+      ctx,
+      (serverId: string) => this.server.getBridge(serverId)
+    );
     this.command = new CommandExecutionService(
       ctx,
       this.audit,

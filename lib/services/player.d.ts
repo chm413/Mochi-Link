@@ -34,11 +34,12 @@ export interface PlayerSyncStatus {
 }
 export declare class PlayerInformationService {
     private ctx;
+    private getBridgeFn;
     private playerCache;
     private identityIndex;
     private syncStatus;
     private cacheTimeout;
-    constructor(ctx: Context);
+    constructor(ctx: Context, getBridge: (serverId: string) => any);
     /**
      * Get unified player information from a specific server
      */

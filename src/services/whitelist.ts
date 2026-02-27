@@ -92,6 +92,7 @@ export interface BanSyncStatus {
 
 export class WhitelistManager {
   private ctx: Context;
+  private getBridgeFn: (serverId: string) => any;
   private whitelistCache = new Map<string, WhitelistCache>();
   private pendingOperations = new Map<string, WhitelistOperation[]>();
   private syncStatus = new Map<string, WhitelistSyncStatus>();
@@ -104,8 +105,9 @@ export class WhitelistManager {
   private syncInterval = 30 * 1000; // 30 seconds
   private maxRetries = 3;
 
-  constructor(ctx: Context) {
+  constructor(ctx: Context, getBridge: (serverId: string) => any) {
     this.ctx = ctx;
+    this.getBridgeFn = getBridge;
     this.initializeService();
   }
 
@@ -1068,9 +1070,13 @@ export class WhitelistManager {
    * Get bridge for server
    */
   private async getBridge(serverId: string): Promise<any> {
-    // This would integrate with the connection manager to get the bridge
-    // For now, return null to indicate no bridge available
-    return null;
+    const bridge = this.getBridgeFn(serverId);
+    if (!bridge) {
+      this.ctx.logger('mochi-link:whitelist').warn(
+        `Bridge not available for server ${serverId}, operations will be queued`
+      );
+    }
+    return bridge;
   }
 
   /**

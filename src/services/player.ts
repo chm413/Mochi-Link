@@ -52,13 +52,15 @@ export interface PlayerSyncStatus {
 
 export class PlayerInformationService {
   private ctx: Context;
+  private getBridgeFn: (serverId: string) => any;
   private playerCache = new Map<string, PlayerCache>();
   private identityIndex = new Map<string, Set<string>>(); // identifier -> playerIds
   private syncStatus = new Map<string, PlayerSyncStatus>();
   private cacheTimeout = 30 * 60 * 1000; // 30 minutes
 
-  constructor(ctx: Context) {
+  constructor(ctx: Context, getBridge: (serverId: string) => any) {
     this.ctx = ctx;
+    this.getBridgeFn = getBridge;
     this.initializeService();
   }
 
@@ -450,9 +452,13 @@ export class PlayerInformationService {
   }
 
   private getBridge(serverId: string): any {
-    // This would integrate with the connection manager to get the bridge
-    // For now, return a mock
-    return null;
+    const bridge = this.getBridgeFn(serverId);
+    if (!bridge) {
+      this.ctx.logger('mochi-link:player').warn(
+        `Bridge not available for server ${serverId}, using cached data only`
+      );
+    }
+    return bridge;
   }
 
   private getConnectedServerIds(): string[] {
