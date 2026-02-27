@@ -1321,7 +1321,18 @@ export class WhitelistManager {
         }
         
         try {
-          const params = JSON.parse(op.parameters);
+          // Safely parse parameters
+          let params: any = {};
+          if (op.parameters) {
+            if (typeof op.parameters === 'string') {
+              if (op.parameters.trim()) {
+                params = JSON.parse(op.parameters);
+              }
+            } else {
+              params = op.parameters;
+            }
+          }
+
           const operation: WhitelistOperation = {
             type: op.operation_type.replace('whitelist_', '') as 'add' | 'remove',
             playerId: op.target,
@@ -1357,7 +1368,18 @@ export class WhitelistManager {
         }
         
         try {
-          const params = JSON.parse(op.parameters);
+          // Safely parse parameters
+          let params: any = {};
+          if (op.parameters) {
+            if (typeof op.parameters === 'string') {
+              if (op.parameters.trim()) {
+                params = JSON.parse(op.parameters);
+              }
+            } else {
+              params = op.parameters;
+            }
+          }
+
           const operation: BanOperation = {
             type: op.operation_type.replace('ban_', '') as 'ban' | 'unban',
             banType: params.banType,
@@ -1444,7 +1466,18 @@ export class WhitelistManager {
       )[0];
       
       try {
-        const bans = JSON.parse(latestBanState.parameters);
+        // Safely parse parameters
+        let bans: any[] = [];
+        if (latestBanState.parameters) {
+          if (typeof latestBanState.parameters === 'string') {
+            if (latestBanState.parameters.trim()) {
+              bans = JSON.parse(latestBanState.parameters);
+            }
+          } else {
+            bans = latestBanState.parameters;
+          }
+        }
+
         return bans.map((ban: any) => ({
           ...ban,
           bannedAt: new Date(ban.bannedAt),

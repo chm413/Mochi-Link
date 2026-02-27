@@ -258,10 +258,22 @@ export class BindingManager {
       );
     }
 
-    // Merge configuration
-    const currentConfig = typeof existing.config === 'string' 
-      ? JSON.parse(existing.config) 
-      : existing.config;
+    // Merge configuration - safely parse existing config
+    let currentConfig: any = {};
+    if (existing.config) {
+      if (typeof existing.config === 'string') {
+        try {
+          if (existing.config.trim()) {
+            currentConfig = JSON.parse(existing.config);
+          }
+        } catch (error) {
+          console.error(`Failed to parse config for binding ${bindingId}:`, error);
+          currentConfig = {};
+        }
+      } else {
+        currentConfig = existing.config;
+      }
+    }
     const newConfig = { ...currentConfig, ...options.config };
 
     // Update binding
@@ -664,14 +676,29 @@ export class BindingManager {
    * Convert database binding to application model
    */
   private dbBindingToModel(dbBinding: DatabaseServerBinding): ServerBinding {
+    // Safely parse config
+    let config: any = {};
+    if (dbBinding.config) {
+      if (typeof dbBinding.config === 'string') {
+        try {
+          if (dbBinding.config.trim()) {
+            config = JSON.parse(dbBinding.config);
+          }
+        } catch (error) {
+          console.error(`Failed to parse config for binding ${dbBinding.id}:`, error);
+          config = {};
+        }
+      } else {
+        config = dbBinding.config;
+      }
+    }
+
     return {
       id: dbBinding.id,
       groupId: dbBinding.group_id,
       serverId: dbBinding.server_id,
       bindingType: dbBinding.binding_type as BindingType,
-      config: typeof dbBinding.config === 'string' 
-        ? JSON.parse(dbBinding.config) 
-        : dbBinding.config,
+      config,
       createdAt: dbBinding.created_at,
       status: 'active', // Default status, would be determined by monitoring
       lastActivity: undefined // Would be tracked separately

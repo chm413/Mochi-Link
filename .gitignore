@@ -192,7 +192,7 @@ temp/
 *.sqlite3
 *.db-journal
 data/
-database/
+# database/  # Commented out: conflicts with lib/database/ source code
 db/
 
 # ============================================================================

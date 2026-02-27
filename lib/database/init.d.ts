@@ -1,8 +1,8 @@
 /**
- * Mochi-Link (大福连) - Database Initialization
- *
- * This file contains database initialization scripts and migration utilities.
- */
+* Mochi-Link (大福连) - Database Initialization
+*
+* This file contains database initialization scripts and migration utilities.
+*/
 import { Context } from 'koishi';
 import { DatabaseManager } from './operations';
 export declare class DatabaseInitializer {
@@ -25,6 +25,10 @@ export declare class DatabaseInitializer {
      * Verify that all required tables exist
      */
     private verifyTables;
+    /**
+     * Fix invalid JSON data in existing database records
+     */
+    private fixInvalidJsonData;
     /**
      * Create initial data if needed
      */
