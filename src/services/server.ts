@@ -1027,19 +1027,17 @@ export class ServerManager {
       
       // Listen for responses from the server
       connection.on('message', (message: any) => {
-        if (message.type === 'response' && message.data) {
-          const commandId = message.data.command_id;
-          if (commandId) {
-            const pending = pendingRequests.get(commandId);
-            if (pending) {
-              clearTimeout(pending.timeout);
-              pendingRequests.delete(commandId);
-              
-              if (message.data.success === false || message.data.error) {
-                pending.reject(new Error(message.data.error || 'Request failed'));
-              } else {
-                pending.resolve(message);
-              }
+        // Handle response messages (U-WBP v2 protocol)
+        if (message.type === 'response' && message.id) {
+          const pending = pendingRequests.get(message.id);
+          if (pending) {
+            clearTimeout(pending.timeout);
+            pendingRequests.delete(message.id);
+            
+            if (message.data?.success === false || message.data?.error) {
+              pending.reject(new Error(message.data?.error || 'Request failed'));
+            } else {
+              pending.resolve(message);
             }
           }
         }
@@ -1067,16 +1065,18 @@ export class ServerManager {
               });
             });
             
-            // Send command message (matching Folia connector's expected format)
+            // Send command message (following U-WBP v2 protocol specification)
             await connection.send({
-              type: 'command',
-              version: '2.0',
-              timestamp: Date.now(),
+              type: 'request',
+              id: requestId,
+              op: 'command.execute',
               data: {
-                command_id: requestId,
                 command: command,
                 executor: 'console'
-              }
+              },
+              timestamp: Date.now(),
+              serverId: server.id,
+              version: '2.0'
             });
             
             // Wait for response
