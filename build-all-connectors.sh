@@ -165,8 +165,8 @@ main() {
     print_status "Building Java Edition plugins..."
     print_status "构建Java版插件..."
     
-    build_java_plugin "mochi-link-connector-java" "MochiLinkConnector-Paper"
-    build_java_plugin "mochi-link-connector-folia" "MochiLinkConnector-Folia"
+    build_java_plugin "connectors/java" "MochiLinkConnector-Paper"
+    build_java_plugin "connectors/folia" "MochiLinkConnector-Folia"
     
     # Build Fabric mod
     print_status "Building Fabric mod..."

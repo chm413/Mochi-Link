@@ -211,8 +211,8 @@ REM Build Java Edition plugins
 call :print_status "Building Java Edition plugins..."
 call :print_status "构建Java版插件..."
 
-call :build_java_plugin "mochi-link-connector-java" "MochiLinkConnector-Paper"
-call :build_java_plugin "mochi-link-connector-folia" "MochiLinkConnector-Folia"
+call :build_java_plugin "connectors\java" "MochiLinkConnector-Paper"
+call :build_java_plugin "connectors\folia" "MochiLinkConnector-Folia"
 
 REM Build Fabric mod
 call :print_status "Building Fabric mod..."

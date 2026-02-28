@@ -5,7 +5,7 @@ echo ========================================
 echo.
 
 echo [1/3] 编译 Java 连接器...
-cd mochi-link-connector-java
+cd connectors\java
 call gradle clean build shadowJar
 if %ERRORLEVEL% NEQ 0 (
     echo 错误: Java 连接器编译失败
@@ -18,7 +18,7 @@ echo Java 连接器编译完成
 echo.
 
 echo [2/3] 编译 Folia 连接器...
-cd mochi-link-connector-folia
+cd connectors\folia
 call gradle clean build shadowJar
 if %ERRORLEVEL% NEQ 0 (
     echo 错误: Folia 连接器编译失败
@@ -33,8 +33,8 @@ echo.
 echo [3/3] 复制到 build-output 目录...
 if not exist build-output mkdir build-output
 
-copy /Y mochi-link-connector-java\build\libs\*.jar build-output\
-copy /Y mochi-link-connector-folia\build\libs\*.jar build-output\
+copy /Y connectors\java\build\libs\*.jar build-output\
+copy /Y connectors\folia\build\libs\*.jar build-output\
 
 echo.
 echo ========================================
