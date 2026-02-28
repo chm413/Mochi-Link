@@ -15,6 +15,8 @@ export type { WhitelistEntry, WhitelistOperation, WhitelistSyncStatus, Whitelist
 export { CommandExecutionService } from './command';
 export type { CommandExecutionOptions, QuickActionDefinition, QuickActionParameter, ServerControlOperation, ServerControlResult, BatchOperationRequest, BatchOperationResult } from './command';
 export { EventService } from './event';
+export { SubscriptionHandler } from './subscription-handler';
+export { RequestHandler } from './request-handler';
 export type { EventFilter as EventServiceFilter, EventSubscription, EventAggregation, EventDistributionRule, EventTarget, EventMetrics, EventListener } from './event';
 export { MonitoringService } from './monitoring';
 export type { MonitoringConfig, AlertThresholds, StorageConfig, ServerStatusReport, HistoricalData, HistoricalMetric, Alert, MonitoringStats } from './monitoring';

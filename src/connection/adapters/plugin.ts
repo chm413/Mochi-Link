@@ -148,7 +148,7 @@ export class PluginConnectionAdapter extends BaseConnectionAdapter {
       id: requestId,
       op: 'server.command',
       data: { command },
-      timestamp: Date.now(),
+      timestamp: new Date().toISOString(),
       serverId: this.serverId,
       version: '2.0'
     };
@@ -314,7 +314,7 @@ export class PluginConnectionAdapter extends BaseConnectionAdapter {
       id: `ping-${Date.now()}`,
       op: 'ping',
       data: {},
-      timestamp: Date.now(),
+      timestamp: new Date().toISOString(),
       serverId: this.serverId,
       version: '2.0',
       systemOp: 'ping'
@@ -333,7 +333,7 @@ export class PluginConnectionAdapter extends BaseConnectionAdapter {
       id: `pong-${Date.now()}`,
       op: 'pong',
       data: { pingId },
-      timestamp: Date.now(),
+      timestamp: new Date().toISOString(),
       serverId: this.serverId,
       version: '2.0',
       systemOp: 'pong'
@@ -352,7 +352,7 @@ export class PluginConnectionAdapter extends BaseConnectionAdapter {
       id: `disconnect-${Date.now()}`,
       op: 'disconnect',
       data: { reason: 'Client disconnect' },
-      timestamp: Date.now(),
+      timestamp: new Date().toISOString(),
       serverId: this.serverId,
       version: '2.0',
       systemOp: 'disconnect'

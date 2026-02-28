@@ -2,6 +2,7 @@ package com.mochilink.connector.handlers;
 
 import com.mochilink.connector.MochiLinkPlugin;
 import com.mochilink.connector.connection.ConnectionManager;
+import com.mochilink.connector.protocol.UWBPv2Protocol;
 
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -20,6 +21,8 @@ import java.util.logging.Logger;
  * 
  * Listens for various server events and converts them to U-WBP v2 protocol
  * messages for transmission to the Mochi-Link management system.
+ * 
+ * Now includes subscription checking to only send events that are subscribed to.
  */
 public class ServerEventHandler implements Listener {
     
@@ -42,14 +45,26 @@ public class ServerEventHandler implements Listener {
             return;
         }
         
+        // Check if there are any subscriptions for this event type
+        if (!plugin.getSubscriptionManager().hasSubscription("player.join")) {
+            return;  // No subscriptions, don't send
+        }
+        
         Player player = event.getPlayer();
         
         Map<String, Object> eventData = new HashMap<>();
         eventData.put("join_message", event.getJoinMessage());
         eventData.put("first_join", !player.hasPlayedBefore());
         eventData.put("player_count", plugin.getServer().getOnlinePlayers().size());
+        eventData.put("player_name", player.getName());
+        eventData.put("player_uuid", player.getUniqueId().toString());
         
-        sendPlayerEvent("player_join", player, eventData);
+        // Check if event data matches subscription filters
+        if (!plugin.getSubscriptionManager().matchesFilters("player.join", eventData)) {
+            return;  // Doesn't match filters
+        }
+        
+        sendPlayerEvent("player.join", player, eventData);
         
         if (plugin.getPluginConfig().isLogEvents()) {
             logger.info(String.format("Player joined: %s (%s)", player.getName(), player.getUniqueId()));
@@ -65,14 +80,26 @@ public class ServerEventHandler implements Listener {
             return;
         }
         
+        // Check subscription
+        if (!plugin.getSubscriptionManager().hasSubscription("player.leave")) {
+            return;
+        }
+        
         Player player = event.getPlayer();
         
         Map<String, Object> eventData = new HashMap<>();
         eventData.put("quit_message", event.getQuitMessage());
         eventData.put("play_time", System.currentTimeMillis() - player.getFirstPlayed());
         eventData.put("player_count", plugin.getServer().getOnlinePlayers().size() - 1);
+        eventData.put("player_name", player.getName());
+        eventData.put("player_uuid", player.getUniqueId().toString());
         
-        sendPlayerEvent("player_quit", player, eventData);
+        // Check filters
+        if (!plugin.getSubscriptionManager().matchesFilters("player.leave", eventData)) {
+            return;
+        }
+        
+        sendPlayerEvent("player.leave", player, eventData);
         
         if (plugin.getPluginConfig().isLogEvents()) {
             logger.info(String.format("Player quit: %s (%s)", player.getName(), player.getUniqueId()));
@@ -88,14 +115,26 @@ public class ServerEventHandler implements Listener {
             return;
         }
         
+        // Check subscription
+        if (!plugin.getSubscriptionManager().hasSubscription("player.chat")) {
+            return;
+        }
+        
         Player player = event.getPlayer();
         
         Map<String, Object> eventData = new HashMap<>();
         eventData.put("message", event.getMessage());
         eventData.put("format", event.getFormat());
         eventData.put("cancelled", event.isCancelled());
+        eventData.put("player_name", player.getName());
+        eventData.put("player_uuid", player.getUniqueId().toString());
         
-        sendPlayerEvent("player_chat", player, eventData);
+        // Check filters
+        if (!plugin.getSubscriptionManager().matchesFilters("player.chat", eventData)) {
+            return;
+        }
+        
+        sendPlayerEvent("player.chat", player, eventData);
         
         if (plugin.getPluginConfig().isLogEvents()) {
             logger.info(String.format("Player chat: %s: %s", player.getName(), event.getMessage()));
@@ -111,6 +150,11 @@ public class ServerEventHandler implements Listener {
             return;
         }
         
+        // Check subscription
+        if (!plugin.getSubscriptionManager().hasSubscription("player.death")) {
+            return;
+        }
+        
         Player player = event.getEntity();
         
         Map<String, Object> eventData = new HashMap<>();
@@ -118,6 +162,8 @@ public class ServerEventHandler implements Listener {
         eventData.put("keep_inventory", event.getKeepInventory());
         eventData.put("keep_level", event.getKeepLevel());
         eventData.put("dropped_exp", event.getDroppedExp());
+        eventData.put("player_name", player.getName());
+        eventData.put("player_uuid", player.getUniqueId().toString());
         
         // Add killer information if available
         if (player.getKiller() != null) {
@@ -133,7 +179,12 @@ public class ServerEventHandler implements Listener {
             "z", player.getLocation().getZ()
         ));
         
-        sendPlayerEvent("player_death", player, eventData);
+        // Check filters
+        if (!plugin.getSubscriptionManager().matchesFilters("player.death", eventData)) {
+            return;
+        }
+        
+        sendPlayerEvent("player.death", player, eventData);
         
         if (plugin.getPluginConfig().isLogEvents()) {
             logger.info(String.format("Player death: %s at %s", player.getName(), player.getLocation()));
@@ -149,12 +200,24 @@ public class ServerEventHandler implements Listener {
             return;
         }
         
+        // Check subscription
+        if (!plugin.getSubscriptionManager().hasSubscription("player.advancement")) {
+            return;
+        }
+        
         Player player = event.getPlayer();
         
         Map<String, Object> eventData = new HashMap<>();
         eventData.put("advancement", event.getAdvancement().getKey().toString());
+        eventData.put("player_name", player.getName());
+        eventData.put("player_uuid", player.getUniqueId().toString());
         
-        sendPlayerEvent("player_advancement", player, eventData);
+        // Check filters
+        if (!plugin.getSubscriptionManager().matchesFilters("player.advancement", eventData)) {
+            return;
+        }
+        
+        sendPlayerEvent("player.advancement", player, eventData);
         
         if (plugin.getPluginConfig().isLogEvents()) {
             logger.info(String.format("Player advancement: %s completed %s", 
@@ -171,14 +234,26 @@ public class ServerEventHandler implements Listener {
             return;
         }
         
+        // Check subscription
+        if (!plugin.getSubscriptionManager().hasSubscription("player.kick")) {
+            return;
+        }
+        
         Player player = event.getPlayer();
         
         Map<String, Object> eventData = new HashMap<>();
         eventData.put("kick_reason", event.getReason());
         eventData.put("leave_message", event.getLeaveMessage());
         eventData.put("cancelled", event.isCancelled());
+        eventData.put("player_name", player.getName());
+        eventData.put("player_uuid", player.getUniqueId().toString());
         
-        sendPlayerEvent("player_kick", player, eventData);
+        // Check filters
+        if (!plugin.getSubscriptionManager().matchesFilters("player.kick", eventData)) {
+            return;
+        }
+        
+        sendPlayerEvent("player.kick", player, eventData);
         
         if (plugin.getPluginConfig().isLogEvents()) {
             logger.info(String.format("Player kicked: %s - %s", player.getName(), event.getReason()));
@@ -190,10 +265,20 @@ public class ServerEventHandler implements Listener {
      */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onServerLoad(ServerLoadEvent event) {
+        // Check subscription
+        if (!plugin.getSubscriptionManager().hasSubscription("server.load")) {
+            return;
+        }
+        
         Map<String, Object> eventData = new HashMap<>();
         eventData.put("load_type", event.getType().toString());
         
-        sendServerEvent("server_load", eventData);
+        // Check filters
+        if (!plugin.getSubscriptionManager().matchesFilters("server.load", eventData)) {
+            return;
+        }
+        
+        sendServerEvent("server.load", eventData);
         
         if (plugin.getPluginConfig().isLogEvents()) {
             logger.info("Server load event: " + event.getType());
@@ -209,9 +294,15 @@ public class ServerEventHandler implements Listener {
         }
         
         try {
-            // This would need access to the protocol instance
-            // For now, we'll just log the event
-            logger.info(String.format("Player event: %s for %s", eventType, player.getName()));
+            // Get protocol instance from connection manager
+            UWBPv2Protocol protocol = connectionManager.getProtocol();
+            if (protocol == null) {
+                logger.warning("Protocol instance not available");
+                return;
+            }
+            
+            String message = protocol.createPlayerEventMessage(eventType, player, eventData);
+            connectionManager.sendMessage(message);
             
         } catch (Exception e) {
             logger.warning("Failed to send player event: " + e.getMessage());
@@ -227,9 +318,15 @@ public class ServerEventHandler implements Listener {
         }
         
         try {
-            // This would need access to the protocol instance
-            // For now, we'll just log the event
-            logger.info(String.format("Server event: %s", eventType));
+            // Get protocol instance from connection manager
+            UWBPv2Protocol protocol = connectionManager.getProtocol();
+            if (protocol == null) {
+                logger.warning("Protocol instance not available");
+                return;
+            }
+            
+            String message = protocol.createServerEventMessage(eventType, eventData);
+            connectionManager.sendMessage(message);
             
         } catch (Exception e) {
             logger.warning("Failed to send server event: " + e.getMessage());

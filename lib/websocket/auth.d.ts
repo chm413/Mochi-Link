@@ -17,7 +17,7 @@ export interface AuthenticationResponse {
     serverId: string;
     token: string;
     challengeResponse: string;
-    timestamp: number;
+    timestamp: string | number;
 }
 export interface AuthenticationResult {
     success: boolean;

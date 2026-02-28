@@ -5,7 +5,7 @@
  * Unified WebSocket Bridge Protocol version 2.
  */
 import { UWBPMessage, UWBPRequest, UWBPResponse, UWBPEvent, UWBPSystemMessage, Player, PlayerDetail, ServerInfo, PerformanceMetrics, CommandResult } from '../types';
-export declare const UWBP_VERSION = "2.0";
+export declare const UWBP_VERSION = "2.0.0";
 export declare const PROTOCOL_NAME = "U-WBP";
 export type RequestOperation = 'server.getInfo' | 'server.getStatus' | 'server.getMetrics' | 'server.shutdown' | 'server.restart' | 'server.reload' | 'server.save' | 'player.list' | 'player.getInfo' | 'player.kick' | 'player.ban' | 'player.unban' | 'player.message' | 'player.teleport' | 'whitelist.get' | 'whitelist.add' | 'whitelist.remove' | 'whitelist.enable' | 'whitelist.disable' | 'command.execute' | 'command.suggest' | 'world.list' | 'world.getInfo' | 'world.setTime' | 'world.setWeather' | 'world.broadcast';
 export type EventOperation = 'player.join' | 'player.leave' | 'player.chat' | 'player.death' | 'player.advancement' | 'player.move' | 'server.status' | 'server.logLine' | 'server.metrics' | 'alert.tpsLow' | 'alert.memoryHigh' | 'alert.playerFlood' | 'alert.diskSpace' | 'alert.connectionLost';

@@ -90,6 +90,14 @@ export declare class EventService {
      */
     updateSubscription(subscriptionId: string, newFilter: EventFilter): Promise<EventSubscription>;
     /**
+     * Get all subscriptions for a connection
+     */
+    getSubscriptionsForConnection(connectionId: string): Promise<EventSubscription[]>;
+    /**
+     * Get subscription by ID
+     */
+    getSubscription(subscriptionId: string): Promise<EventSubscription | undefined>;
+    /**
      * Register event listener for a server
      */
     registerListener(listener: EventListener): Promise<void>;

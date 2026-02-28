@@ -41,7 +41,7 @@ export interface ServerEvent {
   serverId: string;
   eventType: string;
   data: any;
-  timestamp: number;
+  timestamp: string;  // ISO 8601 格式字符串，与 BaseEvent 保持一致
 }
 
 export interface GroupMessage {
@@ -51,7 +51,7 @@ export interface GroupMessage {
   metadata?: {
     serverId: string;
     eventType: string;
-    timestamp: number;
+    timestamp: string | number;  // 支持两种格式
   };
 }
 

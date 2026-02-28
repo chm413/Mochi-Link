@@ -317,14 +317,33 @@ export class MessageValidator {
     }
   }
 
-  private static validateTimestamp(timestamp: number, result: ValidationResult): void {
-    if (typeof timestamp !== 'number' || timestamp <= 0) {
-      this.addError(result, 'timestamp', 'Timestamp must be a positive number', 'INVALID_TIMESTAMP');
+  private static validateTimestamp(timestamp: string | number, result: ValidationResult): void {
+    // 支持 ISO 8601 字符串格式（推荐）或数字格式（向后兼容）
+    let timestampMs: number;
+    
+    if (typeof timestamp === 'string') {
+      // ISO 8601 格式
+      const date = new Date(timestamp);
+      if (isNaN(date.getTime())) {
+        this.addError(result, 'timestamp', 'Timestamp must be a valid ISO 8601 string', 'INVALID_TIMESTAMP');
+        return;
+      }
+      timestampMs = date.getTime();
+    } else if (typeof timestamp === 'number') {
+      // 数字格式（向后兼容）
+      if (timestamp <= 0) {
+        this.addError(result, 'timestamp', 'Timestamp must be a positive number', 'INVALID_TIMESTAMP');
+        return;
+      }
+      timestampMs = timestamp;
+      this.addWarning(result, 'timestamp', 'Numeric timestamp is deprecated, use ISO 8601 string format', 'DEPRECATED_TIMESTAMP_FORMAT');
+    } else {
+      this.addError(result, 'timestamp', 'Timestamp must be an ISO 8601 string or number', 'INVALID_TIMESTAMP_TYPE');
       return;
     }
 
     const now = Date.now();
-    const diff = Math.abs(now - timestamp);
+    const diff = Math.abs(now - timestampMs);
     
     // Warn if timestamp is more than 1 minute off
     if (diff > 60000) {

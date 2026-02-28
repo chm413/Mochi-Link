@@ -31,7 +31,7 @@ export interface AuthenticationResponse {
   serverId: string;
   token: string;
   challengeResponse: string;
-  timestamp: number;
+  timestamp: string | number;  // 支持两种格式
 }
 
 export interface AuthenticationResult {
@@ -407,7 +407,7 @@ export class AuthenticationManager extends EventEmitter {
         capabilities: result.capabilities || [],
         protocolVersion: '2.0'
       },
-      timestamp: Date.now(),
+      timestamp: new Date().toISOString(),
       serverId: result.serverId,
       version: '2.0',
       systemOp: 'handshake'
@@ -430,7 +430,7 @@ export class AuthenticationManager extends EventEmitter {
         error,
         code: 'AUTH_FAILED'
       },
-      timestamp: Date.now(),
+      timestamp: new Date().toISOString(),
       version: '2.0',
       systemOp: 'error'
     };

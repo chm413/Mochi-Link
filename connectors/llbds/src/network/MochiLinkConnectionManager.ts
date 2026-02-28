@@ -252,11 +252,11 @@ export class MochiLinkConnectionManager extends EventEmitter {
      */
     private async handleHandshake(message: any): Promise<void> {
         try {
-            // Send handshake response
+            // Send handshake response (U-WBP v2 compliant)
             const response = {
-                type: 'system',
+                type: 'response',
                 id: message.id,
-                op: 'handshake_response',
+                op: 'system.handshake',
                 data: {
                     serverId: this.config.getServerId(),
                     serverName: this.config.getServerName(),
@@ -275,8 +275,7 @@ export class MochiLinkConnectionManager extends EventEmitter {
                     }
                 },
                 timestamp: Date.now(),
-                version: '2.0',
-                systemOp: 'handshake_response'
+                version: '2.0'
             };
             
             await this.send(response);
@@ -294,16 +293,15 @@ export class MochiLinkConnectionManager extends EventEmitter {
     private async handlePing(message: any): Promise<void> {
         try {
             const response = {
-                type: 'system',
+                type: 'response',
                 id: message.id,
-                op: 'pong',
+                op: 'system.pong',
                 data: {
                     timestamp: Date.now(),
                     serverId: this.config.getServerId()
                 },
                 timestamp: Date.now(),
-                version: '2.0',
-                systemOp: 'pong'
+                version: '2.0'
             };
             
             await this.send(response);
@@ -389,9 +387,15 @@ export class MochiLinkConnectionManager extends EventEmitter {
             if (this.isConnected) {
                 try {
                     const heartbeat = {
-                        type: 'heartbeat',
+                        type: 'request',
+                        id: this.generateId(),
+                        op: 'system.ping',
+                        data: {
+                            serverId: this.config.getServerId(),
+                            timestamp: Date.now()
+                        },
                         timestamp: Date.now(),
-                        serverId: this.config.getServerId()
+                        version: '2.0'
                     };
                     
                     await this.send(heartbeat);
@@ -401,6 +405,13 @@ export class MochiLinkConnectionManager extends EventEmitter {
                 }
             }
         }, 30000); // 30 seconds
+    }
+    
+    /**
+     * Generate unique message ID
+     */
+    private generateId(): string {
+        return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     }
     
     /**

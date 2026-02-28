@@ -25,6 +25,7 @@ public class NukkitConnectionManager {
     private final Gson gson;
     
     private WebSocketClient wsClient;
+    private com.mochilink.connector.nukkit.protocol.NukkitMessageHandler messageHandler;
     private final AtomicBoolean connected = new AtomicBoolean(false);
     private final AtomicBoolean connecting = new AtomicBoolean(false);
     private TaskHandler heartbeatTask;
@@ -237,8 +238,7 @@ public class NukkitConnectionManager {
             String type = json.get("type").getAsString();
             
             if ("request".equals(type)) {
-                // Handle request
-                logger.debug("Received request: " + message);
+                handleRequest(json);
             } else if ("system".equals(type)) {
                 // Handle system message
                 logger.debug("Received system message: " + message);
@@ -246,6 +246,196 @@ public class NukkitConnectionManager {
         } catch (Exception e) {
             logger.error("Failed to handle message", e);
         }
+    }
+    
+    /**
+     * Handle request message
+     */
+    private void handleRequest(JsonObject request) {
+        String op = request.get("op").getAsString();
+        String requestId = request.get("id").getAsString();
+        JsonObject data = request.has("data") ? request.getAsJsonObject("data") : new JsonObject();
+        
+        // Create message handler if not exists
+        if (messageHandler == null) {
+            messageHandler = new com.mochilink.connector.nukkit.protocol.NukkitMessageHandler(plugin, this);
+        }
+        
+        JsonObject response = null;
+        
+        switch (op) {
+            case "player.list":
+                response = messageHandler.handlePlayerList(requestId);
+                break;
+            case "player.info":
+                String playerId = data.has("playerId") ? data.get("playerId").getAsString() : null;
+                response = messageHandler.handlePlayerInfo(requestId, playerId);
+                break;
+            case "player.kick":
+                String kickPlayerId = data.has("playerId") ? data.get("playerId").getAsString() : null;
+                String kickReason = data.has("reason") ? data.get("reason").getAsString() : null;
+                response = messageHandler.handlePlayerKick(requestId, kickPlayerId, kickReason);
+                break;
+            case "player.message":
+                String msgPlayerId = data.has("playerId") ? data.get("playerId").getAsString() : null;
+                String message = data.has("message") ? data.get("message").getAsString() : null;
+                response = messageHandler.handlePlayerMessage(requestId, msgPlayerId, message);
+                break;
+            case "whitelist.list":
+                response = messageHandler.handleWhitelistList(requestId);
+                break;
+            case "whitelist.add":
+                String addPlayerName = data.has("playerName") ? data.get("playerName").getAsString() : null;
+                response = messageHandler.handleWhitelistAdd(requestId, addPlayerName);
+                break;
+            case "whitelist.remove":
+                String removePlayerName = data.has("playerName") ? data.get("playerName").getAsString() : null;
+                response = messageHandler.handleWhitelistRemove(requestId, removePlayerName);
+                break;
+            case "command.execute":
+                String command = data.has("command") ? data.get("command").getAsString() : null;
+                response = messageHandler.handleCommandExecute(requestId, command);
+                break;
+            case "server.info":
+                response = messageHandler.handleServerInfo(requestId);
+                break;
+            case "server.status":
+                response = messageHandler.handleServerStatus(requestId);
+                break;
+            case "server.restart":
+                int restartDelay = data.has("delay") ? data.get("delay").getAsInt() : 10;
+                response = messageHandler.handleServerRestart(requestId, restartDelay);
+                break;
+            case "server.stop":
+                int stopDelay = data.has("delay") ? data.get("delay").getAsInt() : 10;
+                response = messageHandler.handleServerStop(requestId, stopDelay);
+                break;
+            case "event.subscribe":
+                handleEventSubscribe(request, requestId);
+                break;
+            case "event.unsubscribe":
+                handleEventUnsubscribe(request, requestId);
+                break;
+            default:
+                logger.debug("Unhandled request operation: " + op);
+                sendErrorResponse(requestId, op, "Unknown operation: " + op);
+                break;
+        }
+        
+        // Send response if generated
+        if (response != null) {
+            sendMessage(gson.toJson(response));
+        }
+    }
+    
+    /**
+     * Handle event subscription request
+     */
+    private void handleEventSubscribe(JsonObject request, String requestId) {
+        try {
+            JsonObject data = request.getAsJsonObject("data");
+            
+            // Generate subscription ID
+            String subscriptionId = "sub_" + System.currentTimeMillis();
+            
+            // Extract event types
+            java.util.List<String> eventTypes = new java.util.ArrayList<>();
+            if (data.has("eventTypes")) {
+                data.getAsJsonArray("eventTypes").forEach(e -> eventTypes.add(e.getAsString()));
+            }
+            
+            // Extract filters
+            java.util.Map<String, Object> filters = new java.util.HashMap<>();
+            if (data.has("filters")) {
+                JsonObject filtersObj = data.getAsJsonObject("filters");
+                filtersObj.entrySet().forEach(entry -> {
+                    filters.put(entry.getKey(), entry.getValue().getAsString());
+                });
+            }
+            
+            // Create subscription
+            com.mochilink.connector.nukkit.subscription.EventSubscription subscription = 
+                new com.mochilink.connector.nukkit.subscription.EventSubscription(
+                    subscriptionId,
+                    eventTypes,
+                    filters,
+                    System.currentTimeMillis()
+                );
+            
+            // Add to subscription manager
+            plugin.getSubscriptionManager().addSubscription(subscriptionId, subscription);
+            
+            // Send success response
+            JsonObject response = new JsonObject();
+            response.addProperty("type", "response");
+            response.addProperty("id", requestId);
+            response.addProperty("op", "event.subscribe");
+            response.addProperty("timestamp", System.currentTimeMillis());
+            response.addProperty("version", "2.0");
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("subscriptionId", subscriptionId);
+            responseData.addProperty("success", true);
+            response.add("data", responseData);
+            
+            sendMessage(response.toString());
+            logger.info("Event subscription created: " + subscriptionId);
+            
+        } catch (Exception e) {
+            logger.warning("Failed to handle event subscription: " + e.getMessage());
+            sendErrorResponse(requestId, "event.subscribe", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle event unsubscription request
+     */
+    private void handleEventUnsubscribe(JsonObject request, String requestId) {
+        try {
+            JsonObject data = request.getAsJsonObject("data");
+            String subscriptionId = data.get("subscriptionId").getAsString();
+            
+            // Remove subscription
+            plugin.getSubscriptionManager().removeSubscription(subscriptionId);
+            
+            // Send success response
+            JsonObject response = new JsonObject();
+            response.addProperty("type", "response");
+            response.addProperty("id", requestId);
+            response.addProperty("op", "event.unsubscribe");
+            response.addProperty("timestamp", System.currentTimeMillis());
+            response.addProperty("version", "2.0");
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            response.add("data", responseData);
+            
+            sendMessage(response.toString());
+            logger.info("Event subscription removed: " + subscriptionId);
+            
+        } catch (Exception e) {
+            logger.warning("Failed to handle event unsubscription: " + e.getMessage());
+            sendErrorResponse(requestId, "event.unsubscribe", e.getMessage());
+        }
+    }
+    
+    /**
+     * Send error response
+     */
+    private void sendErrorResponse(String requestId, String op, String errorMessage) {
+        JsonObject response = new JsonObject();
+        response.addProperty("type", "error");
+        response.addProperty("id", requestId);
+        response.addProperty("op", op);
+        response.addProperty("timestamp", System.currentTimeMillis());
+        response.addProperty("version", "2.0");
+        
+        JsonObject error = new JsonObject();
+        error.addProperty("code", "OPERATION_FAILED");
+        error.addProperty("message", errorMessage);
+        response.add("error", error);
+        
+        sendMessage(response.toString());
     }
     
     /**

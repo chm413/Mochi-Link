@@ -8,9 +8,8 @@ import com.google.gson.JsonParser;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
-import java.util.HashMap;
+import java.time.Instant;
 import java.util.Map;
-import java.util.UUID;
 import java.util.logging.Logger;
 
 /**
@@ -30,7 +29,8 @@ public class UWBPv2Protocol {
     public static final String MESSAGE_TYPE_AUTH = "auth";
     public static final String MESSAGE_TYPE_HEARTBEAT = "heartbeat";
     public static final String MESSAGE_TYPE_EVENT = "event";
-    public static final String MESSAGE_TYPE_COMMAND = "command";
+    public static final String MESSAGE_TYPE_REQUEST = "request";  // U-WBP v2 standard
+    public static final String MESSAGE_TYPE_COMMAND = "command";  // Legacy support
     public static final String MESSAGE_TYPE_RESPONSE = "response";
     public static final String MESSAGE_TYPE_STATUS = "status";
     
@@ -84,34 +84,40 @@ public class UWBPv2Protocol {
     }
     
     /**
-     * Create player event message
+     * Create player event message (U-WBP v2 compliant)
      */
     public String createPlayerEventMessage(String eventType, Player player, Map<String, Object> eventData) {
         JsonObject message = new JsonObject();
         message.addProperty("type", MESSAGE_TYPE_EVENT);
-        message.addProperty("version", PROTOCOL_VERSION);
-        message.addProperty("timestamp", System.currentTimeMillis());
+        message.addProperty("id", generateId());
+        message.addProperty("op", eventType);
+        message.addProperty("timestamp", Instant.now().toString());  // ISO 8601 format
+        message.addProperty("version", "2.0.0");
+        message.addProperty("serverId", plugin.getPluginConfig().getServerId());
         
         JsonObject data = new JsonObject();
-        data.addProperty("event_type", eventType);
         
         // Player information
         JsonObject playerInfo = new JsonObject();
-        playerInfo.addProperty("uuid", player.getUniqueId().toString());
+        playerInfo.addProperty("id", player.getUniqueId().toString());
         playerInfo.addProperty("name", player.getName());
-        playerInfo.addProperty("display_name", player.getDisplayName());
-        playerInfo.addProperty("ip", player.getAddress().getAddress().getHostAddress());
-        playerInfo.addProperty("world", player.getWorld().getName());
-        playerInfo.addProperty("x", player.getLocation().getX());
-        playerInfo.addProperty("y", player.getLocation().getY());
-        playerInfo.addProperty("z", player.getLocation().getZ());
+        playerInfo.addProperty("displayName", player.getDisplayName());
+        
+        // Location information
+        JsonObject location = new JsonObject();
+        location.addProperty("world", player.getWorld().getName());
+        location.addProperty("x", player.getLocation().getX());
+        location.addProperty("y", player.getLocation().getY());
+        location.addProperty("z", player.getLocation().getZ());
+        playerInfo.add("location", location);
         
         data.add("player", playerInfo);
         
-        // Additional event data
+        // Additional event data (merge into data, not nested)
         if (eventData != null && !eventData.isEmpty()) {
-            JsonObject additionalData = gson.toJsonTree(eventData).getAsJsonObject();
-            data.add("event_data", additionalData);
+            for (Map.Entry<String, Object> entry : eventData.entrySet()) {
+                data.add(entry.getKey(), gson.toJsonTree(entry.getValue()));
+            }
         }
         
         message.add("data", data);
@@ -120,16 +126,18 @@ public class UWBPv2Protocol {
     }
     
     /**
-     * Create server event message
+     * Create server event message (U-WBP v2 compliant)
      */
     public String createServerEventMessage(String eventType, Map<String, Object> eventData) {
         JsonObject message = new JsonObject();
         message.addProperty("type", MESSAGE_TYPE_EVENT);
-        message.addProperty("version", PROTOCOL_VERSION);
-        message.addProperty("timestamp", System.currentTimeMillis());
+        message.addProperty("id", generateId());
+        message.addProperty("op", eventType);
+        message.addProperty("timestamp", Instant.now().toString());  // ISO 8601 format
+        message.addProperty("version", "2.0.0");
+        message.addProperty("serverId", plugin.getPluginConfig().getServerId());
         
         JsonObject data = new JsonObject();
-        data.addProperty("event_type", eventType);
         
         // Server information
         JsonObject serverInfo = new JsonObject();
@@ -142,10 +150,11 @@ public class UWBPv2Protocol {
         
         data.add("server", serverInfo);
         
-        // Additional event data
+        // Additional event data (merge into data, not nested)
         if (eventData != null && !eventData.isEmpty()) {
-            JsonObject additionalData = gson.toJsonTree(eventData).getAsJsonObject();
-            data.add("event_data", additionalData);
+            for (Map.Entry<String, Object> entry : eventData.entrySet()) {
+                data.add(entry.getKey(), gson.toJsonTree(entry.getValue()));
+            }
         }
         
         message.add("data", data);
@@ -154,22 +163,52 @@ public class UWBPv2Protocol {
     }
     
     /**
-     * Create command response message
+     * Create command response message (U-WBP v2 compliant)
      */
-    public String createCommandResponseMessage(String commandId, boolean success, String output, String error) {
+    public String createCommandResponseMessage(String requestId, boolean success, String output, String error) {
         JsonObject message = new JsonObject();
         message.addProperty("type", MESSAGE_TYPE_RESPONSE);
+        message.addProperty("id", requestId);  // Top-level id field per U-WBP v2
         message.addProperty("version", PROTOCOL_VERSION);
         message.addProperty("timestamp", System.currentTimeMillis());
         
         JsonObject data = new JsonObject();
-        data.addProperty("command_id", commandId);
         data.addProperty("success", success);
         data.addProperty("output", output != null ? output : "");
         data.addProperty("error", error != null ? error : "");
         data.addProperty("execution_time", System.currentTimeMillis());
         
+        // Backward compatibility: also include command_id in data
+        if (requestId != null) {
+            data.addProperty("command_id", requestId);
+        }
+        
         message.add("data", data);
+        
+        return gson.toJson(message);
+    }
+    
+    /**
+     * Create generic response message (U-WBP v2 compliant)
+     */
+    public String createResponseMessage(String requestId, String op, String dataJson) {
+        JsonObject message = new JsonObject();
+        message.addProperty("type", MESSAGE_TYPE_RESPONSE);
+        message.addProperty("id", requestId);
+        message.addProperty("op", op);
+        message.addProperty("version", PROTOCOL_VERSION);
+        message.addProperty("timestamp", System.currentTimeMillis());
+        
+        // Parse data JSON string to JsonObject
+        try {
+            JsonObject data = JsonParser.parseString(dataJson).getAsJsonObject();
+            message.add("data", data);
+        } catch (Exception e) {
+            // If parsing fails, create a simple data object
+            JsonObject data = new JsonObject();
+            data.addProperty("message", dataJson);
+            message.add("data", data);
+        }
         
         return gson.toJson(message);
     }
@@ -201,16 +240,26 @@ public class UWBPv2Protocol {
             JsonObject json = JsonParser.parseString(messageJson).getAsJsonObject();
             
             String type = json.get("type").getAsString();
+            String id = json.has("id") ? json.get("id").getAsString() : null;
+            String op = json.has("op") ? json.get("op").getAsString() : null;
             String version = json.has("version") ? json.get("version").getAsString() : "1.0";
             long timestamp = json.has("timestamp") ? json.get("timestamp").getAsLong() : System.currentTimeMillis();
             JsonObject data = json.has("data") ? json.getAsJsonObject("data") : new JsonObject();
             
-            return new ProtocolMessage(type, version, timestamp, data);
+            return new ProtocolMessage(type, id, op, version, timestamp, data);
             
         } catch (Exception e) {
             logger.warning("Failed to parse protocol message: " + e.getMessage());
             return null;
         }
+    }
+    
+    /**
+     * Generate unique message ID
+     */
+    private String generateId() {
+        return "msg_" + System.currentTimeMillis() + "_" + 
+               Long.toHexString(Double.doubleToLongBits(Math.random()));
     }
     
     /**
@@ -249,18 +298,24 @@ public class UWBPv2Protocol {
      */
     public static class ProtocolMessage {
         private final String type;
+        private final String id;
+        private final String op;
         private final String version;
         private final long timestamp;
         private final JsonObject data;
         
-        public ProtocolMessage(String type, String version, long timestamp, JsonObject data) {
+        public ProtocolMessage(String type, String id, String op, String version, long timestamp, JsonObject data) {
             this.type = type;
+            this.id = id;
+            this.op = op;
             this.version = version;
             this.timestamp = timestamp;
             this.data = data;
         }
         
         public String getType() { return type; }
+        public String getId() { return id; }
+        public String getOp() { return op; }
         public String getVersion() { return version; }
         public long getTimestamp() { return timestamp; }
         public JsonObject getData() { return data; }

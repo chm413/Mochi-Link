@@ -220,20 +220,110 @@ export function apply(ctx: Context, config: PluginConfig) {
                     try {
                         logger.debug(`Received message from ${connection.serverId}:`, message);
                         
-                        // Route message through message router service
-                        if (serviceManager) {
-                            await serviceManager.messageRouter.handleServerEvent({
-                                serverId: connection.serverId,
-                                eventType: message.op || message.type,
-                                data: message.data || message,
-                                timestamp: message.timestamp || Date.now()
-                            });
+                        if (!serviceManager) {
+                            logger.error('Service manager not initialized');
+                            return;
+                        }
+
+                        // Handle different message types according to U-WBP v2 protocol
+                        switch (message.type) {
+                            case 'request':
+                                // Handle request messages (operations from connector)
+                                const { RequestHandler } = await import('./services/request-handler');
+                                const requestHandler = new RequestHandler(ctx, {
+                                    event: serviceManager.event,
+                                    server: serviceManager.server,
+                                    player: serviceManager.player,
+                                    playerAction: serviceManager.playerAction,
+                                    serverControl: serviceManager.serverControl,
+                                    whitelist: serviceManager.whitelist,
+                                    command: serviceManager.command
+                                });
+                                
+                                const response = await requestHandler.handleRequest(message, connection);
+                                await connection.send(response);
+                                break;
+
+                            case 'response':
+                                // Handle response messages (responses to our requests)
+                                logger.debug(`Received response for request ${message.requestId}`);
+                                // Emit event for pending request handlers
+                                connection.emit('response', message);
+                                break;
+
+                            case 'event':
+                                // Handle event messages (server events)
+                                await serviceManager.messageRouter.handleServerEvent({
+                                    serverId: connection.serverId,
+                                    eventType: message.op || message.eventType,
+                                    data: message.data || message,
+                                    timestamp: message.timestamp || new Date().toISOString()  // 确保是 ISO 8601 字符串
+                                });
+                                break;
+
+                            case 'system':
+                                // Handle system messages (ping, pong, etc.)
+                                await handleSystemMessage(message, connection);
+                                break;
+
+                            default:
+                                logger.warn(`Unknown message type: ${message.type}`);
                         }
                         
                     } catch (error) {
                         logger.error(`Error handling message from ${connection.serverId}:`, error);
+                        
+                        // Send error response if it was a request
+                        if (message.type === 'request') {
+                            try {
+                                const { MessageFactory } = await import('./protocol/messages');
+                                const errorResponse = MessageFactory.createError(
+                                    message.id,
+                                    message.op,
+                                    error instanceof Error ? error.message : 'Internal error',
+                                    'INTERNAL_ERROR'
+                                );
+                                await connection.send(errorResponse);
+                            } catch (sendError) {
+                                logger.error('Failed to send error response:', sendError);
+                            }
+                        }
                     }
                 });
+                
+                // Helper function to handle system messages
+                async function handleSystemMessage(message: any, connection: WebSocketConnection) {
+                    switch (message.systemOp || message.op) {
+                        case 'ping':
+                            // Respond with pong
+                            const { MessageFactory } = await import('./protocol/messages');
+                            const pongResponse = MessageFactory.createResponse(
+                                message.id,
+                                'system.pong',
+                                {
+                                    latency: Date.now() - (message.timestamp 
+                                        ? new Date(message.timestamp).getTime() 
+                                        : Date.now())
+                                },
+                                { success: true, serverId: connection.serverId }
+                            );
+                            await connection.send(pongResponse);
+                            break;
+
+                        case 'pong':
+                            // Update connection ping time
+                            connection.lastPing = Date.now();
+                            logger.debug(`Pong received from ${connection.serverId}`);
+                            break;
+
+                        case 'disconnect':
+                            logger.info(`Disconnect message from ${connection.serverId}: ${message.data?.reason}`);
+                            break;
+
+                        default:
+                            logger.debug(`Unhandled system operation: ${message.systemOp || message.op}`);
+                    }
+                }
                 
                 wsManager.on('disconnection', async (connection: WebSocketConnection, code: number, reason: string) => {
                     logger.info(`Server disconnected: ${connection.serverId} (${code}: ${reason})`);
@@ -1022,21 +1112,50 @@ export function apply(ctx: Context, config: PluginConfig) {
             return `服务器 ${targetServerId} 不存在`;
           }
           
-          // 记录审计日志使用服务
-          if (serviceManager?.audit) {
-            await serviceManager.audit.logger.logServerOperation(
-              targetServerId,
-              'whitelist.remove',
-              { player: targetPlayer },
-              'success',
-              undefined,
-              { userId: session?.userId }
-            );
+          // 调用实际的白名单服务
+          if (serviceManager?.whitelist) {
+            try {
+              await serviceManager.whitelist.removeFromWhitelist(
+                targetServerId,
+                targetPlayer,  // playerId
+                session?.userId || 'system',  // executor
+                undefined  // reason (可选)
+              );
+              
+              // 记录审计日志使用服务
+              if (serviceManager?.audit) {
+                await serviceManager.audit.logger.logServerOperation(
+                  targetServerId,
+                  'whitelist.remove',
+                  { player: targetPlayer },
+                  'success',
+                  undefined,
+                  { userId: session?.userId }
+                );
+              }
+              
+              return `✅ 已将 ${targetPlayer} 从服务器 ${server.name} 的白名单移除`;
+            } catch (error) {
+              logger.error('Failed to remove from whitelist:', error);
+              
+              // 记录失败的审计日志
+              if (serviceManager?.audit) {
+                await serviceManager.audit.logger.logServerOperation(
+                  targetServerId,
+                  'whitelist.remove',
+                  { player: targetPlayer },
+                  'failure',
+                  (error as Error).message,
+                  { userId: session?.userId }
+                );
+              }
+              
+              return `❌ 从白名单移除失败: ${(error as Error).message}`;
+            }
+          } else {
+            return `服务器 ${server.name} 的白名单功能需要服务器连接\n` +
+                   `提示: 请确保服务器已通过 WebSocket 连接`;
           }
-          
-          // TODO: 调用实际的白名单服务
-          return `已将 ${targetPlayer} 从服务器 ${server.name} 的白名单移除\n` +
-                 `提示: 需要服务器连接后才能同步到游戏`;
         } catch (error) {
           logger.error('Failed to remove from whitelist:', error);
           return '从白名单移除失败';
@@ -1135,9 +1254,33 @@ export function apply(ctx: Context, config: PluginConfig) {
             return `服务器 ${targetServerId} 不存在`;
           }
           
-          // TODO: 调用实际的玩家服务
-          return `玩家 ${player} 在服务器 ${server.name} 的详情功能正在开发中\n` +
-                 `提示: 需要服务器连接后才能获取玩家数据`;
+          // 调用实际的玩家服务
+          if (serviceManager?.player) {
+            try {
+              const playerInfo = await serviceManager.player.getPlayerInfo(targetServerId, targetPlayer);
+              
+              if (!playerInfo) {
+                return `未找到玩家 ${targetPlayer} 在服务器 ${server.name}`;
+              }
+              
+              return `玩家信息 - ${server.name}\n` +
+                     `━━━━━━━━━━━━━━━━━━━━\n` +
+                     `名称: ${playerInfo.name}\n` +
+                     `显示名: ${playerInfo.displayName || playerInfo.name}\n` +
+                     `UUID: ${playerInfo.id}\n` +
+                     `世界: ${playerInfo.world || '未知'}\n` +
+                     `位置: ${playerInfo.position ? `X:${Math.floor(playerInfo.position.x)} Y:${Math.floor(playerInfo.position.y)} Z:${Math.floor(playerInfo.position.z)}` : '未知'}\n` +
+                     `延迟: ${playerInfo.ping !== undefined ? `${playerInfo.ping}ms` : '未知'}\n` +
+                     `OP: ${playerInfo.isOp ? '是' : '否'}\n` +
+                     `在线: ${playerInfo.isOnline ? '是' : '否'}\n` +
+                     `━━━━━━━━━━━━━━━━━━━━`;
+            } catch (error) {
+              logger.error('Failed to get player info:', error);
+              return `获取玩家信息失败: ${(error as Error).message}`;
+            }
+          } else {
+            return `服务器 ${server.name} 的玩家查询功能需要服务器连接`;
+          }
         } catch (error) {
           logger.error('Failed to get player info:', error);
           return '获取玩家信息失败';
@@ -1203,25 +1346,30 @@ export function apply(ctx: Context, config: PluginConfig) {
             return `服务器 ${server.name} 当前离线`;
           }
           
-          // 记录审计日志使用服务
-          if (serviceManager?.audit) {
-            await serviceManager.audit.logger.logServerOperation(
-              targetServerId,
-              'player.kick',
-              { player: targetPlayer, reason: kickReason || '无' },
-              'success',
-              undefined,
-              { userId: session?.userId }
-            );
+          // 调用 PlayerActionService 踢出玩家
+          if (!serviceManager?.playerAction) {
+            return '玩家操作服务未初始化';
           }
           
-          // TODO: 调用实际的玩家服务
-          return `已踢出玩家 ${targetPlayer} 从服务器 ${server.name}\n` +
-                 `原因: ${kickReason || '无'}\n` +
-                 `提示: 需要服务器连接后才能执行`;
+          const result = await serviceManager.playerAction.kickPlayer(
+            targetServerId,
+            {
+              playerId: targetPlayer,
+              playerName: targetPlayer,
+              reason: kickReason || '被管理员踢出',
+              executor: session?.userId
+            }
+          );
+          
+          if (result.success) {
+            return `✅ 已踢出玩家 ${targetPlayer} 从服务器 ${server.name}\n` +
+                   `原因: ${kickReason || '被管理员踢出'}`;
+          } else {
+            return `❌ 踢出玩家失败: ${result.error || '未知错误'}`;
+          }
         } catch (error) {
           logger.error('Failed to kick player:', error);
-          return '踢出玩家失败';
+          return `❌ 踢出玩家失败: ${error instanceof Error ? error.message : '未知错误'}`;
         }
       });
     
@@ -1338,6 +1486,271 @@ export function apply(ctx: Context, config: PluginConfig) {
         } catch (error) {
           logger.error('Failed to execute command:', error);
           return '执行命令失败';
+        }
+      });
+    
+    // ========================================================================
+    // 事件订阅管理命令
+    // ========================================================================
+    
+    // Event subscription management - Level 2 (受信任用户)
+    ctx.command('mochi.event', '事件订阅管理')
+      .userFields(['authority']);
+    
+    // List available event types - Level 1 (所有用户可查看)
+    ctx.command('mochi.event.types', '查看可用事件类型')
+      .userFields(['authority'])
+      .action(async () => {
+        if (!isInitialized) {
+          return '插件尚未初始化完成';
+        }
+        
+        try {
+          const { SubscriptionHandler } = await import('./services/subscription-handler');
+          
+          const basicEvents = SubscriptionHandler.getBasicEventTypes();
+          const extendedEvents = SubscriptionHandler.getExtendedEventTypes();
+          
+          return `📋 可用事件类型：\n\n` +
+                 `✅ 基础事件（默认订阅）：\n` +
+                 basicEvents.map(e => `  • ${e}`).join('\n') +
+                 `\n\n⚡ 扩展事件（按需订阅）：\n` +
+                 extendedEvents.map(e => `  • ${e}`).join('\n') +
+                 `\n\n💡 提示：\n` +
+                 `  • 基础事件会在服务器连接时自动订阅\n` +
+                 `  • 扩展事件需要手动订阅，可能增加服务器负担\n` +
+                 `  • 使用 mochi.event.subscribe 订阅特定事件`;
+        } catch (error) {
+          logger.error('Failed to get event types:', error);
+          return '获取事件类型失败';
+        }
+      });
+    
+    // List subscriptions - Level 1 (所有用户可查看)
+    ctx.command('mochi.event.list [serverId]', '查看事件订阅')
+      .userFields(['authority'])
+      .action(async ({ session }, serverId) => {
+        if (!isInitialized || !serviceManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        const targetServerId = await getServerId(session, serverId);
+        if (!targetServerId) {
+          return '请指定服务器 ID 或在群组中绑定服务器\n' +
+                 '用法: mochi.event.list [serverId]';
+        }
+        
+        try {
+          const server = await dbManager?.getServer(targetServerId);
+          if (!server) {
+            return `服务器 ${targetServerId} 不存在`;
+          }
+          
+          // 获取该服务器的所有订阅
+          const subscriptions = await serviceManager.event.getSubscriptionsForConnection(targetServerId);
+          
+          if (subscriptions.length === 0) {
+            return `服务器 ${server.name} 当前无事件订阅\n` +
+                   `提示：服务器连接时会自动订阅基础事件`;
+          }
+          
+          let result = `服务器 ${server.name} 的事件订阅：\n\n`;
+          for (const sub of subscriptions) {
+            const eventTypes = sub.filter.eventTypes || ['所有事件'];
+            result += `📌 订阅 ID: ${sub.id}\n`;
+            result += `  状态: ${sub.isActive ? '✅ 活跃' : '❌ 已停用'}\n`;
+            result += `  事件类型: ${eventTypes.join(', ')}\n`;
+            result += `  创建时间: ${sub.createdAt.toLocaleString()}\n`;
+            result += `  最后活动: ${sub.lastActivity.toLocaleString()}\n\n`;
+          }
+          
+          return result;
+        } catch (error) {
+          logger.error('Failed to list subscriptions:', error);
+          return '获取订阅列表失败';
+        }
+      });
+    
+    // Subscribe to events - Level 2 (受信任用户)
+    ctx.command('mochi.event.subscribe [serverId] <events...>', '订阅事件')
+      .userFields(['authority'])
+      .before(({ session }) => {
+        if ((session?.user?.authority ?? 0) < 2) {
+          return '权限不足：需要受信任用户权限（等级 2）';
+        }
+      })
+      .option('default', '-d 使用默认基础事件', { fallback: false })
+      .action(async ({ session, options }, serverIdOrEvent, ...events) => {
+        if (!isInitialized || !serviceManager || !wsManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!options) {
+          return '选项参数错误';
+        }
+        
+        let targetServerId: string | null;
+        let eventTypes: string[];
+        
+        // 解析参数
+        if (events.length === 0 && !options.default) {
+          // 只有一个参数，从群组绑定获取serverId
+          targetServerId = await getServerId(session);
+          eventTypes = [serverIdOrEvent];
+        } else if (options.default) {
+          // 使用默认事件
+          targetServerId = await getServerId(session, serverIdOrEvent);
+          const { SubscriptionHandler } = await import('./services/subscription-handler');
+          eventTypes = SubscriptionHandler.getBasicEventTypes();
+        } else {
+          // 多个参数
+          targetServerId = await getServerId(session, serverIdOrEvent);
+          eventTypes = events;
+        }
+        
+        if (!targetServerId) {
+          return '请指定服务器 ID 或在群组中绑定服务器\n' +
+                 '用法: mochi.event.subscribe [serverId] <events...> [-d]\n' +
+                 '示例: mochi.event.subscribe survival player.join player.leave\n' +
+                 '或使用默认: mochi.event.subscribe survival -d';
+        }
+        
+        try {
+          const server = await dbManager?.getServer(targetServerId);
+          if (!server) {
+            return `服务器 ${targetServerId} 不存在`;
+          }
+          
+          if (server.status !== 'online') {
+            return `服务器 ${server.name} 当前离线，无法订阅事件`;
+          }
+          
+          // 获取服务器连接
+          const connection = wsManager.getConnection(targetServerId);
+          if (!connection) {
+            return `服务器 ${server.name} 未建立 WebSocket 连接`;
+          }
+          
+          // 创建订阅
+          const subscription = await serviceManager.event.subscribe(connection, {
+            serverId: targetServerId,
+            eventTypes: eventTypes as any[]
+          });
+          
+          // 记录审计日志
+          if (serviceManager.audit) {
+            await serviceManager.audit.logger.logServerOperation(
+              targetServerId,
+              'event.subscribe',
+              { eventTypes, subscriptionId: subscription.id },
+              'success',
+              undefined,
+              { userId: session?.userId }
+            );
+          }
+          
+          return `✅ 事件订阅成功\n\n` +
+                 `📋 订阅信息：\n` +
+                 `  服务器: ${server.name}\n` +
+                 `  订阅 ID: ${subscription.id}\n` +
+                 `  事件类型: ${eventTypes.join(', ')}\n\n` +
+                 `💡 提示：\n` +
+                 `  • 使用 mochi.event.list 查看所有订阅\n` +
+                 `  • 使用 mochi.event.unsubscribe 取消订阅`;
+        } catch (error) {
+          logger.error('Failed to subscribe to events:', error);
+          return `订阅事件失败: ${(error as Error).message}`;
+        }
+      });
+    
+    // Unsubscribe from events - Level 2 (受信任用户)
+    ctx.command('mochi.event.unsubscribe <subscriptionId>', '取消事件订阅')
+      .userFields(['authority'])
+      .before(({ session }) => {
+        if ((session?.user?.authority ?? 0) < 2) {
+          return '权限不足：需要受信任用户权限（等级 2）';
+        }
+      })
+      .action(async ({ session }, subscriptionId) => {
+        if (!isInitialized || !serviceManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!subscriptionId) {
+          return '用法: mochi.event.unsubscribe <subscriptionId>\n' +
+                 '提示: 使用 mochi.event.list 查看订阅 ID';
+        }
+        
+        try {
+          // 获取订阅信息
+          const subscription = await serviceManager.event.getSubscription(subscriptionId);
+          if (!subscription) {
+            return `订阅 ${subscriptionId} 不存在`;
+          }
+          
+          // 取消订阅
+          await serviceManager.event.unsubscribe(subscriptionId);
+          
+          // 记录审计日志
+          if (serviceManager.audit) {
+            await serviceManager.audit.logger.logServerOperation(
+              subscription.serverId || subscription.connectionId,
+              'event.unsubscribe',
+              { subscriptionId },
+              'success',
+              undefined,
+              { userId: session?.userId }
+            );
+          }
+          
+          return `✅ 已取消订阅 ${subscriptionId}`;
+        } catch (error) {
+          logger.error('Failed to unsubscribe:', error);
+          return `取消订阅失败: ${(error as Error).message}`;
+        }
+      });
+    
+    // Get event statistics - Level 1 (所有用户可查看)
+    ctx.command('mochi.event.stats [serverId]', '查看事件统计')
+      .userFields(['authority'])
+      .action(async ({ session }, serverId) => {
+        if (!isInitialized || !serviceManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        const targetServerId = serverId ? await getServerId(session, serverId) : undefined;
+        
+        try {
+          const stats = await serviceManager.event.getEventStatistics(targetServerId || undefined);
+          const metrics = serviceManager.event.getMetrics();
+          
+          let result = `📊 事件统计信息\n\n`;
+          
+          if (targetServerId) {
+            const server = await dbManager?.getServer(targetServerId);
+            result += `服务器: ${server?.name || targetServerId}\n\n`;
+          } else {
+            result += `全局统计\n\n`;
+          }
+          
+          result += `📈 总体数据：\n`;
+          result += `  总事件数: ${stats.totalEvents}\n`;
+          result += `  平均事件/分钟: ${stats.averageEventsPerMinute.toFixed(2)}\n`;
+          result += `  活跃订阅数: ${metrics.subscriptions}\n`;
+          result += `  活跃连接数: ${metrics.activeConnections}\n`;
+          result += `  平均延迟: ${metrics.averageLatency.toFixed(2)}ms\n\n`;
+          
+          if (stats.topEventTypes.length > 0) {
+            result += `🔥 热门事件类型：\n`;
+            stats.topEventTypes.slice(0, 5).forEach((item, index) => {
+              result += `  ${index + 1}. ${item.type}: ${item.count} 次\n`;
+            });
+          }
+          
+          return result;
+        } catch (error) {
+          logger.error('Failed to get event statistics:', error);
+          return '获取事件统计失败';
         }
       });
     

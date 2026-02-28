@@ -370,4 +370,11 @@ public class ConnectionManager {
         public int getReconnectAttempts() { return reconnectAttempts; }
         public long getConnectionTime() { return connectionTime; }
     }
+    
+    /**
+     * Get protocol instance
+     */
+    public UWBPv2Protocol getProtocol() {
+        return protocol;
+    }
 }

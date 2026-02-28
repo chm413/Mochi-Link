@@ -414,7 +414,7 @@ export class MochiWebSocketClient extends EventEmitter {
           method: this.config.authMethod
         } : undefined
       },
-      timestamp: Date.now(),
+      timestamp: new Date().toISOString(),
       serverId: this.config.serverId,
       version: this.config.protocolVersion,
       systemOp: 'handshake' as const

@@ -596,7 +596,7 @@ export class MonitoringService {
     const alertEvent: BaseEvent = {
       type,
       serverId,
-      timestamp: alert.timestamp,
+      timestamp: new Date(alert.timestamp).toISOString(),
       version: '1.0'
     };
 
@@ -659,7 +659,7 @@ export class MonitoringService {
     const statusEvent: BaseEvent = {
       type: 'server.status',
       serverId: report.serverId,
-      timestamp: report.timestamp,
+      timestamp: new Date(report.timestamp).toISOString(),
       version: '1.0'
     };
 

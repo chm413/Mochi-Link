@@ -93,7 +93,7 @@ export interface UWBPMessage {
     id: string;
     op: string;
     data: any;
-    timestamp?: number;
+    timestamp?: string;
     serverId?: string;
     version?: string;
 }
@@ -119,7 +119,7 @@ export type EventType = 'player.join' | 'player.leave' | 'player.chat' | 'player
 export interface BaseEvent {
     type: EventType;
     serverId: string;
-    timestamp: number;
+    timestamp: string;
     version: string;
 }
 export interface PlayerJoinEvent extends BaseEvent {
@@ -391,13 +391,13 @@ export interface PluginConfig {
 }
 export declare class MochiLinkError extends Error {
     code: string;
-    details?: any | undefined;
-    constructor(message: string, code: string, details?: any | undefined);
+    details?: any;
+    constructor(message: string, code: string, details?: any);
 }
 export declare class ConnectionError extends MochiLinkError {
     serverId: string;
-    retryAfter?: number | undefined;
-    constructor(message: string, serverId: string, retryAfter?: number | undefined);
+    retryAfter?: number;
+    constructor(message: string, serverId: string, retryAfter?: number);
 }
 export declare class AuthenticationError extends MochiLinkError {
     serverId: string;
@@ -410,9 +410,9 @@ export declare class PermissionDeniedError extends MochiLinkError {
     constructor(message: string, userId: string, serverId: string, operation: string);
 }
 export declare class ProtocolError extends MochiLinkError {
-    messageId?: string | undefined;
+    messageId?: string;
     severity: 'minor' | 'major' | 'critical';
-    constructor(message: string, messageId?: string | undefined, severity?: 'minor' | 'major' | 'critical');
+    constructor(message: string, messageId?: string, severity?: 'minor' | 'major' | 'critical');
 }
 export declare class ServerUnavailableError extends MochiLinkError {
     serverId: string;
@@ -420,8 +420,8 @@ export declare class ServerUnavailableError extends MochiLinkError {
 }
 export declare class MaintenanceError extends MochiLinkError {
     serverId: string;
-    estimatedEnd?: Date | undefined;
-    constructor(message: string, serverId: string, estimatedEnd?: Date | undefined);
+    estimatedEnd?: Date;
+    constructor(message: string, serverId: string, estimatedEnd?: Date);
 }
 export declare class ConnectionModeError extends MochiLinkError {
     mode: string;

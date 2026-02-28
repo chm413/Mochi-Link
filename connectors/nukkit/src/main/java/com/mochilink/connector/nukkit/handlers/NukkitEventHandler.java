@@ -30,6 +30,11 @@ public class NukkitEventHandler implements Listener {
     
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerJoin(PlayerJoinEvent event) {
+        // Check subscription
+        if (!plugin.getSubscriptionManager().hasSubscription("player.join")) {
+            return;
+        }
+        
         Player player = event.getPlayer();
         
         JsonObject data = new JsonObject();
@@ -40,18 +45,39 @@ public class NukkitEventHandler implements Listener {
         data.add("player", playerObj);
         data.addProperty("firstJoin", !player.hasPlayedBefore());
         
+        // Check filters
+        java.util.Map<String, Object> filterData = new java.util.HashMap<>();
+        filterData.put("firstJoin", !player.hasPlayedBefore());
+        
+        if (!plugin.getSubscriptionManager().matchesFilters("player.join", filterData)) {
+            return;
+        }
+        
         connectionManager.sendEvent("player.join", data);
         logger.info("Player joined: " + player.getName());
     }
     
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerQuit(PlayerQuitEvent event) {
+        // Check subscription
+        if (!plugin.getSubscriptionManager().hasSubscription("player.leave")) {
+            return;
+        }
+        
         Player player = event.getPlayer();
         
         JsonObject data = new JsonObject();
         data.addProperty("playerId", player.getUniqueId().toString());
         data.addProperty("playerName", player.getName());
         data.addProperty("reason", "quit");
+        
+        // Check filters
+        java.util.Map<String, Object> filterData = new java.util.HashMap<>();
+        filterData.put("reason", "quit");
+        
+        if (!plugin.getSubscriptionManager().matchesFilters("player.leave", filterData)) {
+            return;
+        }
         
         connectionManager.sendEvent("player.leave", data);
         logger.info("Player left: " + player.getName());
@@ -61,6 +87,11 @@ public class NukkitEventHandler implements Listener {
     public void onPlayerChat(PlayerChatEvent event) {
         if (event.isCancelled()) return;
         
+        // Check subscription
+        if (!plugin.getSubscriptionManager().hasSubscription("player.chat")) {
+            return;
+        }
+        
         Player player = event.getPlayer();
         
         JsonObject data = new JsonObject();
@@ -68,11 +99,24 @@ public class NukkitEventHandler implements Listener {
         data.addProperty("playerName", player.getName());
         data.addProperty("message", event.getMessage());
         
+        // Check filters
+        java.util.Map<String, Object> filterData = new java.util.HashMap<>();
+        filterData.put("message", event.getMessage());
+        
+        if (!plugin.getSubscriptionManager().matchesFilters("player.chat", filterData)) {
+            return;
+        }
+        
         connectionManager.sendEvent("player.chat", data);
     }
     
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerDeath(PlayerDeathEvent event) {
+        // Check subscription
+        if (!plugin.getSubscriptionManager().hasSubscription("player.death")) {
+            return;
+        }
+        
         Player player = event.getEntity();
         EntityDamageEvent cause = player.getLastDamageCause();
         
@@ -87,6 +131,14 @@ public class NukkitEventHandler implements Listener {
         location.addProperty("y", player.getY());
         location.addProperty("z", player.getZ());
         data.add("location", location);
+        
+        // Check filters
+        java.util.Map<String, Object> filterData = new java.util.HashMap<>();
+        filterData.put("cause", cause != null ? cause.getCause().name() : "UNKNOWN");
+        
+        if (!plugin.getSubscriptionManager().matchesFilters("player.death", filterData)) {
+            return;
+        }
         
         connectionManager.sendEvent("player.death", data);
         logger.info("Player died: " + player.getName());

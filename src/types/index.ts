@@ -124,7 +124,7 @@ export interface UWBPMessage {
   id: string;
   op: string;
   data: any;
-  timestamp?: number;
+  timestamp?: string;  // ISO 8601 格式字符串
   serverId?: string;
   version?: string;
 }
@@ -170,7 +170,7 @@ export type EventType =
 export interface BaseEvent {
   type: EventType;
   serverId: string;
-  timestamp: number;
+  timestamp: string;  // ISO 8601 格式字符串
   version: string;
 }
 

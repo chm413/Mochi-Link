@@ -303,8 +303,8 @@ export interface PluginConfig {
 export declare class PluginIntegrationError extends Error {
     pluginType: PluginType;
     code: string;
-    details?: any | undefined;
-    constructor(message: string, pluginType: PluginType, code: string, details?: any | undefined);
+    details?: any;
+    constructor(message: string, pluginType: PluginType, code: string, details?: any);
 }
 export declare class PluginNotAvailableError extends PluginIntegrationError {
     constructor(pluginType: PluginType);

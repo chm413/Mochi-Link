@@ -7,6 +7,7 @@ import com.mochilink.connector.handlers.CommandHandler;
 import com.mochilink.connector.integrations.IntegrationManager;
 import com.mochilink.connector.monitoring.PerformanceMonitor;
 import com.mochilink.connector.commands.MochiLinkCommand;
+import com.mochilink.connector.subscription.SubscriptionManager;
 
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -34,6 +35,7 @@ public class MochiLinkPlugin extends JavaPlugin {
     private CommandHandler commandHandler;
     private IntegrationManager integrationManager;
     private PerformanceMonitor performanceMonitor;
+    private SubscriptionManager subscriptionManager;
     
     // Plugin state
     private boolean isEnabled = false;
@@ -78,6 +80,11 @@ public class MochiLinkPlugin extends JavaPlugin {
                 integrationManager.cleanup();
             }
             
+            // Clear subscriptions
+            if (subscriptionManager != null) {
+                subscriptionManager.clearAll();
+            }
+            
             isEnabled = false;
             isConnected = false;
             
@@ -101,6 +108,9 @@ public class MochiLinkPlugin extends JavaPlugin {
         // Load configuration
         pluginConfig = new PluginConfig(this);
         pluginConfig.load();
+        
+        // Initialize subscription manager
+        subscriptionManager = new SubscriptionManager(getLogger());
         
         // Initialize connection manager
         connectionManager = new ConnectionManager(this, pluginConfig);
@@ -259,6 +269,13 @@ public class MochiLinkPlugin extends JavaPlugin {
      */
     public PerformanceMonitor getPerformanceMonitor() {
         return performanceMonitor;
+    }
+    
+    /**
+     * Get subscription manager
+     */
+    public SubscriptionManager getSubscriptionManager() {
+        return subscriptionManager;
     }
     
     /**

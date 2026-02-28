@@ -10,6 +10,7 @@ use com\mochilink\connector\pmmp\handlers\PMMPEventHandler;
 use com\mochilink\connector\pmmp\handlers\PMMPCommandHandler;
 use com\mochilink\connector\pmmp\monitoring\PMMPPerformanceMonitor;
 use com\mochilink\connector\pmmp\commands\MochiLinkPMMPCommand;
+use com\mochilink\connector\pmmp\subscription\SubscriptionManager;
 
 use pocketmine\plugin\PluginBase;
 use pocketmine\utils\TextFormat;
@@ -34,6 +35,7 @@ class MochiLinkPMMPPlugin extends PluginBase {
     private ?PMMPEventHandler $eventHandler = null;
     private ?PMMPCommandHandler $commandHandler = null;
     private ?PMMPPerformanceMonitor $performanceMonitor = null;
+    private ?SubscriptionManager $subscriptionManager = null;
     
     // Plugin state
     private bool $isEnabled = false;
@@ -71,6 +73,11 @@ class MochiLinkPMMPPlugin extends PluginBase {
                 $this->performanceMonitor->stop();
             }
             
+            // Clear subscriptions
+            if ($this->subscriptionManager !== null) {
+                $this->subscriptionManager->clearAll();
+            }
+            
             $this->isEnabled = false;
             $this->isConnected = false;
             
@@ -94,6 +101,9 @@ class MochiLinkPMMPPlugin extends PluginBase {
         // Load configuration
         $this->pluginConfig = new PMMPPluginConfig($this);
         $this->pluginConfig->load();
+        
+        // Initialize subscription manager
+        $this->subscriptionManager = new SubscriptionManager($this->getLogger());
         
         // Initialize connection manager
         $this->connectionManager = new PMMPConnectionManager($this, $this->pluginConfig);
@@ -120,37 +130,43 @@ class MochiLinkPMMPPlugin extends PluginBase {
     private function startConnection(): void {
         $this->getLogger()->info("Starting connection to Mochi-Link management server...");
         
-        // Start connection in async task
-        $this->getScheduler()->scheduleAsyncTask(new class($this) extends AsyncTask {
-            private MochiLinkPMMPPlugin $plugin;
+        try {
+            $this->connectionManager->connect();
             
-            public function __construct(MochiLinkPMMPPlugin $plugin) {
-                $this->plugin = $plugin;
+            // Start performance monitoring after successful connection
+            if ($this->connectionManager->isConnected()) {
+                $this->performanceMonitor->start();
+                $this->setConnected(true);
+                
+                $this->getLogger()->info(TextFormat::GREEN . "Successfully connected to Mochi-Link management server!");
+                $this->getLogger()->info(TextFormat::GREEN . "已成功连接到大福连管理服务器！");
+                
+                // Start heartbeat task
+                $this->startHeartbeat();
             }
             
-            public function onRun(): void {
-                try {
-                    $this->plugin->getConnectionManager()->connect();
-                    
-                    // Start performance monitoring after successful connection
-                    if ($this->plugin->getConnectionManager()->isConnected()) {
-                        $this->plugin->getPerformanceMonitor()->start();
-                        $this->plugin->setConnected(true);
-                        
-                        $this->plugin->getLogger()->info(TextFormat::GREEN . "Successfully connected to Mochi-Link management server!");
-                        $this->plugin->getLogger()->info(TextFormat::GREEN . "已成功连接到大福连管理服务器！");
-                    }
-                    
-                } catch (\Exception $e) {
-                    $this->plugin->getLogger()->warning("Failed to connect to management server: " . $e->getMessage());
-                    
-                    // Schedule reconnection if auto-reconnect is enabled
-                    if ($this->plugin->getPluginConfig()->isAutoReconnectEnabled()) {
-                        $this->plugin->scheduleReconnection();
-                    }
+        } catch (\Exception $e) {
+            $this->getLogger()->warning("Failed to connect to management server: " . $e->getMessage());
+            
+            // Schedule reconnection if auto-reconnect is enabled
+            if ($this->pluginConfig->isAutoReconnectEnabled()) {
+                $this->scheduleReconnection();
+            }
+        }
+    }
+    
+    /**
+     * Start heartbeat task
+     */
+    private function startHeartbeat(): void {
+        $this->getScheduler()->scheduleRepeatingTask(
+            new \pocketmine\scheduler\ClosureTask(function(): void {
+                if ($this->isConnectedToManagement()) {
+                    $this->connectionManager->sendHeartbeat();
                 }
-            }
-        });
+            }),
+            30 * 20 // 30 seconds in ticks
+        );
     }
     
     /**
@@ -159,20 +175,15 @@ class MochiLinkPMMPPlugin extends PluginBase {
     public function scheduleReconnection(): void {
         $reconnectInterval = $this->pluginConfig->getReconnectInterval();
         
-        $this->getScheduler()->scheduleDelayedTask(new class($this) extends \pocketmine\scheduler\Task {
-            private MochiLinkPMMPPlugin $plugin;
-            
-            public function __construct(MochiLinkPMMPPlugin $plugin) {
-                $this->plugin = $plugin;
-            }
-            
-            public function onRun(): void {
-                if (!$this->plugin->isConnected() && $this->plugin->isPluginEnabled()) {
-                    $this->plugin->getLogger()->info("Attempting to reconnect to management server...");
-                    $this->plugin->startConnection();
+        $this->getScheduler()->scheduleDelayedTask(
+            new \pocketmine\scheduler\ClosureTask(function(): void {
+                if (!$this->isConnected() && $this->isPluginEnabled()) {
+                    $this->getLogger()->info("Attempting to reconnect to management server...");
+                    $this->startConnection();
                 }
-            }
-        }, $reconnectInterval * 20); // Convert seconds to ticks
+            }),
+            $reconnectInterval * 20 // Convert seconds to ticks
+        );
     }
     
     /**
@@ -181,37 +192,27 @@ class MochiLinkPMMPPlugin extends PluginBase {
     public function reconnect(): void {
         $this->getLogger()->info("Reconnecting to management server...");
         
-        $this->getScheduler()->scheduleAsyncTask(new class($this) extends AsyncTask {
-            private MochiLinkPMMPPlugin $plugin;
-            
-            public function __construct(MochiLinkPMMPPlugin $plugin) {
-                $this->plugin = $plugin;
+        try {
+            // Disconnect first
+            if ($this->connectionManager->isConnected()) {
+                $this->connectionManager->disconnect();
+                $this->setConnected(false);
             }
             
-            public function onRun(): void {
-                try {
-                    // Disconnect first
-                    if ($this->plugin->getConnectionManager()->isConnected()) {
-                        $this->plugin->getConnectionManager()->disconnect();
-                        $this->plugin->setConnected(false);
-                    }
-                    
-                    // Wait a moment
-                    sleep(1);
-                    
-                    // Reconnect
-                    $this->plugin->getConnectionManager()->connect();
-                    
-                    if ($this->plugin->getConnectionManager()->isConnected()) {
-                        $this->plugin->setConnected(true);
-                        $this->plugin->getLogger()->info(TextFormat::GREEN . "Reconnection successful!");
-                    }
-                    
-                } catch (\Exception $e) {
-                    $this->plugin->getLogger()->warning("Reconnection failed: " . $e->getMessage());
-                }
+            // Wait a moment
+            usleep(1000000); // 1 second
+            
+            // Reconnect
+            $this->connectionManager->connect();
+            
+            if ($this->connectionManager->isConnected()) {
+                $this->setConnected(true);
+                $this->getLogger()->info(TextFormat::GREEN . "Reconnection successful!");
             }
-        });
+            
+        } catch (\Exception $e) {
+            $this->getLogger()->warning("Reconnection failed: " . $e->getMessage());
+        }
     }
     
     /**
@@ -254,6 +255,13 @@ class MochiLinkPMMPPlugin extends PluginBase {
      */
     public function getPerformanceMonitor(): ?PMMPPerformanceMonitor {
         return $this->performanceMonitor;
+    }
+    
+    /**
+     * Get subscription manager
+     */
+    public function getSubscriptionManager(): ?SubscriptionManager {
+        return $this->subscriptionManager;
     }
     
     /**

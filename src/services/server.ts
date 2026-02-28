@@ -1226,7 +1226,7 @@ export class ServerManager {
             op: 'command.execute',
             data: { command, timeout },
             serverId,
-            timestamp: Date.now()
+            timestamp: new Date().toISOString()
           };
 
           await connection.send(message);

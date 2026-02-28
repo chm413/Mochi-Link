@@ -68,7 +68,7 @@ export declare class ServerManager {
     private statusCache;
     private reconnectTimers;
     private connectionManager;
-    constructor(ctx: Context, db: DatabaseManager, audit: AuditService, permission: PermissionManager, token: TokenManager, pluginIntegration?: PluginIntegrationService | undefined);
+    constructor(ctx: Context, db: DatabaseManager, audit: AuditService, permission: PermissionManager, token: TokenManager, pluginIntegration?: PluginIntegrationService);
     /**
      * Register a new server
      */

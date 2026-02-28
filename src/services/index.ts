@@ -47,6 +47,28 @@ export type {
 
 // Player Services
 export { PlayerInformationService } from './player';
+export { PlayerActionService } from './player-action';
+export type {
+  PlayerKickOptions,
+  PlayerKickResult,
+  PlayerMessageOptions,
+  PlayerMessageResult,
+  PlayerTeleportOptions,
+  PlayerTeleportResult
+} from './player-action';
+
+// Server Control Services
+export { ServerControlService } from './server-control';
+export type {
+  ServerRestartOptions,
+  ServerRestartResult,
+  ServerShutdownOptions,
+  ServerShutdownResult,
+  ServerSaveOptions,
+  ServerSaveResult,
+  ServerReloadOptions,
+  ServerReloadResult
+} from './server-control';
 
 // Whitelist Services
 export { WhitelistManager } from './whitelist';
@@ -71,6 +93,8 @@ export type {
 
 // Event Services
 export { EventService } from './event';
+export { SubscriptionHandler } from './subscription-handler';
+export { RequestHandler } from './request-handler';
 export type {
   EventFilter as EventServiceFilter,
   EventSubscription,
@@ -172,6 +196,8 @@ import { PermissionManager } from './permission';
 import { TokenManager } from './token';
 import { ServerManager } from './server';
 import { PlayerInformationService } from './player';
+import { PlayerActionService } from './player-action';
+import { ServerControlService } from './server-control';
 import { WhitelistManager } from './whitelist';
 import { CommandExecutionService } from './command';
 import { EventService } from './event';
@@ -191,6 +217,8 @@ export class ServiceManager {
   public token: TokenManager;
   public server: ServerManager;
   public player: PlayerInformationService;
+  public playerAction: PlayerActionService;
+  public serverControl: ServerControlService;
   public whitelist: WhitelistManager;
   public command: CommandExecutionService;
   public event: EventService;
@@ -213,6 +241,18 @@ export class ServiceManager {
     this.player = new PlayerInformationService(
       ctx,
       (serverId: string) => this.server.getBridge(serverId)
+    );
+    this.playerAction = new PlayerActionService(
+      ctx,
+      (serverId: string) => this.server.getBridge(serverId),
+      this.audit,
+      this.permission
+    );
+    this.serverControl = new ServerControlService(
+      ctx,
+      (serverId: string) => this.server.getBridge(serverId),
+      this.audit,
+      this.permission
     );
     this.whitelist = new WhitelistManager(
       ctx,
@@ -310,6 +350,8 @@ export class ServiceManager {
     
     // Simple health checks for existing services
     const playerHealth = { status: 'healthy' as 'healthy' | 'degraded' | 'unhealthy' };
+    const playerActionHealth = { status: 'healthy' as 'healthy' | 'degraded' | 'unhealthy' };
+    const serverControlHealth = { status: 'healthy' as 'healthy' | 'degraded' | 'unhealthy' };
     const whitelistHealth = { status: 'healthy' as 'healthy' | 'degraded' | 'unhealthy' };
     const commandHealth = { status: 'healthy' as 'healthy' | 'degraded' | 'unhealthy' };
 
@@ -318,6 +360,8 @@ export class ServiceManager {
                       tokenHealth.status === 'healthy' &&
                       serverHealth.status === 'healthy' &&
                       playerHealth.status === 'healthy' &&
+                      playerActionHealth.status === 'healthy' &&
+                      serverControlHealth.status === 'healthy' &&
                       whitelistHealth.status === 'healthy' &&
                       commandHealth.status === 'healthy' &&
                       eventHealth.status === 'healthy' &&
@@ -330,6 +374,8 @@ export class ServiceManager {
                         tokenHealth.status === 'unhealthy' ||
                         serverHealth.status === 'unhealthy' ||
                         playerHealth.status === 'unhealthy' ||
+                        playerActionHealth.status === 'unhealthy' ||
+                        serverControlHealth.status === 'unhealthy' ||
                         whitelistHealth.status === 'unhealthy' ||
                         commandHealth.status === 'unhealthy' ||
                         eventHealth.status === 'unhealthy' ||
@@ -348,6 +394,8 @@ export class ServiceManager {
         token: tokenHealth,
         server: serverHealth,
         player: playerHealth,
+        playerAction: playerActionHealth,
+        serverControl: serverControlHealth,
         whitelist: whitelistHealth,
         command: commandHealth,
         event: eventHealth,

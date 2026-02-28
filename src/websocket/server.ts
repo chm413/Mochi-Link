@@ -401,22 +401,18 @@ export class MochiWebSocketServer extends EventEmitter {
 
   private async initiateAuthentication(connection: WebSocketConnection): Promise<void> {
     try {
-      // Send authentication challenge
-      const challengeMessage = {
-        type: 'system' as const,
-        id: `auth-challenge-${Date.now()}`,
-        op: 'handshake',
-        data: {
-          protocolVersion: '2.0',
-          serverType: 'koishi',
-          authenticationRequired: true,
-          challenge: await this.authManager.generateChallenge(connection.serverId)
-        },
-        timestamp: Date.now(),
-        serverId: connection.serverId,
-        version: '2.0',
-        systemOp: 'handshake' as const
-      };
+      // Send authentication challenge using MessageFactory
+      const { MessageFactory } = await import('../protocol/messages');
+      const { UWBP_VERSION } = await import('../protocol/messages');
+      
+      const challengeMessage = MessageFactory.createSystemMessage('handshake', {
+        protocolVersion: UWBP_VERSION,
+        serverType: 'koishi',
+        authenticationRequired: true,
+        challenge: await this.authManager.generateChallenge(connection.serverId)
+      }, {
+        serverId: connection.serverId
+      });
 
       await connection.send(challengeMessage);
 

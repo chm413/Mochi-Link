@@ -108,12 +108,11 @@ public class ForgeConnectionManager {
         }
         
         JsonObject handshake = new JsonObject();
-        handshake.addProperty("type", "system");
+        handshake.addProperty("type", "request");
         handshake.addProperty("id", generateId());
-        handshake.addProperty("op", "handshake");
+        handshake.addProperty("op", "system.handshake");
         handshake.addProperty("timestamp", System.currentTimeMillis());
         handshake.addProperty("version", "2.0");
-        handshake.addProperty("systemOp", "handshake");
         
         JsonObject data = new JsonObject();
         data.addProperty("protocolVersion", "2.0");
@@ -129,7 +128,7 @@ public class ForgeConnectionManager {
         handshake.add("data", data);
         
         wsClient.send(handshake.toString());
-        logger.info("Handshake sent: {}", handshake.toString());
+        logger.info("Handshake sent");
     }
     
     public void disconnect() {
@@ -162,19 +161,18 @@ public class ForgeConnectionManager {
         }
         
         JsonObject disconnect = new JsonObject();
-        disconnect.addProperty("type", "system");
+        disconnect.addProperty("type", "request");
         disconnect.addProperty("id", generateId());
-        disconnect.addProperty("op", "disconnect");
+        disconnect.addProperty("op", "system.disconnect");
         disconnect.addProperty("timestamp", System.currentTimeMillis());
         disconnect.addProperty("version", "2.0");
-        disconnect.addProperty("systemOp", "disconnect");
         
         JsonObject data = new JsonObject();
         data.addProperty("reason", reason);
         disconnect.add("data", data);
         
         wsClient.send(disconnect.toString());
-        logger.info("Disconnect sent: {}", disconnect.toString());
+        logger.info("Disconnect sent");
     }
     
     public boolean isConnected() {
@@ -193,11 +191,10 @@ public class ForgeConnectionManager {
         event.addProperty("op", eventOp);
         event.addProperty("timestamp", System.currentTimeMillis());
         event.addProperty("version", "2.0");
-        event.addProperty("eventType", eventOp);
         event.add("data", eventData);
         
         wsClient.send(event.toString());
-        logger.debug("Sending event: {}", event.toString());
+        logger.debug("Sending event: {}", eventOp);
     }
     
     private void handleMessage(String message) {
@@ -206,12 +203,150 @@ public class ForgeConnectionManager {
             String type = json.get("type").getAsString();
             
             if ("request".equals(type)) {
-                logger.debug("Received request: {}", message);
+                handleRequest(json);
             } else if ("system".equals(type)) {
                 logger.debug("Received system message: {}", message);
             }
         } catch (Exception e) {
             logger.error("Failed to handle message", e);
+        }
+    }
+    
+    /**
+     * Handle request message
+     */
+    private void handleRequest(JsonObject request) {
+        String op = request.get("op").getAsString();
+        String requestId = request.get("id").getAsString();
+        
+        switch (op) {
+            case "event.subscribe":
+                handleEventSubscribe(request, requestId);
+                break;
+            case "event.unsubscribe":
+                handleEventUnsubscribe(request, requestId);
+                break;
+            default:
+                logger.debug("Unhandled request operation: {}", op);
+                break;
+        }
+    }
+    
+    /**
+     * Handle event subscription request
+     */
+    private void handleEventSubscribe(JsonObject request, String requestId) {
+        try {
+            JsonObject data = request.getAsJsonObject("data");
+            
+            // Generate subscription ID
+            String subscriptionId = "sub_" + System.currentTimeMillis();
+            
+            // Extract event types
+            java.util.List<String> eventTypes = new java.util.ArrayList<>();
+            if (data.has("eventTypes")) {
+                data.getAsJsonArray("eventTypes").forEach(e -> eventTypes.add(e.getAsString()));
+            }
+            
+            // Extract filters
+            java.util.Map<String, Object> filters = new java.util.HashMap<>();
+            if (data.has("filters")) {
+                JsonObject filtersObj = data.getAsJsonObject("filters");
+                filtersObj.entrySet().forEach(entry -> {
+                    if (entry.getValue().isJsonPrimitive()) {
+                        filters.put(entry.getKey(), entry.getValue().getAsString());
+                    }
+                });
+            }
+            
+            // Create subscription
+            com.mochilink.connector.forge.subscription.EventSubscription subscription = 
+                new com.mochilink.connector.forge.subscription.EventSubscription(
+                    subscriptionId,
+                    eventTypes,
+                    filters,
+                    System.currentTimeMillis()
+                );
+            
+            // Add to subscription manager
+            mod.getSubscriptionManager().addSubscription(subscriptionId, subscription);
+            
+            // Send success response
+            JsonObject response = new JsonObject();
+            response.addProperty("type", "response");
+            response.addProperty("id", requestId);
+            response.addProperty("op", "event.subscribe");
+            response.addProperty("timestamp", System.currentTimeMillis());
+            response.addProperty("version", "2.0");
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("subscriptionId", subscriptionId);
+            responseData.addProperty("success", true);
+            response.add("data", responseData);
+            
+            if (wsClient != null && wsClient.isOpen()) {
+                wsClient.send(response.toString());
+            }
+            logger.info("Event subscription created: {}", subscriptionId);
+            
+        } catch (Exception e) {
+            logger.warn("Failed to handle event subscription: {}", e.getMessage());
+            sendErrorResponse(requestId, "event.subscribe", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle event unsubscription request
+     */
+    private void handleEventUnsubscribe(JsonObject request, String requestId) {
+        try {
+            JsonObject data = request.getAsJsonObject("data");
+            String subscriptionId = data.get("subscriptionId").getAsString();
+            
+            // Remove subscription
+            mod.getSubscriptionManager().removeSubscription(subscriptionId);
+            
+            // Send success response
+            JsonObject response = new JsonObject();
+            response.addProperty("type", "response");
+            response.addProperty("id", requestId);
+            response.addProperty("op", "event.unsubscribe");
+            response.addProperty("timestamp", System.currentTimeMillis());
+            response.addProperty("version", "2.0");
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            response.add("data", responseData);
+            
+            if (wsClient != null && wsClient.isOpen()) {
+                wsClient.send(response.toString());
+            }
+            logger.info("Event subscription removed: {}", subscriptionId);
+            
+        } catch (Exception e) {
+            logger.warn("Failed to handle event unsubscription: {}", e.getMessage());
+            sendErrorResponse(requestId, "event.unsubscribe", e.getMessage());
+        }
+    }
+    
+    /**
+     * Send error response
+     */
+    private void sendErrorResponse(String requestId, String op, String errorMessage) {
+        JsonObject response = new JsonObject();
+        response.addProperty("type", "error");
+        response.addProperty("id", requestId);
+        response.addProperty("op", op);
+        response.addProperty("timestamp", System.currentTimeMillis());
+        response.addProperty("version", "2.0");
+        
+        JsonObject error = new JsonObject();
+        error.addProperty("code", "OPERATION_FAILED");
+        error.addProperty("message", errorMessage);
+        response.add("error", error);
+        
+        if (wsClient != null && wsClient.isOpen()) {
+            wsClient.send(response.toString());
         }
     }
     
@@ -223,12 +358,14 @@ public class ForgeConnectionManager {
         heartbeatTask = scheduler.scheduleAtFixedRate(() -> {
             if (connected.get() && wsClient != null) {
                 JsonObject ping = new JsonObject();
-                ping.addProperty("type", "system");
+                ping.addProperty("type", "request");
                 ping.addProperty("id", generateId());
-                ping.addProperty("op", "ping");
+                ping.addProperty("op", "system.ping");
                 ping.addProperty("timestamp", System.currentTimeMillis());
                 ping.addProperty("version", "2.0");
-                ping.addProperty("systemOp", "ping");
+                
+                JsonObject data = new JsonObject();
+                ping.add("data", data);
                 
                 wsClient.send(ping.toString());
             }

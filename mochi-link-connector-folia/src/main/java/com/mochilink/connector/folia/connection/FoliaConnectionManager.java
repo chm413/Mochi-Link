@@ -2,19 +2,27 @@ package com.mochilink.connector.folia.connection;
 
 import com.mochilink.connector.folia.MochiLinkFoliaPlugin;
 import com.mochilink.connector.folia.config.FoliaPluginConfig;
+import com.mochilink.connector.folia.subscription.EventSubscription;
+
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
  * Manages WebSocket connection to Mochi-Link management server for Folia
- * Handles connection lifecycle and message routing with real WebSocket implementation
+ * Handles connection lifecycle, message routing, and event subscription with real WebSocket implementation
  */
 public class FoliaConnectionManager {
     
@@ -114,7 +122,7 @@ public class FoliaConnectionManager {
             JsonObject data = new JsonObject();
             data.addProperty("protocolVersion", "2.0");
             data.addProperty("serverType", "connector");
-            data.addProperty("serverId", config.getServerId());  // Use configured server ID
+            data.addProperty("serverId", config.getServerId());
             
             JsonObject serverInfo = new JsonObject();
             serverInfo.addProperty("name", plugin.getServer().getName());
@@ -140,7 +148,7 @@ public class FoliaConnectionManager {
         try {
             JsonObject json = gson.fromJson(message, JsonObject.class);
             String type = json.get("type").getAsString();
-            String op = json.get("op").getAsString();
+            String op = json.has("op") ? json.get("op").getAsString() : "";
             
             logger.fine("Handling message: type=" + type + ", op=" + op);
             
@@ -166,17 +174,152 @@ public class FoliaConnectionManager {
      */
     private void handleRequest(JsonObject request) {
         String op = request.get("op").getAsString();
+        String requestId = request.has("id") ? request.get("id").getAsString() : generateId();
+        
         logger.info("Received request: " + op);
         
-        // Delegate to command handler
-        // plugin.getCommandHandler().handleRequest(request);
+        switch (op) {
+            case "event.subscribe":
+                handleEventSubscribe(request, requestId);
+                break;
+            case "event.unsubscribe":
+                handleEventUnsubscribe(request, requestId);
+                break;
+            case "command.execute":
+                // Delegate to command handler if needed
+                logger.info("Command execution requested");
+                break;
+            default:
+                logger.warning("Unknown operation: " + op);
+                sendErrorResponse(requestId, op, "Unknown operation: " + op);
+                break;
+        }
+    }
+    
+    /**
+     * Handle event subscribe request
+     */
+    private void handleEventSubscribe(JsonObject request, String requestId) {
+        try {
+            JsonObject data = request.has("data") ? request.getAsJsonObject("data") : new JsonObject();
+            String serverId = data.has("serverId") ? data.get("serverId").getAsString() : null;
+            List<String> eventTypes = new ArrayList<>();
+            
+            if (data.has("eventTypes")) {
+                JsonArray types = data.getAsJsonArray("eventTypes");
+                for (int i = 0; i < types.size(); i++) {
+                    eventTypes.add(types.get(i).getAsString());
+                }
+            }
+            
+            // Parse filters
+            Map<String, Object> filters = new HashMap<>();
+            if (data.has("filters")) {
+                JsonObject filtersObj = data.getAsJsonObject("filters");
+                for (String key : filtersObj.keySet()) {
+                    filters.put(key, filtersObj.get(key).getAsString());
+                }
+            }
+            
+            // Create subscription
+            String subscriptionId = generateSubscriptionId();
+            EventSubscription subscription = new EventSubscription(
+                subscriptionId,
+                eventTypes,
+                filters,
+                System.currentTimeMillis()
+            );
+            
+            // Add to subscription manager
+            plugin.getSubscriptionManager().addSubscription(subscriptionId, subscription);
+            
+            // Send success response
+            JsonObject response = new JsonObject();
+            response.addProperty("type", "response");
+            response.addProperty("id", requestId);
+            response.addProperty("op", "event.subscribe");
+            response.addProperty("timestamp", System.currentTimeMillis());
+            response.addProperty("version", "2.0");
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("subscriptionId", subscriptionId);
+            if (serverId != null) {
+                responseData.addProperty("serverId", serverId);
+            }
+            responseData.add("eventTypes", gson.toJsonTree(eventTypes));
+            responseData.addProperty("message", "Successfully subscribed to events");
+            response.add("data", responseData);
+            
+            sendMessage(response.toString());
+            logger.info("Event subscription created: " + subscriptionId + " for events: " + eventTypes);
+            
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Failed to handle event subscription", e);
+            sendErrorResponse(requestId, "event.subscribe", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle event unsubscribe request
+     */
+    private void handleEventUnsubscribe(JsonObject request, String requestId) {
+        try {
+            JsonObject data = request.has("data") ? request.getAsJsonObject("data") : new JsonObject();
+            String subscriptionId = data.get("subscriptionId").getAsString();
+            
+            // Remove subscription
+            plugin.getSubscriptionManager().removeSubscription(subscriptionId);
+            
+            // Send success response
+            JsonObject response = new JsonObject();
+            response.addProperty("type", "response");
+            response.addProperty("id", requestId);
+            response.addProperty("op", "event.unsubscribe");
+            response.addProperty("timestamp", System.currentTimeMillis());
+            response.addProperty("version", "2.0");
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("subscriptionId", subscriptionId);
+            responseData.addProperty("message", "Successfully unsubscribed from events");
+            response.add("data", responseData);
+            
+            sendMessage(response.toString());
+            logger.info("Event subscription removed: " + subscriptionId);
+            
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Failed to handle event unsubscription", e);
+            sendErrorResponse(requestId, "event.unsubscribe", e.getMessage());
+        }
+    }
+    
+    /**
+     * Send error response
+     */
+    private void sendErrorResponse(String requestId, String op, String errorMessage) {
+        try {
+            JsonObject response = new JsonObject();
+            response.addProperty("type", "response");
+            response.addProperty("id", requestId);
+            response.addProperty("op", op);
+            response.addProperty("timestamp", System.currentTimeMillis());
+            response.addProperty("version", "2.0");
+            
+            JsonObject data = new JsonObject();
+            data.addProperty("success", false);
+            data.addProperty("error", errorMessage);
+            response.add("data", data);
+            
+            sendMessage(response.toString());
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Failed to send error response", e);
+        }
     }
     
     /**
      * Handle system message
      */
     private void handleSystemMessage(JsonObject message) {
-        String op = message.get("systemOp").getAsString();
+        String op = message.has("systemOp") ? message.get("systemOp").getAsString() : "";
         logger.info("Received system message: " + op);
         
         if ("ping".equals(op)) {
@@ -294,9 +437,9 @@ public class FoliaConnectionManager {
             event.addProperty("type", "event");
             event.addProperty("id", generateId());
             event.addProperty("op", eventOp);
-            event.addProperty("timestamp", System.currentTimeMillis());
-            event.addProperty("version", "2.0");
-            event.addProperty("eventType", eventOp);
+            event.addProperty("timestamp", java.time.Instant.now().toString());  // ISO 8601
+            event.addProperty("version", "2.0.0");
+            event.addProperty("serverId", config.getServerId());
             event.add("data", eventData);
             
             sendMessage(event.toString());
@@ -311,7 +454,15 @@ public class FoliaConnectionManager {
      * Generate unique message ID
      */
     private String generateId() {
-        return System.currentTimeMillis() + "-" + 
+        return "msg_" + System.currentTimeMillis() + "_" + 
+               Long.toHexString(Double.doubleToLongBits(Math.random()));
+    }
+    
+    /**
+     * Generate unique subscription ID
+     */
+    private String generateSubscriptionId() {
+        return "sub_" + System.currentTimeMillis() + "_" + 
                Long.toHexString(Double.doubleToLongBits(Math.random()));
     }
 }

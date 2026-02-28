@@ -28,6 +28,14 @@ out/
 *.tsbuildinfo
 tsconfig.tsbuildinfo
 
+# Gradle build files
+.gradle/
+**/build/
+!src/**/build/
+gradle-app.setting
+!gradle-wrapper.jar
+.gradletasknamecache
+
 # ============================================================================
 # Environment & Configuration Files
 # ============================================================================
@@ -325,5 +333,29 @@ credentials.json
 # ============================================================================
 # Custom Project Ignores
 # ============================================================================
-# Add your custom ignores here
-# example: custom-config.json
+# Temporary build outputs
+build-output/
+output/
+lib-temp/
+
+# Temporary report files
+*_REPORT.md
+*_SUMMARY.md
+*_STATUS.md
+*_COMPLETE.md
+*_CHECK.md
+*_FIX.md
+*_ISSUES.md
+*_PROGRESS.md
+*_VERIFICATION.md
+*_IMPLEMENTATION.md
+*_GUIDE.md
+*_CHECKLIST.md
+*_ANALYSIS.md
+*_COMPLIANCE*.md
+
+# Packaged plugins
+*.tgz
+
+# Build info
+*.tsbuildinfo

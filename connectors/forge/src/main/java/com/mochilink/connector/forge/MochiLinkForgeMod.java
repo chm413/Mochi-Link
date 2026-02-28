@@ -2,6 +2,8 @@ package com.mochilink.connector.forge;
 
 import com.mochilink.connector.forge.config.ForgeModConfig;
 import com.mochilink.connector.forge.connection.ForgeConnectionManager;
+import com.mochilink.connector.forge.subscription.SubscriptionManager;
+import com.mochilink.connector.forge.handlers.ForgeEventHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,6 +27,8 @@ public class MochiLinkForgeMod {
     
     private ForgeModConfig config;
     private ForgeConnectionManager connectionManager;
+    private SubscriptionManager subscriptionManager;
+    private ForgeEventHandler eventHandler;
     private boolean initialized = false;
     
     public void onInitialize() {
@@ -37,8 +41,14 @@ public class MochiLinkForgeMod {
             config = new ForgeModConfig();
             config.load();
             
+            // Initialize subscription manager
+            subscriptionManager = new SubscriptionManager(LOGGER);
+            
             // Initialize connection manager
             connectionManager = new ForgeConnectionManager(this, config);
+            
+            // Initialize event handler
+            eventHandler = new ForgeEventHandler(this, connectionManager);
             
             // Connect to management server
             connectionManager.connect();
@@ -53,6 +63,11 @@ public class MochiLinkForgeMod {
     
     public void onShutdown() {
         LOGGER.info("Shutting down {}...", MOD_NAME);
+        
+        // Clear subscriptions
+        if (subscriptionManager != null) {
+            subscriptionManager.clearAll();
+        }
         
         if (connectionManager != null) {
             connectionManager.disconnect();
@@ -71,6 +86,14 @@ public class MochiLinkForgeMod {
     
     public ForgeConnectionManager getConnectionManager() {
         return connectionManager;
+    }
+    
+    public SubscriptionManager getSubscriptionManager() {
+        return subscriptionManager;
+    }
+    
+    public ForgeEventHandler getEventHandler() {
+        return eventHandler;
     }
     
     public boolean isInitialized() {

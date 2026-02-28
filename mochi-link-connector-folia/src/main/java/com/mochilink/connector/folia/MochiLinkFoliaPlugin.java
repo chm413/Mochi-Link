@@ -6,6 +6,7 @@ import com.mochilink.connector.folia.handlers.FoliaEventHandler;
 import com.mochilink.connector.folia.handlers.FoliaCommandHandler;
 import com.mochilink.connector.folia.monitoring.FoliaPerformanceMonitor;
 import com.mochilink.connector.folia.commands.MochiLinkFoliaCommand;
+import com.mochilink.connector.folia.subscription.SubscriptionManager;
 
 import org.bukkit.plugin.java.JavaPlugin;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
@@ -32,6 +33,7 @@ public class MochiLinkFoliaPlugin extends JavaPlugin {
     private FoliaEventHandler eventHandler;
     private FoliaCommandHandler commandHandler;
     private FoliaPerformanceMonitor performanceMonitor;
+    private SubscriptionManager subscriptionManager;
     
     // Plugin state
     private boolean isEnabled = false;
@@ -79,6 +81,11 @@ public class MochiLinkFoliaPlugin extends JavaPlugin {
                 performanceMonitor.stop();
             }
             
+            // Clear subscriptions
+            if (subscriptionManager != null) {
+                subscriptionManager.clearAll();
+            }
+            
             isEnabled = false;
             isConnected = false;
             
@@ -102,6 +109,9 @@ public class MochiLinkFoliaPlugin extends JavaPlugin {
         // Load configuration
         pluginConfig = new FoliaPluginConfig(this);
         pluginConfig.load();
+        
+        // Initialize subscription manager
+        subscriptionManager = new SubscriptionManager(getLogger());
         
         // Initialize Folia-specific connection manager
         connectionManager = new FoliaConnectionManager(this, pluginConfig);
@@ -245,6 +255,13 @@ public class MochiLinkFoliaPlugin extends JavaPlugin {
      */
     public FoliaPerformanceMonitor getPerformanceMonitor() {
         return performanceMonitor;
+    }
+    
+    /**
+     * Get subscription manager
+     */
+    public SubscriptionManager getSubscriptionManager() {
+        return subscriptionManager;
     }
     
     /**

@@ -32,7 +32,7 @@ export interface ServerEvent {
     serverId: string;
     eventType: string;
     data: any;
-    timestamp: number;
+    timestamp: string;
 }
 export interface GroupMessage {
     groupId: string;
@@ -41,7 +41,7 @@ export interface GroupMessage {
     metadata?: {
         serverId: string;
         eventType: string;
-        timestamp: number;
+        timestamp: string | number;
     };
 }
 export interface RoutingStats {

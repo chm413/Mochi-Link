@@ -156,18 +156,15 @@ export class WebSocketConnection extends EventEmitter implements Connection {
     this._status = 'closing';
     
     try {
-      // Send disconnect message if possible
+      // Send disconnect message if possible using MessageFactory
       if (this.ws.readyState === WebSocket.OPEN) {
-        const disconnectMessage = {
-          type: 'system' as const,
-          id: `disconnect-${Date.now()}`,
-          op: 'disconnect',
-          data: { reason: reason || 'Connection closed by client' },
-          timestamp: Date.now(),
-          serverId: this.serverId,
-          version: '2.0',
-          systemOp: 'disconnect' as const
-        };
+        const { MessageFactory } = await import('../protocol/messages');
+        
+        const disconnectMessage = MessageFactory.createSystemMessage('disconnect', {
+          reason: reason || 'Connection closed by client'
+        }, {
+          serverId: this.serverId
+        });
         
         try {
           await this.send(disconnectMessage);

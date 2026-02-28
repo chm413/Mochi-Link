@@ -220,6 +220,21 @@ export class EventService {
     return subscription;
   }
 
+  /**
+   * Get all subscriptions for a connection
+   */
+  async getSubscriptionsForConnection(connectionId: string): Promise<EventSubscription[]> {
+    return Array.from(this.subscriptions.values())
+      .filter(sub => sub.connectionId === connectionId);
+  }
+
+  /**
+   * Get subscription by ID
+   */
+  async getSubscription(subscriptionId: string): Promise<EventSubscription | undefined> {
+    return this.subscriptions.get(subscriptionId);
+  }
+
   // ============================================================================
   // Event Listener Management
   // ============================================================================
@@ -346,13 +361,16 @@ export class EventService {
    * Send event to connection
    */
   private async sendEventToConnection(event: BaseEvent, connection: Connection): Promise<void> {
+    // 提取事件业务数据，排除元数据字段
+    const { type, serverId, timestamp, version, ...eventData } = event as any;
+    
     const uwbpEvent: UWBPEvent = {
       type: 'event',
       id: this.generateEventId(),
       op: event.type,
       eventType: event.type,
-      data: event,
-      timestamp: event.timestamp,
+      data: eventData,  // 只包含业务数据，避免重复
+      timestamp: event.timestamp,  // 已经是 ISO 8601 字符串
       serverId: event.serverId,
       version: event.version
     };
@@ -460,8 +478,8 @@ export class EventService {
     const floodEvent: BaseEvent = {
       type: 'alert.playerFlood' as EventType,
       serverId: aggregation.serverId,
-      timestamp: Date.now(),
-      version: '1.0'
+      timestamp: new Date().toISOString(),
+      version: '2.0.0'
     };
 
     // Add flood event to queue

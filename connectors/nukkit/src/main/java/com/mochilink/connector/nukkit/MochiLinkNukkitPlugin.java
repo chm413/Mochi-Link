@@ -6,6 +6,7 @@ import com.mochilink.connector.nukkit.handlers.NukkitEventHandler;
 import com.mochilink.connector.nukkit.handlers.NukkitCommandHandler;
 import com.mochilink.connector.nukkit.monitoring.NukkitPerformanceMonitor;
 import com.mochilink.connector.nukkit.commands.MochiLinkNukkitCommand;
+import com.mochilink.connector.nukkit.subscription.SubscriptionManager;
 
 import cn.nukkit.plugin.PluginBase;
 import cn.nukkit.scheduler.AsyncTask;
@@ -30,6 +31,7 @@ public class MochiLinkNukkitPlugin extends PluginBase {
     private NukkitEventHandler eventHandler;
     private NukkitCommandHandler commandHandler;
     private NukkitPerformanceMonitor performanceMonitor;
+    private SubscriptionManager subscriptionManager;
     
     // Plugin state
     private boolean isEnabled = false;
@@ -69,6 +71,11 @@ public class MochiLinkNukkitPlugin extends PluginBase {
                 performanceMonitor.stop();
             }
             
+            // Clear subscriptions
+            if (subscriptionManager != null) {
+                subscriptionManager.clearAll();
+            }
+            
             isEnabled = false;
             isConnected = false;
             
@@ -92,6 +99,9 @@ public class MochiLinkNukkitPlugin extends PluginBase {
         // Load configuration
         pluginConfig = new NukkitPluginConfig(this);
         pluginConfig.load();
+        
+        // Initialize subscription manager
+        subscriptionManager = new SubscriptionManager(getLogger());
         
         // Initialize connection manager
         connectionManager = new NukkitConnectionManager(this, pluginConfig);
@@ -237,6 +247,13 @@ public class MochiLinkNukkitPlugin extends PluginBase {
      */
     public NukkitPerformanceMonitor getPerformanceMonitor() {
         return performanceMonitor;
+    }
+    
+    /**
+     * Get subscription manager
+     */
+    public SubscriptionManager getSubscriptionManager() {
+        return subscriptionManager;
     }
     
     /**
