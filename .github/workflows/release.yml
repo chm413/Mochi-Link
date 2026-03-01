@@ -7,12 +7,14 @@ on:
   workflow_dispatch:
 
 jobs:
-  prepare-release:
-    name: Prepare Release
+  build-connectors:
+    name: Build All Connectors
+    uses: ./.github/workflows/build-connectors.yml
+
+  create-release:
+    name: Create GitHub Release
+    needs: build-connectors
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      tag: ${{ steps.version.outputs.tag }}
     
     steps:
       - name: Checkout code
@@ -27,7 +29,6 @@ jobs:
             TAG=${GITHUB_REF#refs/tags/}
             VERSION=${TAG#v}
           else
-            # For manual trigger, get version from package.json
             VERSION=$(node -p "require('./package.json').version")
             TAG="v${VERSION}"
           fi
@@ -35,251 +36,78 @@ jobs:
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "Release version: ${VERSION}"
           echo "Release tag: ${TAG}"
-
-  build-java-connectors:
-    name: Build Java Connectors
-    needs: prepare-release
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        connector: [java, folia, nukkit]
-      fail-fast: false
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.prepare-release.outputs.tag }}
-      
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-          cache: 'gradle'
-      
-      - name: Grant execute permission for gradlew
-        run: |
-          if [ -f "connectors/${{ matrix.connector }}/gradlew" ]; then
-            chmod +x connectors/${{ matrix.connector }}/gradlew
-          fi
-      
-      - name: Build with Gradle
-        working-directory: connectors/${{ matrix.connector }}
-        run: |
-          if [ -f "gradlew" ]; then
-            ./gradlew clean build --no-daemon
-          else
-            gradle clean build --no-daemon
-          fi
-      
-      - name: Rename artifact
-        run: |
-          mkdir -p release
-          find connectors/${{ matrix.connector }}/build/libs -name "*.jar" -not -name "*-sources.jar" -not -name "*-javadoc.jar" \
-            -exec cp {} release/MochiLink-${{ matrix.connector }}-${{ needs.prepare-release.outputs.version }}.jar \;
-      
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.connector }}-connector
-          path: release/*.jar
-
-  build-fabric:
-    name: Build Fabric Connector
-    needs: prepare-release
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.prepare-release.outputs.tag }}
-      
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-          cache: 'gradle'
-      
-      - name: Grant execute permission for gradlew
-        run: |
-          if [ -f "connectors/fabric/gradlew" ]; then
-            chmod +x connectors/fabric/gradlew
-          fi
-      
-      - name: Build Fabric mod
-        working-directory: connectors/fabric
-        run: |
-          if [ -f "gradlew" ]; then
-            ./gradlew clean build --no-daemon
-          else
-            gradle clean build --no-daemon
-          fi
-        continue-on-error: true
-      
-      - name: Rename artifact
-        run: |
-          mkdir -p release
-          find connectors/fabric/build/libs -name "*.jar" -not -name "*-sources.jar" -not -name "*-javadoc.jar" \
-            -exec cp {} release/MochiLink-fabric-${{ needs.prepare-release.outputs.version }}.jar \; || true
-      
-      - name: Upload artifact
-        if: hashFiles('release/*.jar') != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: fabric-connector
-          path: release/*.jar
-
-  build-forge:
-    name: Build Forge Connector
-    needs: prepare-release
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.prepare-release.outputs.tag }}
-      
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-          cache: 'gradle'
-      
-      - name: Grant execute permission for gradlew
-        run: |
-          if [ -f "connectors/forge/gradlew" ]; then
-            chmod +x connectors/forge/gradlew
-          fi
-      
-      - name: Build Forge mod
-        working-directory: connectors/forge
-        run: |
-          if [ -f "gradlew" ]; then
-            ./gradlew clean build --no-daemon
-          else
-            gradle clean build --no-daemon
-          fi
-        continue-on-error: true
-      
-      - name: Rename artifact
-        run: |
-          mkdir -p release
-          find connectors/forge/build/libs -name "*.jar" -not -name "*-sources.jar" -not -name "*-javadoc.jar" \
-            -exec cp {} release/MochiLink-forge-${{ needs.prepare-release.outputs.version }}.jar \; || true
-      
-      - name: Upload artifact
-        if: hashFiles('release/*.jar') != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: forge-connector
-          path: release/*.jar
-
-  build-llbds:
-    name: Build LLBDS Connector
-    needs: prepare-release
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.prepare-release.outputs.tag }}
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: connectors/llbds/package-lock.json
-      
-      - name: Install dependencies
-        working-directory: connectors/llbds
-        run: npm ci
-      
-      - name: Build TypeScript
-        working-directory: connectors/llbds
-        run: npm run build
-      
-      - name: Create package
-        run: |
-          mkdir -p release/llbds-connector
-          cp -r connectors/llbds/dist/* release/llbds-connector/
-          cp connectors/llbds/package.json release/llbds-connector/
-          cd release
-          tar -czf MochiLink-llbds-${{ needs.prepare-release.outputs.version }}.tar.gz llbds-connector
-      
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: llbds-connector
-          path: release/*.tar.gz
-
-  build-pmmp:
-    name: Package PMMP Connector
-    needs: prepare-release
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.prepare-release.outputs.tag }}
-      
-      - name: Create PMMP package
-        run: |
-          mkdir -p release
-          cd connectors/pmmp
-          tar -czf ../../release/MochiLink-pmmp-${{ needs.prepare-release.outputs.version }}.tar.gz .
-      
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: pmmp-connector
-          path: release/*.tar.gz
-
-  create-release:
-    name: Create GitHub Release
-    needs: 
-      - prepare-release
-      - build-java-connectors
-      - build-fabric
-      - build-forge
-      - build-llbds
-      - build-pmmp
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.prepare-release.outputs.tag }}
       
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          path: release-artifacts
       
       - name: Organize release files
         run: |
           mkdir -p release-package
           
-          # Copy all artifacts
-          find artifacts -type f \( -name "*.jar" -o -name "*.tar.gz" \) -exec cp {} release-package/ \;
+          # Copy all connector artifacts
+          if [ -d "release-artifacts/java-connector" ]; then
+            cp release-artifacts/java-connector/*.jar release-package/ 2>/dev/null || true
+          fi
+          if [ -d "release-artifacts/folia-connector" ]; then
+            cp release-artifacts/folia-connector/*.jar release-package/ 2>/dev/null || true
+          fi
+          if [ -d "release-artifacts/nukkit-connector" ]; then
+            cp release-artifacts/nukkit-connector/*.jar release-package/ 2>/dev/null || true
+          fi
+          if [ -d "release-artifacts/fabric-connector" ]; then
+            cp release-artifacts/fabric-connector/*.jar release-package/ 2>/dev/null || true
+          fi
+          if [ -d "release-artifacts/forge-connector" ]; then
+            cp release-artifacts/forge-connector/*.jar release-package/ 2>/dev/null || true
+          fi
           
-          # Create version info
+          # Package LLBDS connector
+          if [ -d "release-artifacts/llbds-connector" ]; then
+            cd release-artifacts/llbds-connector
+            tar -czf ../../release-package/MochiLink-llbds-${{ steps.version.outputs.version }}.tar.gz .
+            cd ../..
+          fi
+          
+          # Package PMMP connector
+          if [ -d "release-artifacts/pmmp-connector" ]; then
+            cd release-artifacts/pmmp-connector
+            tar -czf ../../release-package/MochiLink-pmmp-${{ steps.version.outputs.version }}.tar.gz .
+            cd ../..
+          fi
+          
+          # Rename JAR files with version
+          cd release-package
+          for jar in *.jar; do
+            if [ -f "$jar" ]; then
+              base=$(basename "$jar" .jar)
+              # Extract connector type from filename
+              if [[ "$jar" == *"java"* ]]; then
+                mv "$jar" "MochiLink-java-${{ steps.version.outputs.version }}.jar"
+              elif [[ "$jar" == *"folia"* ]]; then
+                mv "$jar" "MochiLink-folia-${{ steps.version.outputs.version }}.jar"
+              elif [[ "$jar" == *"nukkit"* ]]; then
+                mv "$jar" "MochiLink-nukkit-${{ steps.version.outputs.version }}.jar"
+              elif [[ "$jar" == *"fabric"* ]]; then
+                mv "$jar" "MochiLink-fabric-${{ steps.version.outputs.version }}.jar"
+              elif [[ "$jar" == *"forge"* ]]; then
+                mv "$jar" "MochiLink-forge-${{ steps.version.outputs.version }}.jar"
+              fi
+            fi
+          done
+          cd ..
+      
+      - name: Create version info
+        run: |
           cat > release-package/VERSION.txt << EOF
-          Mochi-Link Connectors Release ${{ needs.prepare-release.outputs.version }}
-          大福连连接器版本 ${{ needs.prepare-release.outputs.version }}
+          Mochi-Link Connectors Release ${{ steps.version.outputs.version }}
+          大福连连接器版本 ${{ steps.version.outputs.version }}
           
           Release Date: $(date)
           发布日期: $(date)
           
-          Git Tag: ${{ needs.prepare-release.outputs.tag }}
+          Git Tag: ${{ steps.version.outputs.tag }}
           Commit: ${{ github.sha }}
           
           ========================================
@@ -287,17 +115,17 @@ jobs:
           ========================================
           
           Java Edition Connectors / Java版连接器:
-          - MochiLink-java-${{ needs.prepare-release.outputs.version }}.jar (Paper/Spigot)
-          - MochiLink-folia-${{ needs.prepare-release.outputs.version }}.jar (Folia)
-          - MochiLink-nukkit-${{ needs.prepare-release.outputs.version }}.jar (Nukkit)
+          - MochiLink-java-${{ steps.version.outputs.version }}.jar (Paper/Spigot)
+          - MochiLink-folia-${{ steps.version.outputs.version }}.jar (Folia)
+          - MochiLink-nukkit-${{ steps.version.outputs.version }}.jar (Nukkit)
           
           Modded Java Edition Connectors / 模组Java版连接器:
-          - MochiLink-fabric-${{ needs.prepare-release.outputs.version }}.jar (Fabric)
-          - MochiLink-forge-${{ needs.prepare-release.outputs.version }}.jar (Forge)
+          - MochiLink-fabric-${{ steps.version.outputs.version }}.jar (Fabric)
+          - MochiLink-forge-${{ steps.version.outputs.version }}.jar (Forge)
           
           Bedrock Edition Connectors / 基岩版连接器:
-          - MochiLink-llbds-${{ needs.prepare-release.outputs.version }}.tar.gz (LLBDS)
-          - MochiLink-pmmp-${{ needs.prepare-release.outputs.version }}.tar.gz (PMMP)
+          - MochiLink-llbds-${{ steps.version.outputs.version }}.tar.gz (LLBDS)
+          - MochiLink-pmmp-${{ steps.version.outputs.version }}.tar.gz (PMMP)
           
           ========================================
           Installation / 安装说明
@@ -328,8 +156,9 @@ jobs:
           - Wiki: https://github.com/chm413/Mochi-Link/wiki
           - Issues: https://github.com/chm413/Mochi-Link/issues
           EOF
-          
-          # Create README
+      
+      - name: Create README
+        run: |
           cat > release-package/README.md << 'EOF'
           # Mochi-Link Connectors Release Package
           # 大福连连接器发布包
@@ -379,12 +208,12 @@ jobs:
         id: changelog
         run: |
           # Get previous tag
-          PREV_TAG=$(git describe --tags --abbrev=0 ${{ needs.prepare-release.outputs.tag }}^ 2>/dev/null || echo "")
+          PREV_TAG=$(git describe --tags --abbrev=0 ${{ steps.version.outputs.tag }}^ 2>/dev/null || echo "")
           
           if [ -z "$PREV_TAG" ]; then
             echo "changelog=Initial release" >> $GITHUB_OUTPUT
           else
-            CHANGELOG=$(git log ${PREV_TAG}..${{ needs.prepare-release.outputs.tag }} --pretty=format:"- %s (%h)" --no-merges)
+            CHANGELOG=$(git log ${PREV_TAG}..${{ steps.version.outputs.tag }} --pretty=format:"- %s (%h)" --no-merges)
             echo "changelog<<EOF" >> $GITHUB_OUTPUT
             echo "$CHANGELOG" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
@@ -393,10 +222,10 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ needs.prepare-release.outputs.tag }}
-          name: Mochi-Link Connectors ${{ needs.prepare-release.outputs.version }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Mochi-Link Connectors ${{ steps.version.outputs.version }}
           body: |
-            # Mochi-Link Connectors ${{ needs.prepare-release.outputs.version }}
+            # Mochi-Link Connectors ${{ steps.version.outputs.version }}
             
             ## 📦 Release Package / 发布包
             
@@ -410,17 +239,17 @@ jobs:
             ## 📥 Downloads / 下载
             
             ### Java Edition Connectors / Java版连接器
-            - `MochiLink-java-${{ needs.prepare-release.outputs.version }}.jar` - Paper/Spigot/Bukkit
-            - `MochiLink-folia-${{ needs.prepare-release.outputs.version }}.jar` - Folia
-            - `MochiLink-nukkit-${{ needs.prepare-release.outputs.version }}.jar` - Nukkit
+            - `MochiLink-java-${{ steps.version.outputs.version }}.jar` - Paper/Spigot/Bukkit
+            - `MochiLink-folia-${{ steps.version.outputs.version }}.jar` - Folia
+            - `MochiLink-nukkit-${{ steps.version.outputs.version }}.jar` - Nukkit
             
             ### Modded Java Edition / 模组Java版
-            - `MochiLink-fabric-${{ needs.prepare-release.outputs.version }}.jar` - Fabric
-            - `MochiLink-forge-${{ needs.prepare-release.outputs.version }}.jar` - Forge
+            - `MochiLink-fabric-${{ steps.version.outputs.version }}.jar` - Fabric
+            - `MochiLink-forge-${{ steps.version.outputs.version }}.jar` - Forge
             
             ### Bedrock Edition / 基岩版
-            - `MochiLink-llbds-${{ needs.prepare-release.outputs.version }}.tar.gz` - LLBDS
-            - `MochiLink-pmmp-${{ needs.prepare-release.outputs.version }}.tar.gz` - PMMP
+            - `MochiLink-llbds-${{ steps.version.outputs.version }}.tar.gz` - LLBDS
+            - `MochiLink-pmmp-${{ steps.version.outputs.version }}.tar.gz` - PMMP
             
             ## 📖 Documentation / 文档
             

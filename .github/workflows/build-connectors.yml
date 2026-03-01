@@ -17,6 +17,7 @@ on:
     paths:
       - 'connectors/**'
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   build-java-connectors:
