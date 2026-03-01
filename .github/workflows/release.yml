@@ -1,0 +1,515 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.6.1)'
+        required: true
+        type: string
+      release_type:
+        description: 'Release type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+
+jobs:
+  prepare-release:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+            echo "version=${VERSION}" >> $GITHUB_OUTPUT
+            echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
+          else
+            TAG=${GITHUB_REF#refs/tags/}
+            VERSION=${TAG#v}
+            echo "version=${VERSION}" >> $GITHUB_OUTPUT
+            echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Update package.json version
+        run: |
+          npm version ${{ steps.version.outputs.version }} --no-git-tag-version
+      
+      - name: Commit version bump
+        if: github.event_name == 'workflow_dispatch'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: bump version to ${{ steps.version.outputs.version }} [skip ci]"
+          file_pattern: "package.json package-lock.json"
+          tagging_message: ${{ steps.version.outputs.tag }}
+
+  build-main-plugin:
+    name: Build Main Plugin
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-release.outputs.tag }}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build
+        run: npm run build
+      
+      - name: Create plugin package
+        run: |
+          mkdir -p release/main-plugin
+          cp -r lib locales package.json README.md release/main-plugin/
+          cd release
+          tar -czf koishi-plugin-mochi-link-${{ needs.prepare-release.outputs.version }}.tar.gz main-plugin
+      
+      - name: Upload main plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-plugin
+          path: release/*.tar.gz
+
+  build-java-connectors:
+    name: Build Java Connectors
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        connector: [java, folia, nukkit]
+      fail-fast: false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-release.outputs.tag }}
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+      
+      - name: Grant execute permission for gradlew
+        run: |
+          if [ -f "connectors/${{ matrix.connector }}/gradlew" ]; then
+            chmod +x connectors/${{ matrix.connector }}/gradlew
+          fi
+      
+      - name: Build with Gradle
+        working-directory: connectors/${{ matrix.connector }}
+        run: |
+          if [ -f "gradlew" ]; then
+            ./gradlew clean build --no-daemon
+          else
+            gradle clean build --no-daemon
+          fi
+      
+      - name: Rename artifact
+        run: |
+          mkdir -p release
+          find connectors/${{ matrix.connector }}/build/libs -name "*.jar" -not -name "*-sources.jar" -not -name "*-javadoc.jar" \
+            -exec cp {} release/MochiLink-${{ matrix.connector }}-${{ needs.prepare-release.outputs.version }}.jar \;
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.connector }}-connector
+          path: release/*.jar
+
+  build-fabric:
+    name: Build Fabric Connector
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-release.outputs.tag }}
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+      
+      - name: Grant execute permission for gradlew
+        run: |
+          if [ -f "connectors/fabric/gradlew" ]; then
+            chmod +x connectors/fabric/gradlew
+          fi
+      
+      - name: Build Fabric mod
+        working-directory: connectors/fabric
+        run: |
+          if [ -f "gradlew" ]; then
+            ./gradlew clean build --no-daemon
+          else
+            gradle clean build --no-daemon
+          fi
+        continue-on-error: true
+      
+      - name: Rename artifact
+        run: |
+          mkdir -p release
+          find connectors/fabric/build/libs -name "*.jar" -not -name "*-sources.jar" -not -name "*-javadoc.jar" \
+            -exec cp {} release/MochiLink-fabric-${{ needs.prepare-release.outputs.version }}.jar \; || true
+      
+      - name: Upload artifact
+        if: hashFiles('release/*.jar') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: fabric-connector
+          path: release/*.jar
+
+  build-forge:
+    name: Build Forge Connector
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-release.outputs.tag }}
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+      
+      - name: Grant execute permission for gradlew
+        run: |
+          if [ -f "connectors/forge/gradlew" ]; then
+            chmod +x connectors/forge/gradlew
+          fi
+      
+      - name: Build Forge mod
+        working-directory: connectors/forge
+        run: |
+          if [ -f "gradlew" ]; then
+            ./gradlew clean build --no-daemon
+          else
+            gradle clean build --no-daemon
+          fi
+        continue-on-error: true
+      
+      - name: Rename artifact
+        run: |
+          mkdir -p release
+          find connectors/forge/build/libs -name "*.jar" -not -name "*-sources.jar" -not -name "*-javadoc.jar" \
+            -exec cp {} release/MochiLink-forge-${{ needs.prepare-release.outputs.version }}.jar \; || true
+      
+      - name: Upload artifact
+        if: hashFiles('release/*.jar') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-connector
+          path: release/*.jar
+
+  build-llbds:
+    name: Build LLBDS Connector
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-release.outputs.tag }}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: connectors/llbds/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: connectors/llbds
+        run: npm ci
+      
+      - name: Build TypeScript
+        working-directory: connectors/llbds
+        run: npm run build
+      
+      - name: Create package
+        run: |
+          mkdir -p release/llbds-connector
+          cp -r connectors/llbds/dist/* release/llbds-connector/
+          cp connectors/llbds/package.json release/llbds-connector/
+          cd release
+          tar -czf MochiLink-llbds-${{ needs.prepare-release.outputs.version }}.tar.gz llbds-connector
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llbds-connector
+          path: release/*.tar.gz
+
+  build-pmmp:
+    name: Package PMMP Connector
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-release.outputs.tag }}
+      
+      - name: Create PMMP package
+        run: |
+          mkdir -p release
+          cd connectors/pmmp
+          tar -czf ../../release/MochiLink-pmmp-${{ needs.prepare-release.outputs.version }}.tar.gz .
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmmp-connector
+          path: release/*.tar.gz
+
+  create-release:
+    name: Create GitHub Release
+    needs: 
+      - prepare-release
+      - build-main-plugin
+      - build-java-connectors
+      - build-fabric
+      - build-forge
+      - build-llbds
+      - build-pmmp
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-release.outputs.tag }}
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Organize release files
+        run: |
+          mkdir -p release-package
+          
+          # Copy all artifacts
+          find artifacts -type f \( -name "*.jar" -o -name "*.tar.gz" \) -exec cp {} release-package/ \;
+          
+          # Create version info
+          cat > release-package/VERSION.txt << EOF
+          Mochi-Link Release ${{ needs.prepare-release.outputs.version }}
+          大福连 版本 ${{ needs.prepare-release.outputs.version }}
+          
+          Release Date: $(date)
+          发布日期: $(date)
+          
+          Git Tag: ${{ needs.prepare-release.outputs.tag }}
+          Commit: ${{ github.sha }}
+          
+          ========================================
+          Package Contents / 包含内容
+          ========================================
+          
+          Main Plugin / 主插件:
+          - koishi-plugin-mochi-link-${{ needs.prepare-release.outputs.version }}.tar.gz
+          
+          Java Edition Connectors / Java版连接器:
+          - MochiLink-java-${{ needs.prepare-release.outputs.version }}.jar (Paper/Spigot)
+          - MochiLink-folia-${{ needs.prepare-release.outputs.version }}.jar (Folia)
+          - MochiLink-nukkit-${{ needs.prepare-release.outputs.version }}.jar (Nukkit)
+          
+          Modded Java Edition Connectors / 模组Java版连接器:
+          - MochiLink-fabric-${{ needs.prepare-release.outputs.version }}.jar (Fabric)
+          - MochiLink-forge-${{ needs.prepare-release.outputs.version }}.jar (Forge)
+          
+          Bedrock Edition Connectors / 基岩版连接器:
+          - MochiLink-llbds-${{ needs.prepare-release.outputs.version }}.tar.gz (LLBDS)
+          - MochiLink-pmmp-${{ needs.prepare-release.outputs.version }}.tar.gz (PMMP)
+          
+          ========================================
+          Installation / 安装说明
+          ========================================
+          
+          Main Plugin:
+          1. Extract koishi-plugin-mochi-link-*.tar.gz
+          2. Install in Koishi: npm install ./main-plugin
+          
+          Java Edition Plugins (.jar):
+          1. Copy to server's plugins/ directory
+          2. Restart server
+          
+          Fabric/Forge Mods (.jar):
+          1. Copy to server's mods/ directory
+          2. Restart server
+          
+          LLBDS Plugin (.tar.gz):
+          1. Extract to LLBDS plugins/ directory
+          2. Restart LLBDS
+          
+          PMMP Plugin (.tar.gz):
+          1. Extract to PMMP plugins/ directory
+          2. Restart PMMP
+          
+          ========================================
+          Documentation / 文档
+          ========================================
+          
+          - GitHub: https://github.com/chm413/Mochi-Link
+          - Wiki: https://github.com/chm413/Mochi-Link/wiki
+          - Issues: https://github.com/chm413/Mochi-Link/issues
+          EOF
+          
+          # Create README
+          cat > release-package/README.md << 'EOF'
+          # Mochi-Link Release Package
+          # 大福连发布包
+          
+          ## What's Included / 包含内容
+          
+          This release package contains:
+          此发布包包含:
+          
+          - Main Koishi plugin / 主 Koishi 插件
+          - All server connectors / 所有服务器连接器
+          - Installation instructions / 安装说明
+          
+          ## Quick Start / 快速开始
+          
+          ### 1. Install Main Plugin / 安装主插件
+          
+          ```bash
+          # Extract the main plugin
+          tar -xzf koishi-plugin-mochi-link-*.tar.gz
+          
+          # Install in Koishi
+          npm install ./main-plugin
+          ```
+          
+          ### 2. Install Connector / 安装连接器
+          
+          Choose the appropriate connector for your server type and follow the installation instructions in VERSION.txt.
+          
+          为您的服务器类型选择合适的连接器，并按照 VERSION.txt 中的安装说明操作。
+          
+          ### 3. Configure / 配置
+          
+          Refer to the configuration templates in the `config-templates/` directory of the repository.
+          
+          参考仓库中 `config-templates/` 目录下的配置模板。
+          
+          ## Support / 支持
+          
+          - Documentation: https://github.com/chm413/Mochi-Link/wiki
+          - Issues: https://github.com/chm413/Mochi-Link/issues
+          - Discussions: https://github.com/chm413/Mochi-Link/discussions
+          EOF
+      
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 ${{ needs.prepare-release.outputs.tag }}^ 2>/dev/null || echo "")
+          
+          if [ -z "$PREV_TAG" ]; then
+            echo "changelog=Initial release" >> $GITHUB_OUTPUT
+          else
+            CHANGELOG=$(git log ${PREV_TAG}..${{ needs.prepare-release.outputs.tag }} --pretty=format:"- %s (%h)" --no-merges)
+            echo "changelog<<EOF" >> $GITHUB_OUTPUT
+            echo "$CHANGELOG" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.prepare-release.outputs.tag }}
+          name: Mochi-Link ${{ needs.prepare-release.outputs.version }}
+          body: |
+            # Mochi-Link ${{ needs.prepare-release.outputs.version }}
+            
+            ## 📦 Release Package / 发布包
+            
+            This release includes the main Koishi plugin and all server connectors.
+            此版本包含主 Koishi 插件和所有服务器连接器。
+            
+            ## 📝 Changelog / 更新日志
+            
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ## 📥 Downloads / 下载
+            
+            ### Main Plugin / 主插件
+            - `koishi-plugin-mochi-link-${{ needs.prepare-release.outputs.version }}.tar.gz`
+            
+            ### Java Edition Connectors / Java版连接器
+            - `MochiLink-java-${{ needs.prepare-release.outputs.version }}.jar` - Paper/Spigot/Bukkit
+            - `MochiLink-folia-${{ needs.prepare-release.outputs.version }}.jar` - Folia
+            - `MochiLink-nukkit-${{ needs.prepare-release.outputs.version }}.jar` - Nukkit
+            
+            ### Modded Java Edition / 模组Java版
+            - `MochiLink-fabric-${{ needs.prepare-release.outputs.version }}.jar` - Fabric
+            - `MochiLink-forge-${{ needs.prepare-release.outputs.version }}.jar` - Forge
+            
+            ### Bedrock Edition / 基岩版
+            - `MochiLink-llbds-${{ needs.prepare-release.outputs.version }}.tar.gz` - LLBDS
+            - `MochiLink-pmmp-${{ needs.prepare-release.outputs.version }}.tar.gz` - PMMP
+            
+            ## 📖 Documentation / 文档
+            
+            - [Installation Guide / 安装指南](https://github.com/chm413/Mochi-Link/wiki)
+            - [Configuration / 配置说明](https://github.com/chm413/Mochi-Link/wiki/Configuration)
+            - [API Documentation / API文档](https://github.com/chm413/Mochi-Link/wiki/API)
+            
+            ## 🐛 Bug Reports / 问题反馈
+            
+            Please report issues at: https://github.com/chm413/Mochi-Link/issues
+            请在此报告问题: https://github.com/chm413/Mochi-Link/issues
+          files: |
+            release-package/*
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}

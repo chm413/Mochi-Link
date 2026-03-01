@@ -1,0 +1,295 @@
+name: Build Connectors
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+    paths:
+      - 'connectors/**'
+      - '.github/workflows/build-connectors.yml'
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+    paths:
+      - 'connectors/**'
+  workflow_dispatch:
+
+jobs:
+  build-java-connectors:
+    name: Build Java Connectors
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        connector: [java, folia, nukkit]
+      fail-fast: false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+      
+      - name: Grant execute permission for gradlew
+        run: |
+          if [ -f "connectors/${{ matrix.connector }}/gradlew" ]; then
+            chmod +x connectors/${{ matrix.connector }}/gradlew
+          fi
+      
+      - name: Build with Gradle
+        working-directory: connectors/${{ matrix.connector }}
+        run: |
+          if [ -f "gradlew" ]; then
+            ./gradlew build --no-daemon --warning-mode all
+          else
+            gradle build --no-daemon --warning-mode all
+          fi
+        continue-on-error: true
+      
+      - name: Upload artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.connector }}-connector
+          path: connectors/${{ matrix.connector }}/build/libs/*.jar
+          retention-days: 30
+
+  build-fabric:
+    name: Build Fabric Connector
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+      
+      - name: Grant execute permission for gradlew
+        run: |
+          if [ -f "connectors/fabric/gradlew" ]; then
+            chmod +x connectors/fabric/gradlew
+          fi
+      
+      - name: Build Fabric mod
+        working-directory: connectors/fabric
+        run: |
+          if [ -f "gradlew" ]; then
+            ./gradlew build --no-daemon --warning-mode all
+          else
+            gradle build --no-daemon --warning-mode all
+          fi
+        continue-on-error: true
+      
+      - name: Upload artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fabric-connector
+          path: connectors/fabric/build/libs/*.jar
+          retention-days: 30
+
+  build-forge:
+    name: Build Forge Connector
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+      
+      - name: Grant execute permission for gradlew
+        run: |
+          if [ -f "connectors/forge/gradlew" ]; then
+            chmod +x connectors/forge/gradlew
+          fi
+      
+      - name: Build Forge mod
+        working-directory: connectors/forge
+        run: |
+          if [ -f "gradlew" ]; then
+            ./gradlew build --no-daemon --warning-mode all
+          else
+            gradle build --no-daemon --warning-mode all
+          fi
+        continue-on-error: true
+      
+      - name: Upload artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-connector
+          path: connectors/forge/build/libs/*.jar
+          retention-days: 30
+
+  build-llbds:
+    name: Build LLBDS Connector
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: connectors/llbds/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: connectors/llbds
+        run: npm ci
+      
+      - name: Build TypeScript
+        working-directory: connectors/llbds
+        run: npm run build
+        continue-on-error: true
+      
+      - name: Upload artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: llbds-connector
+          path: |
+            connectors/llbds/dist/**
+            connectors/llbds/package.json
+          retention-days: 30
+
+  build-pmmp:
+    name: Package PMMP Connector
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Create PMMP package
+        run: |
+          mkdir -p build-output/pmmp
+          cp -r connectors/pmmp/* build-output/pmmp/
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmmp-connector
+          path: build-output/pmmp/**
+          retention-days: 30
+
+  create-release-package:
+    name: Create Release Package
+    runs-on: ubuntu-latest
+    needs: [build-java-connectors, build-fabric, build-forge, build-llbds, build-pmmp]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: build-output
+      
+      - name: Create version info
+        run: |
+          cat > build-output/VERSION.txt << EOF
+          Mochi-Link Connector Build Information
+          大福连连接器构建信息
+          
+          Build Date: $(date)
+          构建日期: $(date)
+          Commit: ${{ github.sha }}
+          Branch: ${{ github.ref_name }}
+          
+          Built Connectors:
+          构建的连接器:
+          
+          Java Edition (Java版):
+          - Paper/Spigot: java-connector/
+          - Folia: folia-connector/
+          
+          Modded Java Edition (模组Java版):
+          - Fabric: fabric-connector/
+          - Forge: forge-connector/
+          
+          Bedrock Edition (基岩版):
+          - LLBDS: llbds-connector/
+          - Nukkit: nukkit-connector/
+          - PMMP: pmmp-connector/
+          EOF
+      
+      - name: Create README
+        run: |
+          cat > build-output/README.md << 'EOF'
+          # Mochi-Link Connectors
+          # 大福连连接器
+          
+          This package contains all built connector plugins and mods for different Minecraft server types.
+          
+          此包包含为不同类型Minecraft服务器构建的所有连接器插件和模组。
+          
+          ## Installation / 安装
+          
+          ### Java Edition Plugins
+          Copy the JAR file to your server's `plugins/` directory.
+          将JAR文件复制到服务器的 `plugins/` 目录。
+          
+          ### Fabric/Forge Mods
+          Copy the JAR file to your server's `mods/` directory.
+          将JAR文件复制到服务器的 `mods/` 目录。
+          
+          ### LLBDS Plugin
+          Copy the entire `llbds-connector/` directory to your LLBDS `plugins/` directory.
+          将整个 `llbds-connector/` 目录复制到LLBDS的 `plugins/` 目录。
+          
+          ### PMMP Plugin
+          Copy the entire `pmmp-connector/` directory to your PMMP `plugins/` directory.
+          将整个 `pmmp-connector/` 目录复制到PMMP的 `plugins/` 目录。
+          
+          ## Configuration / 配置
+          
+          Please refer to the main project documentation for configuration instructions.
+          配置说明请参考主项目文档。
+          
+          ## Support / 支持
+          
+          - GitHub: https://github.com/chm413/Mochi-Link
+          - Issues: https://github.com/chm413/Mochi-Link/issues
+          EOF
+      
+      - name: Upload release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: mochi-link-connectors-all
+          path: build-output/**
+          retention-days: 90
+      
+      - name: Commit artifacts (if changed)
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update connector builds [skip ci]"
+          file_pattern: "connectors/**/build/libs/*.jar connectors/llbds/dist/**"
+          commit_user_name: GitHub Actions
+          commit_user_email: actions@github.com
+          commit_author: GitHub Actions <actions@github.com>
+          skip_dirty_check: false
+        continue-on-error: true

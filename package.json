@@ -1,6 +1,6 @@
 {
   "name": "koishi-plugin-mochi-link",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Mochi-Link (大福连) - Minecraft 统一管理与监控系统",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
