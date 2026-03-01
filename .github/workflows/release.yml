@@ -1,4 +1,4 @@
-name: Release
+name: Release Connectors
 
 on:
   push:
@@ -35,42 +35,6 @@ jobs:
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "Release version: ${VERSION}"
           echo "Release tag: ${TAG}"
-
-  build-main-plugin:
-    name: Build Main Plugin
-    needs: prepare-release
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.prepare-release.outputs.tag }}
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'npm'
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Build
-        run: npm run build
-      
-      - name: Create plugin package
-        run: |
-          mkdir -p release/main-plugin
-          cp -r lib locales package.json README.md release/main-plugin/
-          cd release
-          tar -czf koishi-plugin-mochi-link-${{ needs.prepare-release.outputs.version }}.tar.gz main-plugin
-      
-      - name: Upload main plugin artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: main-plugin
-          path: release/*.tar.gz
 
   build-java-connectors:
     name: Build Java Connectors
@@ -282,7 +246,6 @@ jobs:
     name: Create GitHub Release
     needs: 
       - prepare-release
-      - build-main-plugin
       - build-java-connectors
       - build-fabric
       - build-forge
@@ -310,8 +273,8 @@ jobs:
           
           # Create version info
           cat > release-package/VERSION.txt << EOF
-          Mochi-Link Release ${{ needs.prepare-release.outputs.version }}
-          大福连 版本 ${{ needs.prepare-release.outputs.version }}
+          Mochi-Link Connectors Release ${{ needs.prepare-release.outputs.version }}
+          大福连连接器版本 ${{ needs.prepare-release.outputs.version }}
           
           Release Date: $(date)
           发布日期: $(date)
@@ -322,9 +285,6 @@ jobs:
           ========================================
           Package Contents / 包含内容
           ========================================
-          
-          Main Plugin / 主插件:
-          - koishi-plugin-mochi-link-${{ needs.prepare-release.outputs.version }}.tar.gz
           
           Java Edition Connectors / Java版连接器:
           - MochiLink-java-${{ needs.prepare-release.outputs.version }}.jar (Paper/Spigot)
@@ -343,10 +303,6 @@ jobs:
           Installation / 安装说明
           ========================================
           
-          Main Plugin:
-          1. Extract koishi-plugin-mochi-link-*.tar.gz
-          2. Install in Koishi: npm install ./main-plugin
-          
           Java Edition Plugins (.jar):
           1. Copy to server's plugins/ directory
           2. Restart server
@@ -357,7 +313,8 @@ jobs:
           
           LLBDS Plugin (.tar.gz):
           1. Extract to LLBDS plugins/ directory
-          2. Restart LLBDS
+          2. Run npm install
+          3. Restart LLBDS
           
           PMMP Plugin (.tar.gz):
           1. Extract to PMMP plugins/ directory
@@ -374,47 +331,48 @@ jobs:
           
           # Create README
           cat > release-package/README.md << 'EOF'
-          # Mochi-Link Release Package
-          # 大福连发布包
+          # Mochi-Link Connectors Release Package
+          # 大福连连接器发布包
           
-          ## What's Included / 包含内容
+          This package contains all built connector plugins and mods for different Minecraft server types.
           
-          This release package contains:
-          此发布包包含:
+          此包包含为不同类型Minecraft服务器构建的所有连接器插件和模组。
           
-          - Main Koishi plugin / 主 Koishi 插件
-          - All server connectors / 所有服务器连接器
-          - Installation instructions / 安装说明
+          ## Installation / 安装
           
-          ## Quick Start / 快速开始
+          ### Java Edition Plugins
+          Copy the JAR file to your server's `plugins/` directory.
+          将JAR文件复制到服务器的 `plugins/` 目录。
           
-          ### 1. Install Main Plugin / 安装主插件
+          ### Fabric/Forge Mods
+          Copy the JAR file to your server's `mods/` directory.
+          将JAR文件复制到服务器的 `mods/` 目录。
           
-          ```bash
-          # Extract the main plugin
-          tar -xzf koishi-plugin-mochi-link-*.tar.gz
+          ### LLBDS Plugin
+          1. Extract the tar.gz file
+          2. Copy to your LLBDS `plugins/` directory
+          3. Run `npm install` in the plugin directory
           
-          # Install in Koishi
-          npm install ./main-plugin
-          ```
+          1. 解压 tar.gz 文件
+          2. 复制到LLBDS的 `plugins/` 目录
+          3. 在插件目录中运行 `npm install`
           
-          ### 2. Install Connector / 安装连接器
+          ### PMMP Plugin
+          1. Extract the tar.gz file
+          2. Copy to your PMMP `plugins/` directory
           
-          Choose the appropriate connector for your server type and follow the installation instructions in VERSION.txt.
+          1. 解压 tar.gz 文件
+          2. 复制到PMMP的 `plugins/` 目录
           
-          为您的服务器类型选择合适的连接器，并按照 VERSION.txt 中的安装说明操作。
+          ## Configuration / 配置
           
-          ### 3. Configure / 配置
-          
-          Refer to the configuration templates in the `config-templates/` directory of the repository.
-          
-          参考仓库中 `config-templates/` 目录下的配置模板。
+          Please refer to the main project documentation for configuration instructions.
+          配置说明请参考主项目文档。
           
           ## Support / 支持
           
-          - Documentation: https://github.com/chm413/Mochi-Link/wiki
+          - GitHub: https://github.com/chm413/Mochi-Link
           - Issues: https://github.com/chm413/Mochi-Link/issues
-          - Discussions: https://github.com/chm413/Mochi-Link/discussions
           EOF
       
       - name: Generate changelog
@@ -436,23 +394,20 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ needs.prepare-release.outputs.tag }}
-          name: Mochi-Link ${{ needs.prepare-release.outputs.version }}
+          name: Mochi-Link Connectors ${{ needs.prepare-release.outputs.version }}
           body: |
-            # Mochi-Link ${{ needs.prepare-release.outputs.version }}
+            # Mochi-Link Connectors ${{ needs.prepare-release.outputs.version }}
             
             ## 📦 Release Package / 发布包
             
-            This release includes the main Koishi plugin and all server connectors.
-            此版本包含主 Koishi 插件和所有服务器连接器。
+            This release includes all server connectors for Minecraft.
+            此版本包含所有 Minecraft 服务器连接器。
             
             ## 📝 Changelog / 更新日志
             
             ${{ steps.changelog.outputs.changelog }}
             
             ## 📥 Downloads / 下载
-            
-            ### Main Plugin / 主插件
-            - `koishi-plugin-mochi-link-${{ needs.prepare-release.outputs.version }}.tar.gz`
             
             ### Java Edition Connectors / Java版连接器
             - `MochiLink-java-${{ needs.prepare-release.outputs.version }}.jar` - Paper/Spigot/Bukkit
