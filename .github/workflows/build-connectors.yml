@@ -55,7 +55,6 @@ jobs:
           fi
       
       - name: Upload artifacts
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.connector }}-connector
@@ -93,7 +92,6 @@ jobs:
           fi
       
       - name: Upload artifacts
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: fabric-connector
@@ -131,7 +129,6 @@ jobs:
           fi
       
       - name: Upload artifacts
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: forge-connector

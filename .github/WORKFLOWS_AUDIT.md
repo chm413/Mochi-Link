@@ -105,10 +105,10 @@
 
 ## 问题和建议
 
-### ⚠️ 问题 1: continue-on-error + if: success() 组合
+### ✅ 已修复 1: continue-on-error + if: success() 组合
 **位置**: build-connectors.yml 中的 Java 构建任务
 
-**问题**:
+**原问题**:
 ```yaml
 - name: Build with Gradle
   run: gradle build
@@ -118,51 +118,37 @@
   if: success()  # 这个条件永远不会满足，因为上一步允许失败
 ```
 
-**影响**: 如果构建失败，产物不会上传，但工作流显示成功
+**修复方案**: 已移除所有 `continue-on-error: true` 和 `if: success()` 条件
+- Java connectors (matrix)
+- Fabric connector
+- Forge connector
 
-**建议**:
-```yaml
-# 选项 1: 移除 continue-on-error，让构建失败时工作流失败
-- name: Build with Gradle
-  run: gradle build
+**结果**: 现在构建失败时工作流会正确报错，构建成功时才会上传产物
 
-- name: Upload artifacts
-  if: success()
-
-# 选项 2: 改为 always() 以便即使构建失败也上传（如果有部分产物）
-- name: Build with Gradle
-  run: gradle build
-  continue-on-error: true
-
-- name: Upload artifacts
-  if: always()
-```
-
-### ⚠️ 问题 2: 文件重命名逻辑可能不准确
+### ✅ 已修复 2: 文件重命名逻辑
 **位置**: release.yml 的文件重命名步骤
 
-**问题**:
+**原问题**:
 ```bash
 if [[ "$jar" == *"java"* ]]; then
   mv "$jar" "MochiLink-java-${{ steps.version.outputs.version }}.jar"
 ```
 
-**影响**: 如果 JAR 文件名不包含预期的关键字，重命名会失败
+**修复方案**: 直接从 artifact 目录复制并重命名，避免模式匹配
+```bash
+if [ -d "release-artifacts/java-connector" ]; then
+  for jar in release-artifacts/java-connector/*.jar; do
+    [ -f "$jar" ] && cp "$jar" "release-package/MochiLink-java-${{ steps.version.outputs.version }}.jar"
+  done
+fi
+```
 
-**建议**: 使用更可靠的命名约定或从 artifact 名称推断
+**结果**: 文件重命名更加可靠和可预测
 
-### ✅ 优点 3: 工作流复用
-**位置**: release.yml 调用 build-connectors.yml
-
-**优点**:
-- 单一构建逻辑来源
-- 避免代码重复
-- 易于维护
-
-### ⚠️ 问题 4: 自动提交产物
+### ✅ 已移除 3: 自动提交产物
 **位置**: build-connectors.yml 的最后一步
 
-**问题**:
+**原问题**:
 ```yaml
 - name: Commit artifacts (if changed)
   uses: stefanzweifel/git-auto-commit-action@v5
@@ -170,15 +156,12 @@ if [[ "$jar" == *"java"* ]]; then
     file_pattern: "connectors/**/build/libs/*.jar connectors/llbds/dist/**"
 ```
 
-**影响**: 
-- 会将构建产物提交到仓库
-- 可能导致仓库体积快速增长
-- 通常不推荐将构建产物提交到 Git
+**修复方案**: 已完全移除此步骤
 
-**建议**: 
-- 移除此步骤
-- 只通过 GitHub Releases 分发构建产物
-- 或使用 Git LFS 管理大文件
+**结果**: 
+- 构建产物不再提交到仓库
+- 避免仓库体积快速增长
+- 只通过 GitHub Releases 和 Artifacts 分发构建产物
 
 ---
 
@@ -190,79 +173,85 @@ if [[ "$jar" == *"java"* ]]; then
 3. **并行构建**: 使用 matrix 策略加速构建
 4. **完整覆盖**: 支持所有连接器类型
 5. **自动化**: 从构建到发布全自动
-
-### ⚠️ 需要改进
-1. **错误处理**: continue-on-error 的使用需要优化
-2. **文件命名**: 重命名逻辑需要更健壮
-3. **产物管理**: 考虑移除自动提交产物的步骤
-4. **缓存优化**: 可以添加更多缓存以加速构建
+6. **错误处理**: 构建失败时工作流正确报错
+7. **可靠命名**: 文件重命名逻辑基于 artifact 目录
+8. **产物管理**: 只通过 GitHub Releases 分发，不污染仓库
 
 ### 📊 统计
 - **工作流文件**: 2 个
 - **构建任务**: 6 个（3 Java + 1 Fabric + 1 Forge + 1 LLBDS + 1 PMMP）
-- **总步骤数**: 约 40 个
+- **总步骤数**: 约 35 个（已优化）
 - **重复代码**: 最小化（通过 workflow_call）
 - **触发方式**: 4 种（push, pull_request, workflow_dispatch, workflow_call）
+- **已修复问题**: 3 个（错误处理、文件重命名、自动提交）
 
 ---
 
-## 建议的优化
+## 已完成的优化
 
-### 优先级 1: 修复错误处理
-```yaml
-# 在 build-connectors.yml 中
-- name: Build with Gradle
-  working-directory: connectors/${{ matrix.connector }}
-  run: |
-    if [ -f "gradlew" ]; then
-      ./gradlew build --no-daemon --warning-mode all
-    else
-      gradle build --no-daemon --warning-mode all
-    fi
-  # 移除 continue-on-error: true
+### ✅ 优化 1: 修复错误处理（优先级 1）
+**修改文件**: `.github/workflows/build-connectors.yml`
+**变更**:
+- 移除所有 `continue-on-error: true`
+- 移除 `if: success()` 条件（现在默认行为）
+- 影响范围: Java connectors, Fabric, Forge
 
-- name: Upload artifacts
-  if: success()  # 现在这个条件有意义了
-  uses: actions/upload-artifact@v4
-```
+**效果**: 构建失败时工作流会正确失败并通知开发者
 
-### 优先级 2: 移除自动提交产物
-```yaml
-# 删除或注释掉这一步
-# - name: Commit artifacts (if changed)
-#   uses: stefanzweifel/git-auto-commit-action@v5
-```
+### ✅ 优化 2: 移除自动提交产物（优先级 2）
+**修改文件**: `.github/workflows/build-connectors.yml`
+**变更**:
+- 完全移除 `git-auto-commit-action` 步骤
+- 不再将构建产物提交到仓库
 
-### 优先级 3: 改进文件重命名
-```yaml
-# 在 release.yml 中使用更可靠的方法
-- name: Organize release files
-  run: |
-    mkdir -p release-package
-    
-    # 使用 artifact 名称而非文件名模式匹配
-    [ -d "release-artifacts/java-connector" ] && \
-      cp release-artifacts/java-connector/*.jar \
-      release-package/MochiLink-java-${{ steps.version.outputs.version }}.jar
-    
-    [ -d "release-artifacts/folia-connector" ] && \
-      cp release-artifacts/folia-connector/*.jar \
-      release-package/MochiLink-folia-${{ steps.version.outputs.version }}.jar
-    # ... 等等
-```
+**效果**: 
+- 避免仓库体积增长
+- 遵循最佳实践（构建产物不入库）
+- 通过 GitHub Releases 和 Artifacts 分发
+
+### ✅ 优化 3: 改进文件重命名（优先级 3）
+**修改文件**: `.github/workflows/release.yml`
+**变更**:
+- 从基于文件名模式匹配改为基于 artifact 目录
+- 直接复制并重命名，避免二次处理
+
+**效果**: 
+- 更可靠的文件命名
+- 避免命名冲突和错误
+- 代码更清晰易懂
+
+---
+
+## 建议的后续监控
+
+### 📝 监控项目
+1. **v1.6.2 Release 构建**: 验证所有连接器成功构建
+2. **文件命名**: 确认所有 JAR 和 tar.gz 文件正确命名
+3. **构建失败处理**: 如果某个连接器构建失败，工作流应该正确报错
+4. **产物大小**: 监控 GitHub Artifacts 存储使用情况
+
+### 🔍 可选的未来改进
+1. **缓存优化**: 添加更多 Gradle 和 npm 缓存以加速构建
+2. **并行度**: 考虑是否可以进一步并行化构建步骤
+3. **测试集成**: 在构建后添加自动化测试（如果需要）
+4. **通知**: 添加构建失败时的通知机制（Slack/Discord/Email）
 
 ---
 
 ## 结论
 
-✅ **总体状态**: 良好
-- 工作流结构合理，无明显重复
-- 使用了现代 GitHub Actions 最佳实践
-- 自动化程度高
+✅ **优化完成**: 所有识别的问题已修复
+- 错误处理逻辑已优化
+- 自动提交产物功能已移除
+- 文件重命名逻辑更加健壮
 
-⚠️ **需要注意**:
-- 错误处理逻辑需要优化
-- 考虑移除自动提交产物的功能
-- 文件重命名逻辑可以更健壮
+✅ **工作流状态**: 优秀
+- 结构清晰，职责明确
+- 无重复代码
+- 遵循 GitHub Actions 最佳实践
+- 自动化程度高且可靠
 
-📝 **建议**: 实施优先级 1 和 2 的优化，以提高工作流的可靠性和可维护性。
+📝 **下一步**: 
+- 推送 v1.6.2 标签以触发 release 工作流
+- 监控构建过程确保所有优化正常工作
+- 验证 GitHub Release 中的文件命名和内容

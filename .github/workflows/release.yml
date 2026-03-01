@@ -46,21 +46,35 @@ jobs:
         run: |
           mkdir -p release-package
           
-          # Copy all connector artifacts
+          # Copy and rename Java connector artifacts directly from artifact directories
           if [ -d "release-artifacts/java-connector" ]; then
-            cp release-artifacts/java-connector/*.jar release-package/ 2>/dev/null || true
+            for jar in release-artifacts/java-connector/*.jar; do
+              [ -f "$jar" ] && cp "$jar" "release-package/MochiLink-java-${{ steps.version.outputs.version }}.jar"
+            done
           fi
+          
           if [ -d "release-artifacts/folia-connector" ]; then
-            cp release-artifacts/folia-connector/*.jar release-package/ 2>/dev/null || true
+            for jar in release-artifacts/folia-connector/*.jar; do
+              [ -f "$jar" ] && cp "$jar" "release-package/MochiLink-folia-${{ steps.version.outputs.version }}.jar"
+            done
           fi
+          
           if [ -d "release-artifacts/nukkit-connector" ]; then
-            cp release-artifacts/nukkit-connector/*.jar release-package/ 2>/dev/null || true
+            for jar in release-artifacts/nukkit-connector/*.jar; do
+              [ -f "$jar" ] && cp "$jar" "release-package/MochiLink-nukkit-${{ steps.version.outputs.version }}.jar"
+            done
           fi
+          
           if [ -d "release-artifacts/fabric-connector" ]; then
-            cp release-artifacts/fabric-connector/*.jar release-package/ 2>/dev/null || true
+            for jar in release-artifacts/fabric-connector/*.jar; do
+              [ -f "$jar" ] && cp "$jar" "release-package/MochiLink-fabric-${{ steps.version.outputs.version }}.jar"
+            done
           fi
+          
           if [ -d "release-artifacts/forge-connector" ]; then
-            cp release-artifacts/forge-connector/*.jar release-package/ 2>/dev/null || true
+            for jar in release-artifacts/forge-connector/*.jar; do
+              [ -f "$jar" ] && cp "$jar" "release-package/MochiLink-forge-${{ steps.version.outputs.version }}.jar"
+            done
           fi
           
           # Package LLBDS connector
@@ -76,27 +90,6 @@ jobs:
             tar -czf ../../release-package/MochiLink-pmmp-${{ steps.version.outputs.version }}.tar.gz .
             cd ../..
           fi
-          
-          # Rename JAR files with version
-          cd release-package
-          for jar in *.jar; do
-            if [ -f "$jar" ]; then
-              base=$(basename "$jar" .jar)
-              # Extract connector type from filename
-              if [[ "$jar" == *"java"* ]]; then
-                mv "$jar" "MochiLink-java-${{ steps.version.outputs.version }}.jar"
-              elif [[ "$jar" == *"folia"* ]]; then
-                mv "$jar" "MochiLink-folia-${{ steps.version.outputs.version }}.jar"
-              elif [[ "$jar" == *"nukkit"* ]]; then
-                mv "$jar" "MochiLink-nukkit-${{ steps.version.outputs.version }}.jar"
-              elif [[ "$jar" == *"fabric"* ]]; then
-                mv "$jar" "MochiLink-fabric-${{ steps.version.outputs.version }}.jar"
-              elif [[ "$jar" == *"forge"* ]]; then
-                mv "$jar" "MochiLink-forge-${{ steps.version.outputs.version }}.jar"
-              fi
-            fi
-          done
-          cd ..
       
       - name: Create version info
         run: |
