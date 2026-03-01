@@ -53,7 +53,6 @@ jobs:
           else
             gradle build --no-daemon --warning-mode all
           fi
-        continue-on-error: true
       
       - name: Upload artifacts
         if: success()
@@ -92,7 +91,6 @@ jobs:
           else
             gradle build --no-daemon --warning-mode all
           fi
-        continue-on-error: true
       
       - name: Upload artifacts
         if: success()
@@ -131,7 +129,6 @@ jobs:
           else
             gradle build --no-daemon --warning-mode all
           fi
-        continue-on-error: true
       
       - name: Upload artifacts
         if: success()
@@ -279,14 +276,3 @@ jobs:
           name: mochi-link-connectors-all
           path: build-output/**
           retention-days: 90
-      
-      - name: Commit artifacts (if changed)
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "chore: update connector builds [skip ci]"
-          file_pattern: "connectors/**/build/libs/*.jar connectors/llbds/dist/**"
-          commit_user_name: GitHub Actions
-          commit_user_email: actions@github.com
-          commit_author: GitHub Actions <actions@github.com>
-          skip_dirty_check: false
-        continue-on-error: true
