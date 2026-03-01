@@ -1,5 +1,5 @@
 name: MochiLinkConnectorPMMP
-version: 1.6.1
+version: 1.6.2
 main: com\mochilink\connector\pmmp\MochiLinkPMMPPlugin
 api: [5.0.0]
 authors: [chm413]
