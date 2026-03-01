@@ -12,10 +12,6 @@ base {
 
 repositories {
     mavenCentral()
-    maven {
-        name = 'MinecraftForge'
-        url = 'https://maven.minecraftforge.net'
-    }
 }
 
 configurations {
@@ -66,5 +62,21 @@ jar {
                 "Implementation-Version"  : version,
                 "Implementation-Vendor"   : "chm413"
         ])
+    }
+    
+    // 设置输出目录到 build/libs
+    destinationDirectory = file("$buildDir/libs")
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            artifact jar
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/mcmodsrepo"
+        }
     }
 }

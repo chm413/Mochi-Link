@@ -1,0 +1,112 @@
+# ============================================================================
+# Mochi-Link Folia Connector Configuration
+# 大福连 Folia 连接器配置
+# ============================================================================
+#
+# ⚠️ 重要提示：
+# 1. server.id 必须与 Koishi 中注册的 ID 完全一致
+# 2. server.token 必须是从 Koishi 获取的 64 字符令牌
+# 3. server.host 和 server.port 必须指向 Koishi 的 WebSocket 服务器
+#
+# ============================================================================
+
+# Server connection settings
+# 服务器连接设置
+server:
+  # Mochi-Link 管理系统地址
+  # Koishi WebSocket server address
+  host: "172.16.200.1"
+  
+  # Mochi-Link 管理系统端口
+  # Koishi WebSocket server port (default: 8080)
+  port: 8080
+  
+  # 服务器唯一 ID（必须与 Koishi 中注册的 ID 完全一致）
+  # Server ID (must match the ID registered in Koishi exactly)
+  # 使用命令获取: mochi.server.list
+  id: "folia-survival"
+  
+  # API 令牌（从 Koishi 获取，64 字符）
+  # API token (obtained from Koishi, 64 characters)
+  # 使用命令获取: mochi.server.token <id>
+  token: "your-server-token-here"
+  
+  # 是否使用 SSL/TLS 加密连接
+  # Enable SSL/TLS encryption
+  use-ssl: false
+
+# Auto-reconnect settings
+# 自动重连设置
+auto-reconnect:
+  # 是否启用自动重连
+  # Enable automatic reconnection
+  enabled: true
+  
+  # 重连间隔（秒）
+  # Reconnection interval in seconds
+  interval: 30
+
+# Performance monitoring
+# 性能监控
+performance:
+  # 是否启用性能监控
+  # Enable performance monitoring
+  monitoring-enabled: true
+  
+  # 报告间隔（秒）
+  # Report interval in seconds
+  report-interval: 60
+
+# ============================================================================
+# 配置示例 - Example Configuration
+# ============================================================================
+#
+# 步骤 1: 在 Koishi 中注册服务器
+# Step 1: Register server in Koishi
+#
+#   mochi.server.register folia-survival Folia生存服 --host 127.0.0.1 -p 25565 -t java -c folia
+#
+# 步骤 2: 记录输出的 token
+# Step 2: Note the token from output
+#
+#   🔐 连接令牌:
+#     a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2
+#
+# 步骤 3: 填写配置
+# Step 3: Fill in the configuration
+#
+#   server:
+#     host: "172.16.200.1"
+#     port: 8080
+#     id: "folia-survival"
+#     token: "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2"
+#     use-ssl: false
+#
+# 步骤 4: 重启 Folia 服务器
+# Step 4: Restart Folia server
+#
+# ============================================================================
+# 验证连接 - Verify Connection
+# ============================================================================
+#
+# 成功的日志应该显示:
+# Successful logs should show:
+#
+#   [INFO]: [MochiLinkConnectorFolia] Configuration loaded successfully
+#   [INFO]: [MochiLinkConnectorFolia] Connecting to: ws://172.16.200.1:8080/ws
+#   [INFO]: [MochiLinkConnectorFolia] WebSocket connection established
+#   [INFO]: [MochiLinkConnectorFolia] Connected to Mochi-Link management server
+#
+# 如果看到警告:
+# If you see warnings:
+#
+#   [WARN]: Server ID is not configured! Please set server.id in config.yml
+#   [WARN]: Server token is not configured! Please set server.token in config.yml
+#
+# 说明配置不正确，请检查:
+# Configuration is incorrect, please check:
+#   1. server.id 是否填写
+#   2. server.token 是否填写
+#   3. 值是否正确（没有引号问题）
+#
+# ============================================================================

@@ -8,7 +8,9 @@ import cn.nukkit.Player;
 import cn.nukkit.event.EventHandler;
 import cn.nukkit.event.EventPriority;
 import cn.nukkit.event.Listener;
-import cn.nukkit.event.player.*;
+import cn.nukkit.event.player.PlayerJoinEvent;
+import cn.nukkit.event.player.PlayerQuitEvent;
+import cn.nukkit.event.player.PlayerChatEvent;
 import cn.nukkit.event.entity.EntityDamageEvent;
 import cn.nukkit.plugin.PluginLogger;
 

@@ -34,10 +34,12 @@ public class MochiLinkFoliaPlugin extends JavaPlugin {
     private FoliaCommandHandler commandHandler;
     private FoliaPerformanceMonitor performanceMonitor;
     private SubscriptionManager subscriptionManager;
+    private com.mochilink.connector.folia.protocol.FoliaMessageHandler messageHandler;
     
     // Plugin state
     private boolean isEnabled = false;
     private boolean isConnected = false;
+    private long startTime;
     
     // Folia-specific scheduler task
     private ScheduledTask connectionTask;
@@ -45,6 +47,7 @@ public class MochiLinkFoliaPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         instance = this;
+        startTime = System.currentTimeMillis();
         
         try {
             // Initialize plugin
@@ -115,6 +118,9 @@ public class MochiLinkFoliaPlugin extends JavaPlugin {
         
         // Initialize Folia-specific connection manager
         connectionManager = new FoliaConnectionManager(this, pluginConfig);
+        
+        // Initialize message handler
+        messageHandler = new com.mochilink.connector.folia.protocol.FoliaMessageHandler(this, connectionManager);
         
         // Initialize Folia-specific event handler
         eventHandler = new FoliaEventHandler(this, connectionManager);
@@ -265,6 +271,13 @@ public class MochiLinkFoliaPlugin extends JavaPlugin {
     }
     
     /**
+     * Get message handler
+     */
+    public com.mochilink.connector.folia.protocol.FoliaMessageHandler getMessageHandler() {
+        return messageHandler;
+    }
+    
+    /**
      * Check if plugin is properly enabled
      */
     public boolean isPluginEnabled() {
@@ -295,5 +308,12 @@ public class MochiLinkFoliaPlugin extends JavaPlugin {
         }
         
         return "Unknown";
+    }
+    
+    /**
+     * Get plugin start time
+     */
+    public long getStartTime() {
+        return startTime;
     }
 }

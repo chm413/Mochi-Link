@@ -280,7 +280,7 @@ public class FoliaMessageHandler {
         try {
             JsonObject serverInfo = new JsonObject();
             serverInfo.addProperty("serverId", plugin.getPluginConfig().getServerId());
-            serverInfo.addProperty("name", plugin.getPluginConfig().getServerName());
+            serverInfo.addProperty("name", plugin.getPluginConfig().getServerId());
             serverInfo.addProperty("version", plugin.getServer().getVersion());
             serverInfo.addProperty("bukkitVersion", plugin.getServer().getBukkitVersion());
             serverInfo.addProperty("coreType", "Java");
@@ -322,7 +322,7 @@ public class FoliaMessageHandler {
         try {
             JsonObject statusData = new JsonObject();
             statusData.addProperty("status", "online");
-            statusData.addProperty("uptime", System.currentTimeMillis() - plugin.getServer().getStartTime());
+            statusData.addProperty("uptime", System.currentTimeMillis() - plugin.getStartTime());
             
             JsonObject playersData = new JsonObject();
             playersData.addProperty("online", plugin.getServer().getOnlinePlayers().size());
@@ -411,6 +411,42 @@ public class FoliaMessageHandler {
         } catch (Exception e) {
             logger.log(Level.WARNING, "Failed to stop server", e);
             return createErrorResponse(requestId, "server.stop", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle command execute operation
+     */
+    public JsonObject handleCommandExecute(String requestId, String command) {
+        if (command == null || command.isEmpty()) {
+            return createErrorResponse(requestId, "command.execute", "Missing command parameter");
+        }
+        
+        try {
+            logger.info("Executing command: " + command);
+            
+            // Execute command on global region scheduler
+            plugin.getServer().getGlobalRegionScheduler().run(plugin, (ScheduledTask task) -> {
+                try {
+                    plugin.getServer().dispatchCommand(
+                        plugin.getServer().getConsoleSender(),
+                        command
+                    );
+                } catch (Exception e) {
+                    logger.log(Level.WARNING, "Failed to execute command", e);
+                }
+            });
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            responseData.addProperty("command", command);
+            responseData.addProperty("message", "Command executed successfully");
+            
+            return createSuccessResponse(requestId, "command.execute", responseData);
+            
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Failed to execute command", e);
+            return createErrorResponse(requestId, "command.execute", e.getMessage());
         }
     }
     

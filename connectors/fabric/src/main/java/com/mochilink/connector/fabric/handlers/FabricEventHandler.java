@@ -51,12 +51,14 @@ public class FabricEventHandler {
         
         // Server started event
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            mod.setServer(server);
             onServerStarted();
         });
         
         // Server stopping event
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             onServerStopping();
+            mod.setServer(null);
         });
     }
     

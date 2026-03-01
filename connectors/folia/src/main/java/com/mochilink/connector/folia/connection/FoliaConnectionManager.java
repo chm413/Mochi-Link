@@ -3,6 +3,7 @@ package com.mochilink.connector.folia.connection;
 import com.mochilink.connector.folia.MochiLinkFoliaPlugin;
 import com.mochilink.connector.folia.config.FoliaPluginConfig;
 import com.mochilink.connector.folia.subscription.EventSubscription;
+import com.mochilink.connector.common.ReconnectionManager;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -16,13 +17,15 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
  * Manages WebSocket connection to Mochi-Link management server for Folia
- * Handles connection lifecycle, message routing, and event subscription with real WebSocket implementation
+ * Handles connection lifecycle, message routing, and event subscription with exponential backoff reconnection
  */
 public class FoliaConnectionManager {
     
@@ -35,11 +38,52 @@ public class FoliaConnectionManager {
     private final AtomicBoolean connected = new AtomicBoolean(false);
     private final AtomicBoolean connecting = new AtomicBoolean(false);
     
+    // 重连管理器
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    private final ReconnectionManager reconnectionManager;
+    
     public FoliaConnectionManager(MochiLinkFoliaPlugin plugin, FoliaPluginConfig config) {
         this.plugin = plugin;
         this.config = config;
         this.logger = plugin.getLogger();
         this.gson = new Gson();
+        
+        // 初始化重连管理器
+        ReconnectionManager.ReconnectionConfig reconnectConfig = 
+            ReconnectionManager.ReconnectionConfig.defaults();
+        
+        this.reconnectionManager = new ReconnectionManager(
+            logger,
+            scheduler,
+            reconnectConfig,
+            new ReconnectionManager.ReconnectionCallback() {
+                @Override
+                public boolean attemptReconnect() {
+                    connect();
+                    return connected.get();
+                }
+                
+                @Override
+                public void onReconnecting(int attempts, long nextInterval) {
+                    logger.info(String.format("第 %d 次重连，%dms 后执行", attempts, nextInterval));
+                }
+                
+                @Override
+                public void onMaxAttemptsReached(int totalAttempts) {
+                    logger.warning(String.format("达到最大重连次数，总尝试: %d", totalAttempts));
+                }
+                
+                @Override
+                public void onReconnectionDisabled(int totalAttempts) {
+                    logger.warning(String.format("重连已禁用，总尝试: %d", totalAttempts));
+                }
+                
+                @Override
+                public void onReconnectionEnabled() {
+                    logger.info("重连已重新启用");
+                }
+            }
+        );
     }
     
     /**
@@ -67,6 +111,9 @@ public class FoliaConnectionManager {
                     logger.info("WebSocket connection established");
                     logger.info("Connected to Mochi-Link management server");
                     
+                    // 重置重连状态
+                    reconnectionManager.reset();
+                    
                     // Send handshake message
                     sendHandshake();
                 }
@@ -83,9 +130,9 @@ public class FoliaConnectionManager {
                     connecting.set(false);
                     logger.warning("WebSocket connection closed: " + reason + " (code: " + code + ")");
                     
-                    // Auto-reconnect if enabled
+                    // 使用重连管理器进行自动重连
                     if (config.isAutoReconnectEnabled() && plugin.isEnabled()) {
-                        scheduleReconnect();
+                        reconnectionManager.scheduleReconnect();
                     }
                 }
                 
@@ -103,6 +150,11 @@ public class FoliaConnectionManager {
             logger.log(Level.SEVERE, "Failed to connect", e);
             connected.set(false);
             connecting.set(false);
+            
+            // 连接失败时触发重连
+            if (config.isAutoReconnectEnabled() && plugin.isEnabled()) {
+                reconnectionManager.scheduleReconnect();
+            }
         }
     }
     
@@ -175,24 +227,86 @@ public class FoliaConnectionManager {
     private void handleRequest(JsonObject request) {
         String op = request.get("op").getAsString();
         String requestId = request.has("id") ? request.get("id").getAsString() : generateId();
+        JsonObject data = request.has("data") ? request.getAsJsonObject("data") : new JsonObject();
         
         logger.info("Received request: " + op);
         
+        // Get message handler
+        com.mochilink.connector.folia.protocol.FoliaMessageHandler messageHandler = 
+            plugin.getMessageHandler();
+        
+        if (messageHandler == null) {
+            logger.warning("Message handler not initialized");
+            sendErrorResponse(requestId, op, "Message handler not available");
+            return;
+        }
+        
+        JsonObject response = null;
+        
         switch (op) {
-            case "event.subscribe":
-                handleEventSubscribe(request, requestId);
+            case "player.list":
+                response = messageHandler.handlePlayerList(requestId);
                 break;
-            case "event.unsubscribe":
-                handleEventUnsubscribe(request, requestId);
+            case "player.info":
+                String playerId = data.has("playerId") ? data.get("playerId").getAsString() : null;
+                response = messageHandler.handlePlayerInfo(requestId, playerId);
+                break;
+            case "player.kick":
+                String kickPlayerId = data.has("playerId") ? data.get("playerId").getAsString() : null;
+                String kickReason = data.has("reason") ? data.get("reason").getAsString() : null;
+                response = messageHandler.handlePlayerKick(requestId, kickPlayerId, kickReason);
+                break;
+            case "player.message":
+                String msgPlayerId = data.has("playerId") ? data.get("playerId").getAsString() : null;
+                String message = data.has("message") ? data.get("message").getAsString() : null;
+                response = messageHandler.handlePlayerMessage(requestId, msgPlayerId, message);
+                break;
+            case "whitelist.list":
+                response = messageHandler.handleWhitelistList(requestId);
+                break;
+            case "whitelist.add":
+                String addPlayerName = data.has("playerName") ? data.get("playerName").getAsString() : null;
+                String addPlayerId = data.has("playerId") ? data.get("playerId").getAsString() : null;
+                response = messageHandler.handleWhitelistAdd(requestId, addPlayerName, addPlayerId);
+                break;
+            case "whitelist.remove":
+                String removePlayerName = data.has("playerName") ? data.get("playerName").getAsString() : null;
+                String removePlayerId = data.has("playerId") ? data.get("playerId").getAsString() : null;
+                response = messageHandler.handleWhitelistRemove(requestId, removePlayerName, removePlayerId);
                 break;
             case "command.execute":
-                // Delegate to command handler if needed
-                logger.info("Command execution requested");
+                String command = data.has("command") ? data.get("command").getAsString() : null;
+                response = messageHandler.handleCommandExecute(requestId, command);
                 break;
+            case "server.info":
+                response = messageHandler.handleServerInfo(requestId);
+                break;
+            case "server.status":
+                response = messageHandler.handleServerStatus(requestId);
+                break;
+            case "server.restart":
+                int restartDelay = data.has("delay") ? data.get("delay").getAsInt() : 10;
+                response = messageHandler.handleServerRestart(requestId, restartDelay);
+                break;
+            case "server.stop":
+                int stopDelay = data.has("delay") ? data.get("delay").getAsInt() : 10;
+                response = messageHandler.handleServerStop(requestId, stopDelay);
+                break;
+            case "event.subscribe":
+                handleEventSubscribe(request, requestId);
+                return; // Event subscribe handles its own response
+            case "event.unsubscribe":
+                handleEventUnsubscribe(request, requestId);
+                return; // Event unsubscribe handles its own response
             default:
                 logger.warning("Unknown operation: " + op);
                 sendErrorResponse(requestId, op, "Unknown operation: " + op);
-                break;
+                return;
+        }
+        
+        // Send response if available
+        if (response != null) {
+            sendMessage(response.toString());
         }
     }
     
@@ -343,26 +457,6 @@ public class FoliaConnectionManager {
     }
     
     /**
-     * Schedule reconnection
-     */
-    private void scheduleReconnect() {
-        int interval = config.getReconnectInterval();
-        logger.info("Scheduling reconnection in " + interval + " seconds");
-        
-        plugin.getServer().getAsyncScheduler().runDelayed(
-            plugin,
-            (task) -> {
-                if (!connected.get() && plugin.isEnabled()) {
-                    logger.info("Attempting to reconnect...");
-                    connect();
-                }
-            },
-            interval,
-            java.util.concurrent.TimeUnit.SECONDS
-        );
-    }
-    
-    /**
      * Disconnect from management server
      */
     public void disconnect() {
@@ -371,6 +465,9 @@ public class FoliaConnectionManager {
         }
         
         try {
+            // 取消重连
+            reconnectionManager.cancel();
+            
             // Send disconnect message
             JsonObject disconnect = new JsonObject();
             disconnect.addProperty("type", "system");
@@ -391,12 +488,36 @@ public class FoliaConnectionManager {
                 wsClient.close();
             }
             
+            // 关闭调度器
+            scheduler.shutdown();
+            
             connected.set(false);
             logger.info("Disconnected from management server");
             
         } catch (Exception e) {
             logger.log(Level.WARNING, "Error during disconnect", e);
         }
+    }
+    
+    /**
+     * 获取重连状态
+     */
+    public ReconnectionManager.ReconnectionStatus getReconnectionStatus() {
+        return reconnectionManager.getStatus();
+    }
+    
+    /**
+     * 启用重连
+     */
+    public void enableReconnection() {
+        reconnectionManager.enable();
+    }
+    
+    /**
+     * 禁用重连
+     */
+    public void disableReconnection() {
+        reconnectionManager.disable();
     }
     
     /**

@@ -1045,6 +1045,11 @@ export class ServerManager {
       
       // Create connection adapter for WebSocket
       const connectionAdapter: any = {
+        pendingRequests: pendingRequests, // 暴露 pendingRequests 供 bridge 使用
+        send: async (message: any) => {
+          // 直接发送消息
+          await connection.send(message);
+        },
         sendCommand: async (command: string, timeout?: number) => {
           // Send command through WebSocket connection
           try {

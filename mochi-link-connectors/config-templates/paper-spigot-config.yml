@@ -1,0 +1,209 @@
+# Mochi-Link Connector Configuration for Paper/Spigot
+# 大福连连接器Paper/Spigot配置文件
+
+# 连接模式配置 / Connection Mode Configuration
+connection:
+  # 连接模式 / Connection mode: forward (connector connects to Koishi) or reverse (Koishi connects to connector)
+  mode: "forward"
+  
+  # 正向连接配置 / Forward connection settings (connector -> Koishi)
+  forward:
+    host: "localhost"
+    port: 8080
+    ssl: false
+  
+  # 反向连接配置 / Reverse connection settings (Koishi -> connector)
+  reverse:
+    port: 25566
+    bind_address: "0.0.0.0"
+    ssl: false
+  
+  # 连接选项 / Connection options
+  options:
+    auto_reconnect: true
+    reconnect_interval: 30
+    max_reconnect_attempts: -1
+    connect_timeout: 10000
+    heartbeat_interval: 30
+
+# 认证配置 / Authentication Configuration
+authentication:
+  # API令牌（从管理系统获取） / API token (obtained from management system)
+  token: "your-api-token-here"
+  
+  # 服务器唯一ID（必须在管理系统中注册） / Unique server ID (must be registered in management system)
+  server_id: "my-paper-server"
+  
+  # IP白名单 / IP whitelist
+  ip_whitelist_enabled: false
+
+# 自动重连配置 / Auto-reconnection Configuration
+reconnect:
+  # 是否启用自动重连 / Enable auto-reconnection
+  enabled: true
+  
+  # 重连间隔（秒） / Reconnection interval (seconds)
+  interval: 30
+  
+  # 最大重连次数（-1为无限制） / Maximum reconnection attempts (-1 for unlimited)
+  maxAttempts: 10
+  
+  # 指数退避 / Exponential backoff
+  exponentialBackoff: true
+  
+  # 最大退避时间（秒） / Maximum backoff time (seconds)
+  maxBackoffTime: 300
+
+# 功能配置 / Feature Configuration
+features:
+  # 玩家事件推送 / Player event pushing
+  playerEvents:
+    enabled: true
+    events:
+      - "join"
+      - "quit"
+      - "chat"
+      - "death"
+      - "achievement"
+  
+  # 服务器状态监控 / Server status monitoring
+  serverMonitoring:
+    enabled: true
+    interval: 30  # 监控间隔（秒） / Monitoring interval (seconds)
+  
+  # 命令执行 / Command execution
+  commandExecution:
+    enabled: true
+    # 允许执行的命令白名单 / Whitelist of allowed commands
+    whitelist:
+      - "list"
+      - "tps"
+      - "memory"
+      - "save-all"
+    # 禁止执行的命令黑名单 / Blacklist of forbidden commands
+    blacklist:
+      - "stop"
+      - "restart"
+      - "op"
+      - "deop"
+  
+  # 性能监控 / Performance monitoring
+  performanceMonitoring:
+    enabled: true
+    interval: 60  # 监控间隔（秒） / Monitoring interval (seconds)
+    metrics:
+      - "tps"
+      - "memory"
+      - "cpu"
+      - "players"
+  
+  # 白名单同步 / Whitelist synchronization
+  whitelistSync:
+    enabled: true
+    bidirectional: true  # 双向同步 / Bidirectional sync
+  
+  # 封禁同步 / Ban synchronization
+  banSync:
+    enabled: true
+    types:
+      - "player"
+      - "ip"
+
+# 插件集成配置 / Plugin Integration Configuration
+integrations:
+  # PlaceholderAPI集成 / PlaceholderAPI integration
+  placeholderapi:
+    enabled: true
+    
+  # LuckPerms集成 / LuckPerms integration
+  luckperms:
+    enabled: true
+    syncPermissions: true
+    
+  # Vault集成 / Vault integration
+  vault:
+    enabled: true
+    syncEconomy: false
+    
+  # Plan集成 / Plan integration
+  plan:
+    enabled: true
+    shareAnalytics: true
+
+# 安全配置 / Security Configuration
+security:
+  # IP白名单 / IP whitelist
+  ipWhitelist:
+    enabled: false
+    addresses:
+      - "127.0.0.1"
+      - "192.168.1.0/24"
+  
+  # 加密配置 / Encryption configuration
+  encryption:
+    enabled: false
+    algorithm: "AES-256-GCM"
+    keyFile: "encryption.key"
+
+# 日志配置 / Logging Configuration
+logging:
+  # 日志级别 / Log level
+  level: "INFO"
+  
+  # 是否记录详细调试信息 / Enable detailed debug logging
+  debug: false
+  
+  # 是否记录性能统计 / Log performance statistics
+  logPerformance: true
+  
+  # 日志文件配置 / Log file configuration
+  file:
+    enabled: true
+    path: "plugins/MochiLinkConnector/logs/"
+    maxSize: "10MB"
+    maxFiles: 5
+
+# 缓存配置 / Cache Configuration
+cache:
+  # 玩家信息缓存 / Player info cache
+  playerInfo:
+    enabled: true
+    maxSize: 1000
+    ttl: 300  # 生存时间（秒） / Time to live (seconds)
+  
+  # 权限缓存 / Permission cache
+  permissions:
+    enabled: true
+    maxSize: 500
+    ttl: 600
+
+# 高级配置 / Advanced Configuration
+advanced:
+  # 线程池配置 / Thread pool configuration
+  threadPool:
+    coreSize: 2
+    maxSize: 10
+    keepAliveTime: 60
+  
+  # 消息队列配置 / Message queue configuration
+  messageQueue:
+    maxSize: 1000
+    batchSize: 50
+    flushInterval: 1000  # 毫秒 / milliseconds
+  
+  # 心跳配置 / Heartbeat configuration
+  heartbeat:
+    enabled: true
+    interval: 30  # 秒 / seconds
+    timeout: 10   # 秒 / seconds
+
+# 开发配置 / Development Configuration
+development:
+  # 是否启用开发模式 / Enable development mode
+  enabled: false
+  
+  # 模拟延迟（毫秒） / Simulate latency (milliseconds)
+  simulateLatency: 0
+  
+  # 模拟丢包率（0.0-1.0） / Simulate packet loss rate (0.0-1.0)
+  simulatePacketLoss: 0.0

@@ -77,6 +77,10 @@ export interface Player {
   edition: 'Java' | 'Bedrock';
   deviceType?: string;
   ipAddress?: string;
+  health?: number;         // 玩家生命值
+  level?: number;          // 玩家等级
+  gameMode?: string;       // 游戏模式
+  isOnline?: boolean;      // 是否在线
 }
 
 export interface PlayerDetail extends Player {

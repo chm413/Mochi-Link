@@ -1,0 +1,47 @@
+# Mochi-Link PMMP Connector Configuration
+# 大福连 PMMP 版连接器配置文件
+
+# Mochi-Link Management Server Connection
+# 大福连管理服务器连接配置
+mochi-link-host: "localhost"
+mochi-link-port: 25580
+mochi-link-path: "/ws"
+use-ssl: false
+
+# Server Identification
+# 服务器标识
+# server-id will be auto-generated if not set
+# server-id 如果未设置将自动生成
+server-id: ""
+server-name: "PMMP Server"
+
+# Authentication
+# 认证配置
+# Get your auth token from Mochi-Link management panel
+# 从大福连管理面板获取认证令牌
+auth-token: "your-auth-token-here"
+
+# Connection Behavior
+# 连接行为配置
+timeout: 10000  # Connection timeout in milliseconds / 连接超时（毫秒）
+retry-attempts: 10  # Maximum reconnection attempts / 最大重连次数
+retry-delay: 5000  # Delay between reconnection attempts in milliseconds / 重连延迟（毫秒）
+auto-reconnect: true  # Enable automatic reconnection / 启用自动重连
+reconnect-interval: 30  # Reconnection check interval in seconds / 重连检查间隔（秒）
+
+# Performance Monitoring
+# 性能监控配置
+enable-monitoring: true  # Enable performance monitoring / 启用性能监控
+monitoring-interval: 30  # Monitoring report interval in seconds / 监控报告间隔（秒）
+
+# Event Forwarding
+# 事件转发配置
+forward-events:
+  player-join: true
+  player-leave: true
+  player-chat: true
+  player-death: true
+
+# Logging
+# 日志配置
+debug-mode: false  # Enable debug logging / 启用调试日志

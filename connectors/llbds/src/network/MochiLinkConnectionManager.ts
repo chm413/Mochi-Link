@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import { EventEmitter } from 'events';
 import * as winston from 'winston';
 import { LLBDSConfig } from '../config/LLBDSConfig';
+import { ReconnectionManager, ReconnectionConfig } from '../common/ReconnectionManager';
 
 /**
  * Mochi-Link Connection Manager
@@ -19,9 +20,7 @@ export class MochiLinkConnectionManager extends EventEmitter {
     private _isConnected: boolean = false;
     private _isConnecting: boolean = false;
     
-    private reconnectAttempts: number = 0;
-    private maxReconnectAttempts: number = 10;
-    private reconnectDelay: number = 5000;
+    private reconnectionManager: ReconnectionManager;
     private heartbeatInterval: NodeJS.Timeout | null = null;
     private connectionTimeout: NodeJS.Timeout | null = null;
     
@@ -32,8 +31,38 @@ export class MochiLinkConnectionManager extends EventEmitter {
         super();
         this.config = config;
         this.logger = logger;
-        this.maxReconnectAttempts = config.getRetryAttempts();
-        this.reconnectDelay = config.getRetryDelay();
+        
+        // 初始化重连管理器
+        const reconnectionConfig: ReconnectionConfig = {
+            baseInterval: config.getRetryDelay(),
+            maxAttempts: config.getRetryAttempts(),
+            backoffMultiplier: 1.5,
+            maxInterval: 60000,
+            disableOnMaxAttempts: true
+        };
+        
+        this.reconnectionManager = new ReconnectionManager(
+            logger,
+            reconnectionConfig,
+            {
+                attemptReconnect: async () => {
+                    await this.connect();
+                    return this.isConnected();
+                },
+                onReconnecting: (attempts, nextInterval) => {
+                    this.logger.info(`第 ${attempts} 次重连，${nextInterval}ms 后执行`);
+                },
+                onMaxAttemptsReached: (totalAttempts) => {
+                    this.logger.warn(`达到最大重连次数，总尝试: ${totalAttempts}`);
+                },
+                onReconnectionDisabled: (totalAttempts) => {
+                    this.logger.warn(`重连已禁用，总尝试: ${totalAttempts}`);
+                },
+                onReconnectionEnabled: () => {
+                    this.logger.info('重连已重新启用');
+                }
+            }
+        );
     }
     
     /**
@@ -89,6 +118,9 @@ export class MochiLinkConnectionManager extends EventEmitter {
     public async disconnect(): Promise<void> {
         this.logger.info('Disconnecting from Mochi-Link...');
         
+        // 取消重连
+        this.reconnectionManager.cancel();
+        
         // Clear intervals and timeouts
         this.clearHeartbeat();
         this.clearConnectionTimeout();
@@ -101,7 +133,6 @@ export class MochiLinkConnectionManager extends EventEmitter {
         
         this._isConnected = false;
         this._isConnecting = false;
-        this.reconnectAttempts = 0;
         
         this.emit('disconnect');
     }
@@ -181,7 +212,9 @@ export class MochiLinkConnectionManager extends EventEmitter {
         
         this._isConnected = true;
         this._isConnecting = false;
-        this.reconnectAttempts = 0;
+        
+        // 重置重连状态
+        this.reconnectionManager.reset();
         
         this.clearConnectionTimeout();
         this.startHeartbeat();
@@ -333,9 +366,9 @@ export class MochiLinkConnectionManager extends EventEmitter {
         
         this.emit('disconnect', code, reason);
         
-        // Attempt reconnection if not a normal closure
-        if (code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
-            this.scheduleReconnect();
+        // Attempt reconnection if not a normal closure (remote disconnect)
+        if (code !== 1000) {
+            this.reconnectionManager.scheduleReconnect();
         }
     }
     
@@ -353,28 +386,29 @@ export class MochiLinkConnectionManager extends EventEmitter {
         
         this.emit('error', error);
         
-        // Attempt reconnection
-        if (this.reconnectAttempts < this.maxReconnectAttempts) {
-            this.scheduleReconnect();
-        }
+        // Attempt reconnection on connection failure
+        this.reconnectionManager.scheduleReconnect();
     }
     
     /**
-     * Schedule reconnection attempt
+     * Get reconnection status
      */
-    private scheduleReconnect(): void {
-        this.reconnectAttempts++;
-        const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1); // Exponential backoff
-        
-        this.logger.info(`Scheduling reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms`);
-        
-        setTimeout(() => {
-            if (!this.isConnected && !this.isConnecting) {
-                this.connect().catch(error => {
-                    this.logger.error('Reconnection attempt failed:', error);
-                });
-            }
-        }, delay);
+    public getReconnectionStatus() {
+        return this.reconnectionManager.getStatus();
+    }
+    
+    /**
+     * Enable reconnection
+     */
+    public enableReconnection(): void {
+        this.reconnectionManager.enable();
+    }
+    
+    /**
+     * Disable reconnection
+     */
+    public disableReconnection(): void {
+        this.reconnectionManager.disable();
     }
     
     /**
@@ -489,11 +523,13 @@ export class MochiLinkConnectionManager extends EventEmitter {
      * Get connection statistics
      */
     public getConnectionStats(): any {
+        const reconnectionStatus = this.reconnectionManager.getStatus();
         return {
             connected: this.isConnected,
             connecting: this.isConnecting,
-            reconnectAttempts: this.reconnectAttempts,
-            maxReconnectAttempts: this.maxReconnectAttempts,
+            reconnectAttempts: reconnectionStatus.currentAttempts,
+            totalReconnectAttempts: reconnectionStatus.totalAttempts,
+            reconnectionDisabled: reconnectionStatus.disabled,
             queuedMessages: this.messageQueue.length,
             pendingMessages: this.pendingMessages.size,
             lastConnectTime: this.isConnected ? Date.now() : null
@@ -505,7 +541,7 @@ export class MochiLinkConnectionManager extends EventEmitter {
      */
     public reset(): void {
         this.disconnect();
-        this.reconnectAttempts = 0;
+        this.reconnectionManager.reset();
         this.messageQueue = [];
         this.pendingMessages.clear();
     }

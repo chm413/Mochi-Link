@@ -1,0 +1,51 @@
+# ============================================================================
+# Gradle 本地配置模板
+# ============================================================================
+# 
+# 使用说明:
+# 1. 复制此文件为 gradle.properties.local
+# 2. 根据需要配置代理设置
+# 3. gradle.properties.local 不会被提交到版本控制
+#
+# ============================================================================
+
+# 增加内存配置
+org.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=1G
+
+# 启用并行编译
+org.gradle.parallel=true
+
+# 启用构建缓存
+org.gradle.caching=true
+
+# ============================================================================
+# 代理配置 (可选)
+# ============================================================================
+# 如果需要使用代理，请取消注释并配置以下选项
+
+# HTTP 代理
+#systemProp.http.proxyHost=127.0.0.1
+#systemProp.http.proxyPort=2080
+#systemProp.http.proxyUser=your_username
+#systemProp.http.proxyPassword=your_password
+#systemProp.http.nonProxyHosts=localhost|127.*|[::1]
+
+# HTTPS 代理
+#systemProp.https.proxyHost=127.0.0.1
+#systemProp.https.proxyPort=2080
+#systemProp.https.proxyUser=your_username
+#systemProp.https.proxyPassword=your_password
+
+# SOCKS5 代理 (备用)
+#systemProp.socksProxyHost=127.0.0.1
+#systemProp.socksProxyPort=2080
+
+# ============================================================================
+# JVM 参数中的代理配置 (可选)
+# ============================================================================
+# 如果需要在 JVM 参数中配置代理，请使用以下格式:
+# org.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=1G \
+#   -Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=2080 \
+#   -Dhttp.proxyUser=your_username -Dhttp.proxyPassword=your_password \
+#   -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=2080 \
+#   -Dhttps.proxyUser=your_username -Dhttps.proxyPassword=your_password

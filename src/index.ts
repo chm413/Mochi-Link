@@ -458,7 +458,7 @@ export function apply(ctx: Context, config: PluginConfig) {
       });
     
     // Add server - Level 3 (管理员)
-    ctx.command('mochi.server.add <id> <name>', '添加服务器')
+    ctx.command('mochi.server.add <id> <name:text>', '添加服务器')
       .userFields(['authority'])
       .option('type', '-t <type:string> 服务器类型 (java/bedrock)', { fallback: 'java' })
       .option('core', '-c <core:string> 核心类型 (paper/fabric/forge/folia/nukkit/pmmp/llbds)', { fallback: 'paper' })
@@ -474,7 +474,8 @@ export function apply(ctx: Context, config: PluginConfig) {
         
         if (!id || !name) {
           return '用法: mochi.server.add <id> <name> [-t type] [-c core]\n' +
-                 '示例: mochi.server.add survival 生存服 -t java -c paper';
+                 '示例: mochi.server.add survival 生存服 -t java -c paper\n' +
+                 '      mochi.server.add survival "My Server" -t java -c paper  (名称包含空格时使用引号)';
         }
         
         if (!options) {
@@ -537,7 +538,7 @@ export function apply(ctx: Context, config: PluginConfig) {
       });
     
     // Register server - Level 3 (管理员) - 完整注册（包含连接信息）
-    ctx.command('mochi.server.register <id> <name>', '注册服务器（完整信息）')
+    ctx.command('mochi.server.register <id> <name:text>', '注册服务器（完整信息）')
       .userFields(['authority'])
       .option('host', '--host <host:string> 服务器地址', { fallback: '127.0.0.1' })
       .option('port', '-p <port:number> 服务器端口', { fallback: 25565 })
@@ -981,7 +982,7 @@ export function apply(ctx: Context, config: PluginConfig) {
       });
     
     // Add to whitelist - Level 2 (受信任用户)
-    ctx.command('mochi.whitelist.add [serverId] <player>', '添加白名单')
+    ctx.command('mochi.whitelist.add [serverId] <player:text>', '添加白名单')
       .userFields(['authority'])
       .before(({ session }) => {
         if ((session?.user?.authority ?? 0) < 2) {
@@ -1002,14 +1003,15 @@ export function apply(ctx: Context, config: PluginConfig) {
           targetServerId = await getServerId(session);
           targetPlayer = serverIdOrPlayer;
         } else {
-          // 两个参数，第一个是服务器 ID
-          targetServerId = serverIdOrPlayer;
+          // 两个参数，第一个可能是服务器 ID
+          targetServerId = await getServerId(session, serverIdOrPlayer);
           targetPlayer = player;
         }
         
         if (!targetServerId) {
           return '请指定服务器 ID 或在群组中绑定服务器\n' +
                  '用法: mochi.whitelist.add <serverId> <player>\n' +
+                 '      mochi.whitelist.add <serverId> "Player Name"  (玩家名包含空格时使用引号)\n' +
                  '或在群组中: mochi.whitelist.add <player>';
         }
         
@@ -1075,7 +1077,7 @@ export function apply(ctx: Context, config: PluginConfig) {
       });
     
     // Remove from whitelist - Level 2 (受信任用户)
-    ctx.command('mochi.whitelist.remove [serverId] <player>', '移除白名单')
+    ctx.command('mochi.whitelist.remove [serverId] <player:text>', '移除白名单')
       .userFields(['authority'])
       .before(({ session }) => {
         if ((session?.user?.authority ?? 0) < 2) {
@@ -1223,7 +1225,7 @@ export function apply(ctx: Context, config: PluginConfig) {
       });
     
     // Player info - Level 1 (所有用户可查看)
-    ctx.command('mochi.player.info [serverId] <player>', '查看玩家信息')
+    ctx.command('mochi.player.info [serverId] <player:text>', '查看玩家信息')
       .userFields(['authority'])
       .action(async ({ session }, serverIdOrPlayer, player) => {
         if (!isInitialized || !dbManager) {
@@ -1271,6 +1273,9 @@ export function apply(ctx: Context, config: PluginConfig) {
                      `世界: ${playerInfo.world || '未知'}\n` +
                      `位置: ${playerInfo.position ? `X:${Math.floor(playerInfo.position.x)} Y:${Math.floor(playerInfo.position.y)} Z:${Math.floor(playerInfo.position.z)}` : '未知'}\n` +
                      `延迟: ${playerInfo.ping !== undefined ? `${playerInfo.ping}ms` : '未知'}\n` +
+                     `生命值: ${playerInfo.health !== undefined ? `${playerInfo.health}/20` : '未知'}\n` +
+                     `等级: ${playerInfo.level !== undefined ? playerInfo.level : '未知'}\n` +
+                     `游戏模式: ${playerInfo.gameMode || '未知'}\n` +
                      `OP: ${playerInfo.isOp ? '是' : '否'}\n` +
                      `在线: ${playerInfo.isOnline ? '是' : '否'}\n` +
                      `━━━━━━━━━━━━━━━━━━━━`;
@@ -1288,7 +1293,7 @@ export function apply(ctx: Context, config: PluginConfig) {
       });
     
     // Kick player - Level 3 (管理员)
-    ctx.command('mochi.player.kick [serverId] <player> [reason]', '踢出玩家')
+    ctx.command('mochi.player.kick [serverId] <player:text> [reason:text]', '踢出玩家')
       .userFields(['authority'])
       .before(({ session }) => {
         if ((session?.user?.authority ?? 0) < 3) {
@@ -1319,8 +1324,8 @@ export function apply(ctx: Context, config: PluginConfig) {
             targetPlayer = serverIdOrPlayer;
             kickReason = playerOrReason;
           } else {
-            // 无绑定，第一个是serverId，第二个是player
-            targetServerId = serverIdOrPlayer;
+            // 无绑定，第一个可能是serverId，第二个是player
+            targetServerId = await getServerId(session, serverIdOrPlayer);
             targetPlayer = playerOrReason;
             kickReason = undefined;
           }
@@ -1333,7 +1338,8 @@ export function apply(ctx: Context, config: PluginConfig) {
         
         if (!targetServerId) {
           return '请指定服务器 ID 或在群组中绑定服务器\n' +
-                 '用法: mochi.player.kick [serverId] <player> [reason]';
+                 '用法: mochi.player.kick [serverId] <player> [reason]\n' +
+                 '      mochi.player.kick [serverId] "Player Name" "Kick Reason"  (包含空格时使用引号)';
         }
         
         try {
@@ -1959,6 +1965,210 @@ export function apply(ctx: Context, config: PluginConfig) {
         } catch (error) {
           logger.error('Failed to remove binding:', error);
           return '解除绑定失败';
+        }
+      });
+    
+    // ========================================================================
+    // 简化指令 - 快捷操作
+    // ========================================================================
+    
+    // 添加白名单 - 简化指令 - Level 2 (受信任用户)
+    ctx.command('添加白名单 <player:text>', '快速添加白名单')
+      .alias('白名单添加')
+      .alias('wl')
+      .userFields(['authority'])
+      .before(({ session }) => {
+        if ((session?.user?.authority ?? 0) < 2) {
+          return '权限不足：需要受信任用户权限（等级 2）';
+        }
+      })
+      .action(async ({ session }, player) => {
+        if (!isInitialized || !dbManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!player) {
+          return '用法: 添加白名单 <玩家名>\n' +
+                 '示例: 添加白名单 Steve\n' +
+                 '      添加白名单 "Player Name"  (玩家名包含空格时使用引号)';
+        }
+        
+        // 从群组绑定获取服务器
+        const targetServerId = await getServerId(session);
+        if (!targetServerId) {
+          return '请先在群组中绑定服务器\n' +
+                 '用法: mochi.bind.add <serverId>';
+        }
+        
+        try {
+          const server = await dbManager.getServer(targetServerId);
+          if (!server) {
+            return `服务器 ${targetServerId} 不存在`;
+          }
+          
+          // 调用白名单服务
+          if (serviceManager?.whitelist) {
+            try {
+              await serviceManager.whitelist.addToWhitelist(
+                targetServerId, 
+                player,
+                player,
+                session?.userId || 'system'
+              );
+              
+              // 记录审计日志
+              if (serviceManager?.audit) {
+                await serviceManager.audit.logger.logServerOperation(
+                  targetServerId,
+                  'whitelist.add',
+                  { player: player },
+                  'success',
+                  undefined,
+                  { userId: session?.userId }
+                );
+              }
+              
+              return `✅ 已将 ${player} 添加到服务器 ${server.name} 的白名单`;
+            } catch (error) {
+              logger.error('Failed to add to whitelist:', error);
+              
+              // 记录失败的审计日志
+              if (serviceManager?.audit) {
+                await serviceManager.audit.logger.logServerOperation(
+                  targetServerId,
+                  'whitelist.add',
+                  { player: player },
+                  'failure',
+                  (error as Error).message,
+                  { userId: session?.userId }
+                );
+              }
+              
+              return `❌ 添加到白名单失败: ${(error as Error).message}`;
+            }
+          } else {
+            return `服务器 ${server.name} 的白名单功能需要服务器连接\n` +
+                   `提示: 请确保服务器已通过 WebSocket 连接`;
+          }
+        } catch (error) {
+          logger.error('Failed to add to whitelist:', error);
+          return '添加到白名单失败';
+        }
+      });
+    
+    // 在线玩家 - 简化指令 - Level 1 (所有用户可查看)
+    ctx.command('在线', '查看在线玩家和服务器状态')
+      .alias('online')
+      .alias('玩家')
+      .userFields(['authority'])
+      .action(async ({ session }) => {
+        if (!isInitialized || !dbManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        // 从群组绑定获取服务器
+        const targetServerId = await getServerId(session);
+        if (!targetServerId) {
+          return '请先在群组中绑定服务器\n' +
+                 '用法: mochi.bind.add <serverId>';
+        }
+        
+        try {
+          const server = await dbManager.getServer(targetServerId);
+          if (!server) {
+            return `服务器 ${targetServerId} 不存在`;
+          }
+          
+          if (server.status !== 'online') {
+            return `❌ 服务器 ${server.name} 当前离线`;
+          }
+          
+          // 获取在线玩家
+          if (serviceManager?.player) {
+            try {
+              const players = await serviceManager.player.getOnlinePlayers(targetServerId);
+              
+              // 获取服务器状态（通过 bridge）
+              const bridge = serviceManager.server.getBridge(targetServerId);
+              let serverInfo = null;
+              if (bridge) {
+                try {
+                  serverInfo = await bridge.getServerInfo();
+                } catch (error) {
+                  logger.debug('Failed to get server info:', error);
+                }
+              }
+              
+              // 构建响应消息
+              let response = `📊 服务器状态 - ${server.name}\n`;
+              response += `━━━━━━━━━━━━━━━━━━━━\n`;
+              
+              // 服务器基本信息
+              if (serverInfo) {
+                response += `🎮 版本: ${serverInfo.version || server.core_version || '未知'}\n`;
+                response += `⚙️ 核心: ${serverInfo.coreName || server.core_name}\n`;
+                response += `📈 TPS: ${serverInfo.tps !== undefined ? serverInfo.tps.toFixed(1) : '未知'}\n`;
+                
+                if (serverInfo.memoryUsage) {
+                  const memUsed = (serverInfo.memoryUsage.used / 1024 / 1024).toFixed(0);
+                  const memMax = (serverInfo.memoryUsage.max / 1024 / 1024).toFixed(0);
+                  const memPercent = serverInfo.memoryUsage.percentage?.toFixed(1) || 
+                                    ((serverInfo.memoryUsage.used / serverInfo.memoryUsage.max) * 100).toFixed(1);
+                  response += `💾 内存: ${memUsed}MB / ${memMax}MB (${memPercent}%)\n`;
+                }
+                
+                if (serverInfo.uptime !== undefined) {
+                  const hours = Math.floor(serverInfo.uptime / 3600);
+                  const minutes = Math.floor((serverInfo.uptime % 3600) / 60);
+                  response += `⏱️ 运行时间: ${hours}小时${minutes}分钟\n`;
+                }
+              }
+              
+              response += `━━━━━━━━━━━━━━━━━━━━\n`;
+              
+              // 在线玩家信息
+              if (!players || players.length === 0) {
+                response += `👥 在线玩家: 0 人\n`;
+                response += `\n当前无玩家在线`;
+              } else {
+                const maxPlayers = serverInfo?.maxPlayers || '?';
+                response += `👥 在线玩家: ${players.length} / ${maxPlayers}\n`;
+                response += `━━━━━━━━━━━━━━━━━━━━\n`;
+                
+                players.forEach((player: any, index: number) => {
+                  response += `${index + 1}. ${player.name}`;
+                  
+                  // 添加额外信息（如果有）
+                  const details: string[] = [];
+                  if (player.ping !== undefined) {
+                    details.push(`${player.ping}ms`);
+                  }
+                  if (player.world) {
+                    details.push(player.world);
+                  }
+                  if (player.gameMode) {
+                    details.push(player.gameMode);
+                  }
+                  
+                  if (details.length > 0) {
+                    response += ` (${details.join(', ')})`;
+                  }
+                  
+                  response += '\n';
+                });
+              }
+              
+              return response;
+            } catch (error) {
+              logger.error('Failed to get players:', error);
+              return `❌ 获取在线玩家失败: ${(error as Error).message}`;
+            }
+          } else {
+            return `服务器 ${server.name} 的玩家查询功能需要服务器连接`;
+          }
+        } catch (error) {
+          logger.error('Failed to get online players:', error);
+          return '获取在线玩家失败';
         }
       });
     

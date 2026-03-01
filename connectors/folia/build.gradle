@@ -55,4 +55,7 @@ jar {
     exclude 'META-INF/*.SF'
     exclude 'META-INF/*.DSA'
     exclude 'META-INF/*.RSA'
+    
+    // 设置输出目录到 build/libs
+    destinationDirectory = file("$buildDir/libs")
 }

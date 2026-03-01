@@ -310,4 +310,25 @@ public class MochiLinkPlugin extends JavaPlugin {
         
         return "Unknown";
     }
+
+    /**
+     * Reload plugin configuration
+     */
+    public void reloadPluginConfig() {
+        try {
+            // Reload config from file
+            super.reloadConfig();
+
+            // Reload plugin config
+            if (pluginConfig != null) {
+                pluginConfig.load();
+            }
+
+            getLogger().info("Configuration reloaded successfully.");
+
+        } catch (Exception e) {
+            getLogger().log(Level.WARNING, "Failed to reload configuration", e);
+        }
+    }
+
 }

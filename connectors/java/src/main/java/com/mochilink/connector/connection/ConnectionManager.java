@@ -12,13 +12,15 @@ import org.bukkit.scheduler.BukkitTask;
 import java.net.URI;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
  * Manages WebSocket connections to the Mochi-Link management server
  * 
- * Handles both forward and reverse connection modes, automatic reconnection,
+ * Handles both forward and reverse connection modes, automatic reconnection with exponential backoff,
  * and message routing using the U-WBP v2 protocol.
  */
 public class ConnectionManager {
@@ -37,7 +39,19 @@ public class ConnectionManager {
     private BukkitTask heartbeatTask;
     private BukkitTask reconnectTask;
     
-    private int reconnectAttempts = 0;
+    // 重连状态
+    private final AtomicInteger currentAttempts = new AtomicInteger(0);
+    private final AtomicInteger totalAttempts = new AtomicInteger(0);
+    private final AtomicBoolean isReconnecting = new AtomicBoolean(false);
+    private final AtomicBoolean reconnectDisabled = new AtomicBoolean(false);
+    private final AtomicLong lastAttemptTime = new AtomicLong(0);
+    
+    // 重连配置
+    private final long baseInterval = 5000; // 5秒
+    private final int maxAttempts = 10;
+    private final double backoffMultiplier = 1.5;
+    private final long maxInterval = 60000; // 60秒
+    private final boolean disableOnMaxAttempts = true;
     
     public ConnectionManager(MochiLinkPlugin plugin, PluginConfig config) {
         this.plugin = plugin;
@@ -80,7 +94,7 @@ public class ConnectionManager {
                 
                 if (success) {
                     connected.set(true);
-                    reconnectAttempts = 0;
+                    resetReconnectionState();
                     
                     // Start heartbeat
                     startHeartbeat();
@@ -97,6 +111,12 @@ public class ConnectionManager {
                 
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Connection failed", e);
+                
+                // 连接失败时触发重连
+                if (config.isAutoReconnectEnabled()) {
+                    scheduleReconnection();
+                }
+                
                 return false;
             } finally {
                 connecting.set(false);
@@ -115,11 +135,8 @@ public class ConnectionManager {
         // Stop heartbeat
         stopHeartbeat();
         
-        // Stop reconnect task
-        if (reconnectTask != null) {
-            reconnectTask.cancel();
-            reconnectTask = null;
-        }
+        // Cancel reconnection
+        cancelReconnection();
         
         // Close WebSocket connection
         if (webSocketClient != null) {
@@ -281,31 +298,124 @@ public class ConnectionManager {
     }
     
     /**
-     * Schedule reconnection attempt
+     * Schedule reconnection attempt with exponential backoff
      */
     private void scheduleReconnection() {
-        // Check max reconnect attempts
-        int maxAttempts = config.getMaxReconnectAttempts();
-        if (maxAttempts > 0 && reconnectAttempts >= maxAttempts) {
-            logger.warning("Maximum reconnection attempts reached. Giving up.");
+        // 检查是否已禁用
+        if (reconnectDisabled.get()) {
+            logger.warning("重连已禁用，跳过重连调度");
             return;
         }
         
-        reconnectAttempts++;
-        int interval = config.getReconnectInterval();
+        // 检查是否正在重连
+        if (isReconnecting.get()) {
+            logger.fine("已在重连中，跳过");
+            return;
+        }
         
-        logger.info(String.format("Scheduling reconnection attempt #%d in %d seconds", 
-                                reconnectAttempts, interval));
+        // 检查是否达到最大尝试次数
+        if (currentAttempts.get() >= maxAttempts) {
+            logger.warning("达到最大重连次数 (" + maxAttempts + ")，停止重连");
+            
+            // 自动禁用重连
+            if (disableOnMaxAttempts) {
+                reconnectDisabled.set(true);
+                logger.warning("重连已自动禁用");
+            }
+            
+            return;
+        }
         
+        // 增加尝试计数
+        int attempts = currentAttempts.incrementAndGet();
+        totalAttempts.incrementAndGet();
+        lastAttemptTime.set(System.currentTimeMillis());
+        
+        // 计算指数退避间隔
+        long exponentialInterval = (long) (baseInterval * Math.pow(backoffMultiplier, attempts - 1));
+        long nextInterval = Math.min(exponentialInterval, maxInterval);
+        
+        logger.info(String.format("调度第 %d 次重连，%dms 后执行 (总尝试: %d)", 
+            attempts, nextInterval, totalAttempts.get()));
+        
+        // 标记为重连中
+        isReconnecting.set(true);
+        
+        // 调度重连任务
         reconnectTask = new BukkitRunnable() {
             @Override
             public void run() {
+                isReconnecting.set(false);
+                
                 if (!connected.get()) {
-                    logger.info("Attempting reconnection...");
-                    connect();
+                    logger.info("执行第 " + attempts + " 次重连尝试...");
+                    connect().thenAccept(success -> {
+                        if (success) {
+                            logger.info("重连成功！");
+                        }
+                    });
                 }
             }
-        }.runTaskLaterAsynchronously(plugin, interval * 20L);
+        }.runTaskLaterAsynchronously(plugin, nextInterval / 50); // 50ms per tick
+    }
+    
+    /**
+     * Cancel reconnection
+     */
+    private void cancelReconnection() {
+        if (reconnectTask != null) {
+            reconnectTask.cancel();
+            reconnectTask = null;
+        }
+        isReconnecting.set(false);
+    }
+    
+    /**
+     * Reset reconnection state
+     */
+    private void resetReconnectionState() {
+        cancelReconnection();
+        currentAttempts.set(0);
+        // totalAttempts 和 reconnectDisabled 不重置，用于跟踪生命周期统计
+    }
+    
+    /**
+     * Enable reconnection
+     */
+    public void enableReconnection() {
+        if (!reconnectDisabled.get()) {
+            logger.fine("重连已经是启用状态");
+            return;
+        }
+        
+        reconnectDisabled.set(false);
+        currentAttempts.set(0);
+        
+        logger.info("重连已重新启用");
+    }
+    
+    /**
+     * Disable reconnection
+     */
+    public void disableReconnection() {
+        if (reconnectDisabled.get()) {
+            logger.fine("重连已经是禁用状态");
+            return;
+        }
+        
+        cancelReconnection();
+        reconnectDisabled.set(true);
+        
+        logger.info("重连已手动禁用");
+    }
+    
+    /**
+     * Get reconnection status
+     */
+    public String getReconnectionStatus() {
+        return String.format("ReconnectionStatus{reconnecting=%s, attempts=%d, totalAttempts=%d, disabled=%s, lastAttempt=%d}",
+            isReconnecting.get(), currentAttempts.get(), totalAttempts.get(), 
+            reconnectDisabled.get(), lastAttemptTime.get());
     }
     
     /**
@@ -326,14 +436,14 @@ public class ConnectionManager {
      * Get current reconnection attempts
      */
     public int getReconnectAttempts() {
-        return reconnectAttempts;
+        return currentAttempts.get();
     }
     
     /**
      * Reset reconnection attempts counter
      */
     public void resetReconnectAttempts() {
-        reconnectAttempts = 0;
+        currentAttempts.set(0);
     }
     
     /**
@@ -343,7 +453,9 @@ public class ConnectionManager {
         return new ConnectionStats(
             connected.get(),
             connecting.get(),
-            reconnectAttempts,
+            currentAttempts.get(),
+            totalAttempts.get(),
+            reconnectDisabled.get(),
             webSocketClient != null ? webSocketClient.getConnectionTime() : 0
         );
     }
@@ -355,19 +467,26 @@ public class ConnectionManager {
         private final boolean connected;
         private final boolean connecting;
         private final int reconnectAttempts;
+        private final int totalAttempts;
+        private final boolean reconnectDisabled;
         private final long connectionTime;
         
         public ConnectionStats(boolean connected, boolean connecting, 
-                             int reconnectAttempts, long connectionTime) {
+                             int reconnectAttempts, int totalAttempts,
+                             boolean reconnectDisabled, long connectionTime) {
             this.connected = connected;
             this.connecting = connecting;
             this.reconnectAttempts = reconnectAttempts;
+            this.totalAttempts = totalAttempts;
+            this.reconnectDisabled = reconnectDisabled;
             this.connectionTime = connectionTime;
         }
         
         public boolean isConnected() { return connected; }
         public boolean isConnecting() { return connecting; }
         public int getReconnectAttempts() { return reconnectAttempts; }
+        public int getTotalAttempts() { return totalAttempts; }
+        public boolean isReconnectDisabled() { return reconnectDisabled; }
         public long getConnectionTime() { return connectionTime; }
     }
     

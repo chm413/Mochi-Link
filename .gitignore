@@ -28,13 +28,19 @@ out/
 *.tsbuildinfo
 tsconfig.tsbuildinfo
 
+# ============================================================================
 # Gradle build files
+# ============================================================================
 .gradle/
 **/build/
 !src/**/build/
 gradle-app.setting
 !gradle-wrapper.jar
 .gradletasknamecache
+
+# Local Gradle properties (may contain sensitive proxy credentials)
+gradle.properties.local
+**/gradle.properties.local
 
 # ============================================================================
 # Environment & Configuration Files

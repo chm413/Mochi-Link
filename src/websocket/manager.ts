@@ -41,6 +41,9 @@ export interface ConnectionManagerConfig {
   autoReconnect?: boolean;
   reconnectInterval?: number;
   maxReconnectAttempts?: number;
+  reconnectBackoffMultiplier?: number;
+  maxReconnectInterval?: number;
+  disableReconnectOnMaxAttempts?: boolean;
   
   // Protocol settings
   protocolHandler?: ProtocolHandler;
@@ -101,6 +104,9 @@ export class WebSocketConnectionManager extends EventEmitter {
       autoReconnect: true,
       reconnectInterval: 5000,
       maxReconnectAttempts: 10,
+      reconnectBackoffMultiplier: 1.5,
+      maxReconnectInterval: 60000,
+      disableReconnectOnMaxAttempts: true,
       authenticationRequired: true,
       encryptionEnabled: false,
       heartbeat: {},
@@ -251,6 +257,9 @@ export class WebSocketConnectionManager extends EventEmitter {
         autoReconnect: this.config.autoReconnect,
         reconnectInterval: this.config.reconnectInterval,
         maxReconnectAttempts: this.config.maxReconnectAttempts,
+        reconnectBackoffMultiplier: this.config.reconnectBackoffMultiplier,
+        maxReconnectInterval: this.config.maxReconnectInterval,
+        disableReconnectOnMaxAttempts: this.config.disableReconnectOnMaxAttempts,
         connectionTimeout: this.config.connectionTimeout
       };
 
@@ -428,6 +437,38 @@ export class WebSocketConnectionManager extends EventEmitter {
     };
   }
 
+  /**
+   * Get reconnection status for a specific server
+   */
+  getReconnectionStatus(serverId: string): any {
+    const client = this.clients.get(serverId);
+    if (!client) {
+      return null;
+    }
+
+    return client.getReconnectionStatus();
+  }
+
+  /**
+   * Enable reconnection for a specific server
+   */
+  enableReconnection(serverId: string): void {
+    const client = this.clients.get(serverId);
+    if (client) {
+      client.enableReconnection();
+    }
+  }
+
+  /**
+   * Disable reconnection for a specific server
+   */
+  disableReconnection(serverId: string): void {
+    const client = this.clients.get(serverId);
+    if (client) {
+      client.disableReconnection();
+    }
+  }
+
   // ============================================================================
   // Private Methods
   // ============================================================================
@@ -554,6 +595,18 @@ export class WebSocketConnectionManager extends EventEmitter {
 
     client.on('reconnecting', (attempt, interval) => {
       this.emit('reconnecting', serverConfig.id, attempt, interval);
+    });
+
+    client.on('reconnectionFailed', (error, attempts) => {
+      this.emit('reconnectionFailed', serverConfig.id, error, attempts);
+    });
+
+    client.on('reconnectionDisabled', (error, totalAttempts) => {
+      this.emit('reconnectionDisabled', serverConfig.id, error, totalAttempts);
+    });
+
+    client.on('reconnectionEnabled', () => {
+      this.emit('reconnectionEnabled', serverConfig.id);
     });
   }
 

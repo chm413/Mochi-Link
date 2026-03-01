@@ -10,12 +10,14 @@ import org.java_websocket.handshake.ServerHandshake;
 
 import java.net.URI;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import cn.nukkit.plugin.PluginLogger;
 import cn.nukkit.scheduler.TaskHandler;
 
 /**
  * Manages WebSocket connection to Mochi-Link management server for Nukkit
- * Implements U-WBP v2 protocol
+ * Implements U-WBP v2 protocol with exponential backoff reconnection
  */
 public class NukkitConnectionManager {
     
@@ -29,7 +31,21 @@ public class NukkitConnectionManager {
     private final AtomicBoolean connected = new AtomicBoolean(false);
     private final AtomicBoolean connecting = new AtomicBoolean(false);
     private TaskHandler heartbeatTask;
+    
+    // 重连状态
+    private final AtomicInteger currentAttempts = new AtomicInteger(0);
+    private final AtomicInteger totalAttempts = new AtomicInteger(0);
+    private final AtomicBoolean isReconnecting = new AtomicBoolean(false);
+    private final AtomicBoolean reconnectDisabled = new AtomicBoolean(false);
+    private final AtomicLong lastAttemptTime = new AtomicLong(0);
     private TaskHandler reconnectTask;
+    
+    // 重连配置
+    private final long baseInterval = 5000; // 5秒
+    private final int maxAttempts = 10;
+    private final double backoffMultiplier = 1.5;
+    private final long maxInterval = 60000; // 60秒
+    private final boolean disableOnMaxAttempts = true;
     
     public NukkitConnectionManager(MochiLinkNukkitPlugin plugin, NukkitPluginConfig config) {
         this.plugin = plugin;
@@ -62,6 +78,9 @@ public class NukkitConnectionManager {
                     connected.set(true);
                     connecting.set(false);
                     
+                    // 重置重连状态
+                    resetReconnectionState();
+                    
                     // Send handshake message
                     sendHandshake();
                     
@@ -80,7 +99,7 @@ public class NukkitConnectionManager {
                     connected.set(false);
                     stopHeartbeat();
                     
-                    // Auto reconnect
+                    // 使用指数退避重连
                     if (remote) {
                         scheduleReconnect();
                     }
@@ -99,6 +118,9 @@ public class NukkitConnectionManager {
             logger.error("Failed to connect", e);
             connected.set(false);
             connecting.set(false);
+            
+            // 连接失败时触发重连
+            scheduleReconnect();
         }
     }
     
@@ -149,6 +171,7 @@ public class NukkitConnectionManager {
             sendDisconnect("Plugin disabled");
             
             stopHeartbeat();
+            cancelReconnection(); // 取消重连
             
             if (wsClient != null) {
                 wsClient.close();
@@ -475,20 +498,130 @@ public class NukkitConnectionManager {
     }
     
     /**
-     * Schedule reconnection
+     * Schedule reconnection with exponential backoff
      */
     private void scheduleReconnect() {
-        if (reconnectTask != null) {
-            reconnectTask.cancel();
+        // 检查是否已禁用
+        if (reconnectDisabled.get()) {
+            logger.warning("重连已禁用，跳过重连调度");
+            return;
         }
         
+        // 检查是否正在重连
+        if (isReconnecting.get()) {
+            logger.debug("已在重连中，跳过");
+            return;
+        }
+        
+        // 检查是否达到最大尝试次数
+        if (currentAttempts.get() >= maxAttempts) {
+            logger.warning("达到最大重连次数 (" + maxAttempts + ")，停止重连");
+            
+            // 自动禁用重连
+            if (disableOnMaxAttempts) {
+                reconnectDisabled.set(true);
+                logger.warning("重连已自动禁用");
+            }
+            
+            return;
+        }
+        
+        // 增加尝试计数
+        int attempts = currentAttempts.incrementAndGet();
+        totalAttempts.incrementAndGet();
+        lastAttemptTime.set(System.currentTimeMillis());
+        
+        // 计算指数退避间隔
+        long exponentialInterval = (long) (baseInterval * Math.pow(backoffMultiplier, attempts - 1));
+        long nextInterval = Math.min(exponentialInterval, maxInterval);
+        
+        logger.info("调度第 " + attempts + " 次重连，" + nextInterval + "ms 后执行 (总尝试: " + totalAttempts.get() + ")");
+        
+        // 标记为重连中
+        isReconnecting.set(true);
+        
+        // 调度重连任务 (Nukkit 使用 ticks, 1秒 = 20 ticks)
+        int ticks = (int) (nextInterval / 50); // 50ms per tick
         reconnectTask = plugin.getServer().getScheduler().scheduleDelayedTask(plugin, new Runnable() {
             @Override
             public void run() {
-                logger.info("Attempting to reconnect...");
-                connect();
+                isReconnecting.set(false);
+                
+                try {
+                    logger.info("执行第 " + attempts + " 次重连尝试...");
+                    connect();
+                    
+                    if (connected.get()) {
+                        logger.info("重连成功！");
+                    }
+                } catch (Exception e) {
+                    logger.warning("重连过程中发生异常: " + e.getMessage());
+                }
             }
-        }, 20 * 10);
+        }, ticks);
+    }
+    
+    /**
+     * Cancel reconnection
+     */
+    private void cancelReconnection() {
+        if (reconnectTask != null) {
+            reconnectTask.cancel();
+            reconnectTask = null;
+        }
+        isReconnecting.set(false);
+    }
+    
+    /**
+     * Reset reconnection state
+     */
+    private void resetReconnectionState() {
+        cancelReconnection();
+        currentAttempts.set(0);
+        // totalAttempts 和 reconnectDisabled 不重置，用于跟踪生命周期统计
+    }
+    
+    /**
+     * Enable reconnection
+     */
+    public void enableReconnection() {
+        if (!reconnectDisabled.get()) {
+            logger.debug("重连已经是启用状态");
+            return;
+        }
+        
+        reconnectDisabled.set(false);
+        currentAttempts.set(0);
+        
+        logger.info("重连已重新启用");
+    }
+    
+    /**
+     * Disable reconnection
+     */
+    public void disableReconnection() {
+        if (reconnectDisabled.get()) {
+            logger.debug("重连已经是禁用状态");
+            return;
+        }
+        
+        cancelReconnection();
+        reconnectDisabled.set(true);
+        
+        logger.info("重连已手动禁用");
+    }
+    
+    /**
+     * Get reconnection status
+     */
+    public String getReconnectionStatus() {
+        return "ReconnectionStatus{" +
+               "reconnecting=" + isReconnecting.get() +
+               ", attempts=" + currentAttempts.get() +
+               ", totalAttempts=" + totalAttempts.get() +
+               ", disabled=" + reconnectDisabled.get() +
+               ", lastAttempt=" + lastAttemptTime.get() +
+               "}";
     }
     
     /**

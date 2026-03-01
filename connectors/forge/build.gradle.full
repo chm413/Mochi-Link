@@ -1,0 +1,101 @@
+plugins {
+    id 'java'
+    id 'maven-publish'
+    id 'net.minecraftforge.gradle' version '6.0.+'
+}
+
+version = '1.0.0'
+group = 'com.mochilink'
+
+base {
+    archivesName = 'mochi-link-connector-forge'
+}
+
+minecraft {
+    mappings channel: 'official', version: project.minecraft_version
+    
+    runs {
+        server {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+            
+            mods {
+                mochilink {
+                    source sourceSets.main
+                }
+            }
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        name = 'MinecraftForge'
+        url = 'https://maven.minecraftforge.net'
+    }
+    maven {
+        name = 'Sponge'
+        url = 'https://repo.spongepowered.org/maven'
+    }
+}
+
+configurations {
+    embed
+    implementation.extendsFrom(embed)
+}
+
+dependencies {
+    // Minecraft and Forge
+    minecraft "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
+    
+    // WebSocket client (embedded)
+    implementation 'org.java-websocket:Java-WebSocket:1.5.3'
+    
+    // JSON processing (embedded)
+    implementation 'com.google.code.gson:gson:2.10.1'
+}
+
+def targetJavaVersion = 17
+tasks.withType(JavaCompile).configureEach {
+    it.options.encoding = "UTF-8"
+    if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
+        it.options.release = targetJavaVersion
+    }
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+    }
+    withSourcesJar()
+}
+
+jar {
+    manifest {
+        attributes([
+                "Specification-Title"     : "mochi-link-connector-forge",
+                "Specification-Vendor"    : "chm413",
+                "Specification-Version"   : "1",
+                "Implementation-Title"    : project.name,
+                "Implementation-Version"  : version,
+                "Implementation-Vendor"   : "chm413"
+        ])
+    }
+    
+    finalizedBy 'reobfJar'
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            artifact jar
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/mcmodsrepo"
+        }
+    }
+}

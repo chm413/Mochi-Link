@@ -1,6 +1,7 @@
 plugins {
     id 'java'
     id 'maven-publish'
+    id 'fabric-loom' version '1.7-SNAPSHOT'
 }
 
 version = '1.0.0'
@@ -16,6 +17,10 @@ repositories {
         name = 'Fabric'
         url = 'https://maven.fabricmc.net/'
     }
+    maven {
+        name = 'Sponge'
+        url = 'https://repo.spongepowered.org/maven'
+    }
 }
 
 configurations {
@@ -24,20 +29,21 @@ configurations {
 }
 
 dependencies {
-    // Minecraft server
-    compileOnly 'net.minecraft:minecraft:1.20.1'
-    
-    // Fabric API
-    compileOnly 'net.fabricmc.fabric-api:fabric-api:0.92.2+1.20.1'
+    // Minecraft and mappings
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
     
     // Fabric Loader
-    compileOnly 'net.fabricmc:fabric-loader:0.15.11'
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     
-    // WebSocket client
-    embed 'org.java-websocket:Java-WebSocket:1.5.3'
+    // Fabric API
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
     
-    // JSON processing
-    embed 'com.google.code.gson:gson:2.10.1'
+    // WebSocket client (embedded)
+    include implementation('org.java-websocket:Java-WebSocket:1.5.3')
+    
+    // JSON processing (embedded)
+    include implementation('com.google.code.gson:gson:2.10.1')
 }
 
 def targetJavaVersion = 17
@@ -55,18 +61,23 @@ java {
     withSourcesJar()
 }
 
-jar {
-    from {
-        configurations.embed.collect { it.isDirectory() ? it : zipTree(it) }
+processResources {
+    inputs.property "version", project.version
+    inputs.property "minecraft_version", project.minecraft_version
+    inputs.property "loader_version", project.loader_version
+    
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version,
+               "minecraft_version": project.minecraft_version,
+               "loader_version": project.loader_version
     }
-    
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    
-    exclude 'META-INF/*.SF'
-    exclude 'META-INF/*.DSA'
-    exclude 'META-INF/*.RSA'
-    
+}
+
+jar {
     from("LICENSE") {
         rename { "${it}_${project.archivesBaseName}"}
     }
+    
+    // 设置输出目录到 build/libs
+    destinationDirectory = file("$buildDir/libs")
 }

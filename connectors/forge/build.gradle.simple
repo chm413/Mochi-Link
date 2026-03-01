@@ -1,0 +1,79 @@
+plugins {
+    id 'java'
+    id 'maven-publish'
+}
+
+version = '1.0.0'
+group = 'com.mochilink'
+
+base {
+    archivesName = 'mochi-link-connector-forge'
+}
+
+repositories {
+    mavenCentral()
+}
+
+configurations {
+    embed
+    implementation.extendsFrom(embed)
+}
+
+dependencies {
+    // WebSocket client
+    embed 'org.java-websocket:Java-WebSocket:1.5.3'
+    
+    // JSON processing
+    embed 'com.google.code.gson:gson:2.10.1'
+}
+
+def targetJavaVersion = 17
+tasks.withType(JavaCompile).configureEach {
+    it.options.encoding = "UTF-8"
+    if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
+        it.options.release = targetJavaVersion
+    }
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+    }
+    withSourcesJar()
+}
+
+jar {
+    from {
+        configurations.embed.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    
+    exclude 'META-INF/*.SF'
+    exclude 'META-INF/*.DSA'
+    exclude 'META-INF/*.RSA'
+    
+    manifest {
+        attributes([
+                "Specification-Title"     : "mochi-link-connector-forge",
+                "Specification-Vendor"    : "chm413",
+                "Specification-Version"   : "1",
+                "Implementation-Title"    : project.name,
+                "Implementation-Version"  : version,
+                "Implementation-Vendor"   : "chm413"
+        ])
+    }
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            artifact jar
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/mcmodsrepo"
+        }
+    }
+}

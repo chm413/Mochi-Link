@@ -128,6 +128,11 @@ public class ForgeEventHandler {
      */
     @SubscribeEvent
     public static void onServerStarted(ServerStartedEvent event) {
+        // Set server instance
+        if (mod != null) {
+            mod.setServer(event.getServer());
+        }
+        
         if (mod == null || !mod.getSubscriptionManager().hasSubscription("server.start")) {
             return;
         }
@@ -169,5 +174,10 @@ public class ForgeEventHandler {
         
         connectionManager.sendEvent("server.stop", data);
         logger.info("Server stopping event sent");
+        
+        // Clear server instance
+        if (mod != null) {
+            mod.setServer(null);
+        }
     }
 }

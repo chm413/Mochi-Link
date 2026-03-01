@@ -310,4 +310,25 @@ class MochiLinkPMMPPlugin extends PluginBase {
         
         return "Unknown";
     }
+
+    /**
+     * Reload plugin configuration
+     */
+    public function reloadPluginConfig(): void {
+        try {
+            // Reload config from file
+            $this->reloadConfig();
+
+            // Reload plugin config
+            if ($this->pluginConfig !== null) {
+                $this->pluginConfig->load();
+            }
+
+            $this->getLogger()->info("Configuration reloaded successfully.");
+
+        } catch (\Exception $e) {
+            $this->getLogger()->warning("Failed to reload configuration: " . $e->getMessage());
+        }
+    }
+
 }

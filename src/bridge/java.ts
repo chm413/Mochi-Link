@@ -83,7 +83,56 @@ export class JavaConnectorBridge {
   }
 
   async getPlayerDetail(playerId: string): Promise<any> {
-    return null;
+    if (!this.connectionAdapter || !this.connectionAdapter.sendCommand) {
+      return null;
+    }
+
+    try {
+      // 通过 WebSocket 发送 player.info 请求
+      const requestId = `player-info-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // 创建响应 Promise
+      const responsePromise = new Promise<any>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Player info request timeout'));
+        }, 10000);
+
+        // 临时存储 pending request（需要在 connectionAdapter 中处理）
+        if (this.connectionAdapter.pendingRequests) {
+          this.connectionAdapter.pendingRequests.set(requestId, {
+            resolve,
+            reject,
+            timeout
+          });
+        } else {
+          clearTimeout(timeout);
+          reject(new Error('Connection adapter does not support request-response pattern'));
+        }
+      });
+
+      // 发送请求
+      await this.connectionAdapter.send({
+        type: 'request',
+        id: requestId,
+        op: 'player.info',
+        data: {
+          playerId: playerId
+        },
+        timestamp: Date.now(),
+        serverId: this.config.serverId,
+        version: '2.0'
+      });
+
+      // 等待响应
+      const response = await responsePromise;
+      
+      // 返回玩家详细信息（包含 health, level, gameMode, isOnline 等字段）
+      return response.data?.player || response.data?.playerInfo || null;
+      
+    } catch (error) {
+      console.error(`Failed to get player detail for ${playerId}:`, error);
+      return null;
+    }
   }
 
   getCapabilities(): string[] {

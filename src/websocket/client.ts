@@ -46,6 +46,7 @@ export interface WebSocketClientConfig {
   maxReconnectAttempts?: number;
   reconnectBackoffMultiplier?: number;
   maxReconnectInterval?: number;
+  disableReconnectOnMaxAttempts?: boolean; // Auto-disable reconnect after max attempts
   
   // Heartbeat settings
   heartbeatInterval?: number;
@@ -65,10 +66,13 @@ export interface WebSocketClientConfig {
 
 interface ReconnectionState {
   attempts: number;
+  totalAttempts: number; // Total attempts across all reconnection cycles
   nextInterval: number;
   isReconnecting: boolean;
   timer?: NodeJS.Timeout;
   lastError?: Error;
+  disabled: boolean; // Whether reconnection has been disabled due to max attempts
+  lastAttemptTime?: number; // Timestamp of last reconnection attempt
 }
 
 // ============================================================================
@@ -113,8 +117,10 @@ export class MochiWebSocketClient extends EventEmitter {
 
     this.reconnectionState = {
       attempts: 0,
+      totalAttempts: 0,
       nextInterval: this.config.reconnectInterval || 5000,
-      isReconnecting: false
+      isReconnecting: false,
+      disabled: false
     };
   }
 
@@ -231,16 +237,43 @@ export class MochiWebSocketClient extends EventEmitter {
   getReconnectionStatus(): {
     isReconnecting: boolean;
     attempts: number;
+    totalAttempts: number;
     nextAttemptIn?: number;
     lastError?: string;
+    disabled: boolean;
+    lastAttemptTime?: number;
   } {
     return {
       isReconnecting: this.reconnectionState.isReconnecting,
       attempts: this.reconnectionState.attempts,
+      totalAttempts: this.reconnectionState.totalAttempts,
       nextAttemptIn: this.reconnectionState.timer ? 
         this.reconnectionState.nextInterval : undefined,
-      lastError: this.reconnectionState.lastError?.message
+      lastError: this.reconnectionState.lastError?.message,
+      disabled: this.reconnectionState.disabled,
+      lastAttemptTime: this.reconnectionState.lastAttemptTime
     };
+  }
+
+  /**
+   * Re-enable auto-reconnection after it was disabled
+   */
+  enableReconnection(): void {
+    this.reconnectionState.disabled = false;
+    this.config.autoReconnect = true;
+    this.reconnectionState.attempts = 0;
+    this.reconnectionState.nextInterval = this.config.reconnectInterval || 5000;
+    this.emit('reconnectionEnabled');
+  }
+
+  /**
+   * Manually disable auto-reconnection
+   */
+  disableReconnection(): void {
+    this.reconnectionState.disabled = true;
+    this.config.autoReconnect = false;
+    this.cancelReconnection();
+    this.emit('reconnectionDisabled', undefined, this.reconnectionState.totalAttempts);
   }
 
   // ============================================================================
@@ -449,18 +482,45 @@ export class MochiWebSocketClient extends EventEmitter {
   }
 
   private scheduleReconnection(error: Error): void {
+    // Check if reconnection is disabled
+    if (this.reconnectionState.disabled) {
+      this.emit('reconnectionDisabled', error, this.reconnectionState.totalAttempts);
+      return;
+    }
+
     if (this.reconnectionState.isReconnecting) {
       return;
     }
 
-    if (this.reconnectionState.attempts >= (this.config.maxReconnectAttempts || 10)) {
+    const maxAttempts = this.config.maxReconnectAttempts || 10;
+    
+    // Check if max attempts reached
+    if (this.reconnectionState.attempts >= maxAttempts) {
       this.emit('reconnectionFailed', error, this.reconnectionState.attempts);
+      
+      // Auto-disable reconnection if configured
+      if (this.config.disableReconnectOnMaxAttempts !== false) {
+        this.reconnectionState.disabled = true;
+        this.config.autoReconnect = false;
+        this.emit('reconnectionDisabled', error, this.reconnectionState.totalAttempts);
+      }
+      
       return;
     }
 
     this.reconnectionState.isReconnecting = true;
     this.reconnectionState.lastError = error;
     this.reconnectionState.attempts++;
+    this.reconnectionState.totalAttempts++;
+    this.reconnectionState.lastAttemptTime = Date.now();
+
+    // Calculate exponential backoff interval
+    const baseInterval = this.config.reconnectInterval || 5000;
+    const backoffMultiplier = this.config.reconnectBackoffMultiplier || 1.5;
+    const maxInterval = this.config.maxReconnectInterval || 60000;
+    
+    const exponentialInterval = baseInterval * Math.pow(backoffMultiplier, this.reconnectionState.attempts - 1);
+    this.reconnectionState.nextInterval = Math.min(exponentialInterval, maxInterval);
 
     this.emit('reconnecting', this.reconnectionState.attempts, this.reconnectionState.nextInterval);
 
@@ -470,11 +530,7 @@ export class MochiWebSocketClient extends EventEmitter {
       try {
         await this.connect();
       } catch (reconnectError) {
-        // Update interval for next attempt
-        this.reconnectionState.nextInterval = Math.min(
-          this.reconnectionState.nextInterval * (this.config.reconnectBackoffMultiplier || 1.5),
-          this.config.maxReconnectInterval || 60000
-        );
+        // Reconnection failed, will be scheduled again by connect() method
       }
     }, this.reconnectionState.nextInterval);
   }
@@ -492,5 +548,7 @@ export class MochiWebSocketClient extends EventEmitter {
     this.reconnectionState.attempts = 0;
     this.reconnectionState.nextInterval = this.config.reconnectInterval || 5000;
     this.reconnectionState.lastError = undefined;
+    this.reconnectionState.lastAttemptTime = undefined;
+    // Note: totalAttempts and disabled are NOT reset to track lifetime stats
   }
 }

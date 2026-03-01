@@ -2,6 +2,7 @@ package com.mochilink.connector.forge.connection;
 
 import com.mochilink.connector.forge.MochiLinkForgeMod;
 import com.mochilink.connector.forge.config.ForgeModConfig;
+import com.mochilink.connector.common.ReconnectionManager;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import org.java_websocket.client.WebSocketClient;
@@ -17,7 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Manages WebSocket connection to Mochi-Link management server for Forge
- * Implements U-WBP v2 protocol
+ * Implements U-WBP v2 protocol with exponential backoff reconnection
  */
 public class ForgeConnectionManager {
     
@@ -32,13 +33,52 @@ public class ForgeConnectionManager {
     
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
     private ScheduledFuture<?> heartbeatTask;
-    private ScheduledFuture<?> reconnectTask;
+    
+    // 重连管理器
+    private final ReconnectionManager reconnectionManager;
     
     public ForgeConnectionManager(MochiLinkForgeMod mod, ForgeModConfig config) {
         this.mod = mod;
         this.config = config;
         this.logger = MochiLinkForgeMod.getLogger();
         this.gson = new Gson();
+        
+        // 初始化重连管理器
+        ReconnectionManager.ReconnectionConfig reconnectConfig = 
+            ReconnectionManager.ReconnectionConfig.defaults();
+        
+        this.reconnectionManager = new ReconnectionManager(
+            new org.slf4j.helpers.NOPLogger(), // 转换 SLF4J Logger
+            scheduler,
+            reconnectConfig,
+            new ReconnectionManager.ReconnectionCallback() {
+                @Override
+                public boolean attemptReconnect() {
+                    connect();
+                    return connected.get();
+                }
+                
+                @Override
+                public void onReconnecting(int attempts, long nextInterval) {
+                    logger.info("第 {} 次重连，{}ms 后执行", attempts, nextInterval);
+                }
+                
+                @Override
+                public void onMaxAttemptsReached(int totalAttempts) {
+                    logger.warn("达到最大重连次数，总尝试: {}", totalAttempts);
+                }
+                
+                @Override
+                public void onReconnectionDisabled(int totalAttempts) {
+                    logger.warn("重连已禁用，总尝试: {}", totalAttempts);
+                }
+                
+                @Override
+                public void onReconnectionEnabled() {
+                    logger.info("重连已重新启用");
+                }
+            }
+        );
     }
     
     public void connect() {
@@ -62,6 +102,9 @@ public class ForgeConnectionManager {
                     connected.set(true);
                     connecting.set(false);
                     
+                    // 重置重连状态
+                    reconnectionManager.reset();
+                    
                     // Send handshake message
                     sendHandshake();
                     
@@ -80,9 +123,9 @@ public class ForgeConnectionManager {
                     connected.set(false);
                     stopHeartbeat();
                     
-                    // Auto reconnect
+                    // 使用重连管理器进行自动重连
                     if (remote) {
-                        scheduleReconnect();
+                        reconnectionManager.scheduleReconnect();
                     }
                 }
                 
@@ -99,6 +142,9 @@ public class ForgeConnectionManager {
             logger.error("Failed to connect", e);
             connected.set(false);
             connecting.set(false);
+            
+            // 连接失败时触发重连
+            reconnectionManager.scheduleReconnect();
         }
     }
     
@@ -140,6 +186,7 @@ public class ForgeConnectionManager {
             sendDisconnect("Mod disabled");
             
             stopHeartbeat();
+            reconnectionManager.cancel(); // 取消重连
             scheduler.shutdown();
             
             if (wsClient != null) {
@@ -218,17 +265,84 @@ public class ForgeConnectionManager {
     private void handleRequest(JsonObject request) {
         String op = request.get("op").getAsString();
         String requestId = request.get("id").getAsString();
+        JsonObject data = request.has("data") ? request.getAsJsonObject("data") : new JsonObject();
+        
+        // Get message handler
+        com.mochilink.connector.forge.protocol.ForgeMessageHandler messageHandler = 
+            mod.getMessageHandler();
+        
+        if (messageHandler == null) {
+            logger.warn("Message handler not initialized");
+            sendErrorResponse(requestId, op, "Message handler not available");
+            return;
+        }
+        
+        JsonObject response = null;
         
         switch (op) {
+            case "player.list":
+                response = messageHandler.handlePlayerList(requestId);
+                break;
+            case "player.info":
+                String playerId = data.has("playerId") ? data.get("playerId").getAsString() : null;
+                response = messageHandler.handlePlayerInfo(requestId, playerId);
+                break;
+            case "player.kick":
+                String kickPlayerId = data.has("playerId") ? data.get("playerId").getAsString() : null;
+                String kickReason = data.has("reason") ? data.get("reason").getAsString() : null;
+                response = messageHandler.handlePlayerKick(requestId, kickPlayerId, kickReason);
+                break;
+            case "player.message":
+                String msgPlayerId = data.has("playerId") ? data.get("playerId").getAsString() : null;
+                String message = data.has("message") ? data.get("message").getAsString() : null;
+                response = messageHandler.handlePlayerMessage(requestId, msgPlayerId, message);
+                break;
+            case "whitelist.list":
+                response = messageHandler.handleWhitelistList(requestId);
+                break;
+            case "whitelist.add":
+                String addPlayerName = data.has("playerName") ? data.get("playerName").getAsString() : null;
+                String addPlayerId = data.has("playerId") ? data.get("playerId").getAsString() : null;
+                response = messageHandler.handleWhitelistAdd(requestId, addPlayerName, addPlayerId);
+                break;
+            case "whitelist.remove":
+                String removePlayerName = data.has("playerName") ? data.get("playerName").getAsString() : null;
+                String removePlayerId = data.has("playerId") ? data.get("playerId").getAsString() : null;
+                response = messageHandler.handleWhitelistRemove(requestId, removePlayerName, removePlayerId);
+                break;
+            case "command.execute":
+                String command = data.has("command") ? data.get("command").getAsString() : null;
+                response = messageHandler.handleCommandExecute(requestId, command);
+                break;
+            case "server.info":
+                response = messageHandler.handleServerInfo(requestId);
+                break;
+            case "server.status":
+                response = messageHandler.handleServerStatus(requestId);
+                break;
+            case "server.restart":
+                int restartDelay = data.has("delay") ? data.get("delay").getAsInt() : 10;
+                response = messageHandler.handleServerRestart(requestId, restartDelay);
+                break;
+            case "server.stop":
+                int stopDelay = data.has("delay") ? data.get("delay").getAsInt() : 10;
+                response = messageHandler.handleServerStop(requestId, stopDelay);
+                break;
             case "event.subscribe":
                 handleEventSubscribe(request, requestId);
-                break;
+                return; // Event subscribe handles its own response
             case "event.unsubscribe":
                 handleEventUnsubscribe(request, requestId);
-                break;
+                return; // Event unsubscribe handles its own response
             default:
-                logger.debug("Unhandled request operation: {}", op);
-                break;
+                logger.debug("Unknown operation: {}", op);
+                sendErrorResponse(requestId, op, "Unknown operation: " + op);
+                return;
+        }
+        
+        // Send response if available
+        if (response != null && wsClient != null && wsClient.isOpen()) {
+            wsClient.send(response.toString());
         }
     }
     
@@ -379,15 +493,25 @@ public class ForgeConnectionManager {
         }
     }
     
-    private void scheduleReconnect() {
-        if (reconnectTask != null) {
-            reconnectTask.cancel(false);
-        }
-        
-        reconnectTask = scheduler.schedule(() -> {
-            logger.info("Attempting to reconnect...");
-            connect();
-        }, 10, TimeUnit.SECONDS);
+    /**
+     * 获取重连状态
+     */
+    public ReconnectionManager.ReconnectionStatus getReconnectionStatus() {
+        return reconnectionManager.getStatus();
+    }
+    
+    /**
+     * 启用重连
+     */
+    public void enableReconnection() {
+        reconnectionManager.enable();
+    }
+    
+    /**
+     * 禁用重连
+     */
+    public void disableReconnection() {
+        reconnectionManager.disable();
     }
     
     private String generateId() {

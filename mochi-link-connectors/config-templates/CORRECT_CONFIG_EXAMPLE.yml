@@ -1,0 +1,149 @@
+# ============================================================================
+# Mochi-Link Connector 正确配置示例
+# ============================================================================
+# 
+# ⚠️ 重要提示：
+# 1. 配置路径必须与 Java 代码匹配
+# 2. server_id 和 token 是必需的
+# 3. 使用 authentication.server_id 而不是 server.id
+# 4. 使用 authentication.token 而不是 auth.token
+#
+# ============================================================================
+
+# 连接模式配置
+connection:
+  # 连接模式: forward (连接器连接到 Koishi) 或 reverse (Koishi 连接到连接器)
+  mode: "forward"
+  
+  # 正向连接配置 (连接器 -> Koishi)
+  forward:
+    host: "172.16.200.1"  # ⚠️ Koishi 服务器地址
+    port: 8080            # ⚠️ Koishi WebSocket 端口（默认 8080）
+    ssl: false
+  
+  # 反向连接配置 (Koishi -> 连接器)
+  reverse:
+    port: 25566
+    bind_address: "0.0.0.0"
+    ssl: false
+  
+  # 连接选项
+  options:
+    auto_reconnect: true
+    reconnect_interval: 30
+    max_reconnect_attempts: -1  # -1 表示无限重试
+    connect_timeout: 10000      # 毫秒
+    heartbeat_interval: 30      # 秒
+
+# ============================================================================
+# ⚠️ 认证配置 - 最重要的部分！
+# ============================================================================
+authentication:
+  # API 令牌（从 Koishi 获取）
+  # 使用命令: mochi.server.register <id> <name>
+  # 或: mochi.server.token <id>
+  token: "your-api-token-here"  # ⚠️ 必须是 64 字符的十六进制字符串
+  
+  # 服务器唯一 ID（必须与 Koishi 中注册的 ID 完全一致）
+  server_id: "my-paper-server"  # ⚠️ 区分大小写，必须完全匹配
+  
+  # IP 白名单（可选）
+  ip_whitelist_enabled: false
+
+# ============================================================================
+# 功能配置
+# ============================================================================
+features:
+  # 启用的模块
+  enabled_modules:
+    - "player_management"
+    - "command_execution"
+    - "performance_monitoring"
+    - "whitelist_sync"
+  
+  # 玩家管理
+  player_management:
+    sync_join_leave: true
+    sync_chat: true
+    sync_death: true
+    sync_advancement: true
+  
+  # 命令执行
+  command_execution:
+    allow_console_commands: true
+    command_timeout: 30000
+    command_blacklist:
+      - "stop"
+      - "restart"
+      - "op"
+      - "deop"
+  
+  # 性能监控
+  performance_monitoring:
+    collection_interval: 60
+    enable_tps_monitoring: true
+    enable_memory_monitoring: true
+    enable_player_count_monitoring: true
+
+# ============================================================================
+# 日志配置
+# ============================================================================
+logging:
+  level: "INFO"
+  verbose_connection: false
+  log_events: true
+  log_commands: true
+
+# ============================================================================
+# 安全配置
+# ============================================================================
+security:
+  enable_encryption: false
+  encryption_algorithm: "AES-256-GCM"
+  verify_message_integrity: true
+  allowed_management_ips: []
+
+# ============================================================================
+# 调试配置
+# ============================================================================
+debug:
+  enabled: false
+  save_debug_logs: false
+  debug_log_file: "plugins/MochiLinkConnector/debug.log"
+
+# ============================================================================
+# 配置示例 - Folia 服务器
+# ============================================================================
+# 
+# connection:
+#   mode: "forward"
+#   forward:
+#     host: "172.16.200.1"
+#     port: 8080
+#     ssl: false
+#   options:
+#     auto_reconnect: true
+#     reconnect_interval: 30
+#     heartbeat_interval: 30
+# 
+# authentication:
+#   token: "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2"
+#   server_id: "folia-survival"
+#   ip_whitelist_enabled: false
+# 
+# features:
+#   enabled_modules:
+#     - "player_management"
+#     - "command_execution"
+#     - "performance_monitoring"
+#   player_management:
+#     sync_join_leave: true
+#     sync_chat: true
+#   command_execution:
+#     allow_console_commands: true
+# 
+# logging:
+#   level: "INFO"
+#   verbose_connection: false
+# 
+# ============================================================================

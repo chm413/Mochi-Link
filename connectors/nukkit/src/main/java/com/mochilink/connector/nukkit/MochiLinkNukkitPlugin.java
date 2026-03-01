@@ -288,4 +288,15 @@ public class MochiLinkNukkitPlugin extends PluginBase {
         
         return "Unknown";
     }
+    
+    /**
+     * Reload plugin configuration
+     */
+    public void reloadPluginConfig() {
+        getLogger().info("Reloading plugin configuration...");
+        reloadConfig();
+        if (pluginConfig != null) {
+            pluginConfig = new NukkitPluginConfig(this);
+        }
+    }
 }

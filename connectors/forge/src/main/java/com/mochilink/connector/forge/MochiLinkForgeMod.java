@@ -29,6 +29,8 @@ public class MochiLinkForgeMod {
     private ForgeConnectionManager connectionManager;
     private SubscriptionManager subscriptionManager;
     private ForgeEventHandler eventHandler;
+    private com.mochilink.connector.forge.protocol.ForgeMessageHandler messageHandler;
+    private net.minecraft.server.MinecraftServer server;
     private boolean initialized = false;
     
     public void onInitialize() {
@@ -46,6 +48,9 @@ public class MochiLinkForgeMod {
             
             // Initialize connection manager
             connectionManager = new ForgeConnectionManager(this, config);
+            
+            // Initialize message handler
+            messageHandler = new com.mochilink.connector.forge.protocol.ForgeMessageHandler(this, connectionManager);
             
             // Initialize event handler
             eventHandler = new ForgeEventHandler(this, connectionManager);
@@ -96,11 +101,68 @@ public class MochiLinkForgeMod {
         return eventHandler;
     }
     
+    public com.mochilink.connector.forge.protocol.ForgeMessageHandler getMessageHandler() {
+        return messageHandler;
+    }
+    
+    public net.minecraft.server.MinecraftServer getServer() {
+        return server;
+    }
+    
+    public void setServer(net.minecraft.server.MinecraftServer server) {
+        this.server = server;
+    }
+    
     public boolean isInitialized() {
         return initialized;
     }
     
     public static Logger getLogger() {
         return LOGGER;
+    }
+    
+    /**
+     * Check if connected to management server
+     */
+    public boolean isConnectedToManagement() {
+        return connectionManager != null && connectionManager.isConnected();
+    }
+    
+    /**
+     * Get connection status
+     */
+    public String getConnectionStatus() {
+        if (connectionManager == null) {
+            return "Not initialized";
+        }
+        return connectionManager.isConnected() ? "Connected" : "Disconnected";
+    }
+    
+    /**
+     * Check if mod is enabled
+     */
+    public boolean isModEnabled() {
+        return initialized;
+    }
+    
+    /**
+     * Reconnect to management server
+     */
+    public void reconnect() {
+        if (connectionManager != null) {
+            LOGGER.info("Reconnecting to management server...");
+            connectionManager.disconnect();
+            connectionManager.connect();
+        }
+    }
+    
+    /**
+     * Reload configuration
+     */
+    public void reloadConfig() {
+        if (config != null) {
+            LOGGER.info("Reloading configuration...");
+            config.load();
+        }
     }
 }
