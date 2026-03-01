@@ -257,7 +257,10 @@ audit-logs/
 
 # Performance monitoring data
 metrics/
-monitoring/
+# monitoring/  # Commented out: conflicts with source code directories
+# Only ignore monitoring data in root and specific locations
+/monitoring/
+data/monitoring/
 
 # ============================================================================
 # Docker
