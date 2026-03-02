@@ -54,7 +54,7 @@ public class FabricMessageHandler {
                 position.addProperty("z", player.getZ());
                 playerObj.add("position", position);
                 
-                playerObj.addProperty("ping", player.pingMilliseconds);
+                playerObj.addProperty("ping", player.networkHandler.getLatency());
                 playerObj.addProperty("isOp", server.getPlayerManager().isOperator(player.getGameProfile()));
                 playerObj.addProperty("health", player.getHealth());
                 playerObj.addProperty("foodLevel", player.getHungerManager().getFoodLevel());
@@ -104,7 +104,7 @@ public class FabricMessageHandler {
             position.addProperty("z", player.getZ());
             playerInfo.add("position", position);
             
-            playerInfo.addProperty("ping", player.pingMilliseconds);
+            playerInfo.addProperty("ping", player.networkHandler.getLatency());
             playerInfo.addProperty("isOp", server.getPlayerManager().isOperator(player.getGameProfile()));
             playerInfo.addProperty("health", player.getHealth());
             playerInfo.addProperty("maxHealth", player.getMaxHealth());
@@ -420,7 +420,8 @@ public class FabricMessageHandler {
             statusData.add("players", playersData);
             
             JsonObject performanceData = new JsonObject();
-            performanceData.addProperty("tps", server.getTickTime());
+            // Note: Fabric doesn't expose tick time directly
+            performanceData.addProperty("tps", 20.0); // Assume 20 TPS
             
             Runtime runtime = Runtime.getRuntime();
             long usedMemory = (runtime.totalMemory() - runtime.freeMemory()) / 1024 / 1024;

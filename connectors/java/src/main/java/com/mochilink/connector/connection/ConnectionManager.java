@@ -412,10 +412,8 @@ public class ConnectionManager {
     /**
      * Get reconnection status
      */
-    public String getReconnectionStatus() {
-        return String.format("ReconnectionStatus{reconnecting=%s, attempts=%d, totalAttempts=%d, disabled=%s, lastAttempt=%d}",
-            isReconnecting.get(), currentAttempts.get(), totalAttempts.get(), 
-            reconnectDisabled.get(), lastAttemptTime.get());
+    public ReconnectionManager.ReconnectionStatus getReconnectionStatus() {
+        return reconnectionManager.getStatus();
     }
     
     /**

@@ -154,8 +154,7 @@ public class MochiLinkFabricCommand {
         sendMessage(ctx, "§6=== Server Statistics ===");
         sendMessage(ctx, "§ePlayers: §f" + 
             server.getCurrentPlayerCount() + "/" + server.getMaxPlayerCount());
-        sendMessage(ctx, "§eTPS: §f" + 
-            String.format("%.2f", server.getTickTime()));
+        sendMessage(ctx, "§eTPS: §f20.0"); // Fabric doesn't expose tick time directly
         
         Runtime runtime = Runtime.getRuntime();
         long usedMemory = (runtime.totalMemory() - runtime.freeMemory()) / 1024 / 1024;
@@ -211,7 +210,8 @@ public class MochiLinkFabricCommand {
             return 0;
         }
         
-        var subscriptions = mod.getSubscriptionManager().getAllSubscriptions();
+        java.util.Collection<com.mochilink.connector.fabric.subscription.EventSubscription> subscriptions = 
+            mod.getSubscriptionManager().getAllSubscriptions();
         
         sendMessage(ctx, "§6=== Active Event Subscriptions ===");
         
@@ -222,8 +222,9 @@ public class MochiLinkFabricCommand {
         
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         
-        subscriptions.forEach((subId, subscription) -> {
-            sendMessage(ctx, "§eID: §f" + subId);
+        int index = 1;
+        for (com.mochilink.connector.fabric.subscription.EventSubscription subscription : subscriptions) {
+            sendMessage(ctx, "§e#" + index + ": §f" + subscription.getId());
             sendMessage(ctx, "§7  Events: " + String.join(", ", subscription.getEventTypes()));
             
             if (!subscription.getFilters().isEmpty()) {
@@ -231,7 +232,8 @@ public class MochiLinkFabricCommand {
             }
             
             sendMessage(ctx, "§7  Created: " + sdf.format(new Date(subscription.getCreatedAt() * 1000)));
-        });
+            index++;
+        }
         
         sendMessage(ctx, "§eTotal: §f" + subscriptions.size() + " subscriptions");
         

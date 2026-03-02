@@ -271,7 +271,7 @@ public class MochiLinkFoliaCommand implements CommandExecutor, TabCompleter {
             return;
         }
         
-        java.util.Collection<com.mochilink.connector.subscription.EventSubscription> subscriptions = 
+        java.util.Collection<com.mochilink.connector.folia.subscription.EventSubscription> subscriptions = 
             plugin.getSubscriptionManager().getAllSubscriptions();
         
         sender.sendMessage(ChatColor.GOLD + "=== Active Event Subscriptions ===");
@@ -281,7 +281,7 @@ public class MochiLinkFoliaCommand implements CommandExecutor, TabCompleter {
             return;
         }
         
-        for (com.mochilink.connector.subscription.EventSubscription subscription : subscriptions) {
+        for (com.mochilink.connector.folia.subscription.EventSubscription subscription : subscriptions) {
             sender.sendMessage(ChatColor.YELLOW + "ID: " + ChatColor.WHITE + subscription.getId());
             sender.sendMessage(ChatColor.GRAY + "  Events: " + String.join(", ", subscription.getEventTypes()));
             

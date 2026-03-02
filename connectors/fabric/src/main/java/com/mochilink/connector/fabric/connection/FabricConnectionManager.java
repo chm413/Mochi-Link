@@ -48,7 +48,7 @@ public class FabricConnectionManager {
             ReconnectionManager.ReconnectionConfig.defaults();
         
         this.reconnectionManager = new ReconnectionManager(
-            new org.slf4j.helpers.NOPLogger(), // 转换 SLF4J Logger
+            java.util.logging.Logger.getLogger("MochiLink-Fabric"),
             scheduler,
             reconnectConfig,
             new ReconnectionManager.ReconnectionCallback() {

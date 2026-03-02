@@ -5,6 +5,8 @@ package com.mochilink.connector.fabric.config;
  */
 public class FabricModConfig {
     
+    private String serverId = "fabric-server";
+    private String serverName = "Fabric Server";
     private String serverHost = "localhost";
     private int serverPort = 8080;
     private String serverToken = "";
@@ -20,6 +22,10 @@ public class FabricModConfig {
         // TODO: Load from config file
     }
     
+    public String getServerId() { return serverId; }
+    public String getServerName() { return serverName; }
+    public String getMochiLinkHost() { return serverHost; }
+    public int getMochiLinkPort() { return serverPort; }
     public String getServerHost() { return serverHost; }
     public int getServerPort() { return serverPort; }
     public String getServerToken() { return serverToken; }
