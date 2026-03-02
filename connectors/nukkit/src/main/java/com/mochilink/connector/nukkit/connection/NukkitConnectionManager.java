@@ -614,14 +614,18 @@ public class NukkitConnectionManager {
     /**
      * Get reconnection status
      */
-    public String getReconnectionStatus() {
-        return "ReconnectionStatus{" +
-               "reconnecting=" + isReconnecting.get() +
-               ", attempts=" + currentAttempts.get() +
-               ", totalAttempts=" + totalAttempts.get() +
-               ", disabled=" + reconnectDisabled.get() +
-               ", lastAttempt=" + lastAttemptTime.get() +
-               "}";
+    public com.mochilink.connector.common.ReconnectionManager.ReconnectionStatus getReconnectionStatus() {
+        long nextInterval = (long) (baseInterval * Math.pow(backoffMultiplier, currentAttempts.get()));
+        nextInterval = Math.min(nextInterval, maxInterval);
+        
+        return new com.mochilink.connector.common.ReconnectionManager.ReconnectionStatus(
+            isReconnecting.get(),
+            currentAttempts.get(),
+            totalAttempts.get(),
+            nextInterval,
+            reconnectDisabled.get(),
+            lastAttemptTime.get()
+        );
     }
     
     /**

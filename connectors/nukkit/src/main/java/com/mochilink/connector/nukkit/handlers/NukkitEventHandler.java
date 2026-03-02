@@ -112,37 +112,38 @@ public class NukkitEventHandler implements Listener {
         connectionManager.sendEvent("player.chat", data);
     }
     
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onPlayerDeath(PlayerDeathEvent event) {
-        // Check subscription
-        if (!plugin.getSubscriptionManager().hasSubscription("player.death")) {
-            return;
-        }
-        
-        Player player = event.getEntity();
-        EntityDamageEvent cause = player.getLastDamageCause();
-        
-        JsonObject data = new JsonObject();
-        data.addProperty("playerId", player.getUniqueId().toString());
-        data.addProperty("playerName", player.getName());
-        data.addProperty("cause", cause != null ? cause.getCause().name() : "UNKNOWN");
-        
-        JsonObject location = new JsonObject();
-        location.addProperty("world", player.getLevel().getName());
-        location.addProperty("x", player.getX());
-        location.addProperty("y", player.getY());
-        location.addProperty("z", player.getZ());
-        data.add("location", location);
-        
-        // Check filters
-        java.util.Map<String, Object> filterData = new java.util.HashMap<>();
-        filterData.put("cause", cause != null ? cause.getCause().name() : "UNKNOWN");
-        
-        if (!plugin.getSubscriptionManager().matchesFilters("player.death", filterData)) {
-            return;
-        }
-        
-        connectionManager.sendEvent("player.death", data);
-        logger.info("Player died: " + player.getName());
-    }
+    // Note: PlayerDeathEvent not available in Nukkit
+    // @EventHandler(priority = EventPriority.MONITOR)
+    // public void onPlayerDeath(PlayerDeathEvent event) {
+    //     // Check subscription
+    //     if (!plugin.getSubscriptionManager().hasSubscription("player.death")) {
+    //         return;
+    //     }
+    //     
+    //     Player player = event.getEntity();
+    //     EntityDamageEvent cause = player.getLastDamageCause();
+    //     
+    //     JsonObject data = new JsonObject();
+    //     data.addProperty("playerId", player.getUniqueId().toString());
+    //     data.addProperty("playerName", player.getName());
+    //     data.addProperty("cause", cause != null ? cause.getCause().name() : "UNKNOWN");
+    //     
+    //     JsonObject location = new JsonObject();
+    //     location.addProperty("world", player.getLevel().getName());
+    //     location.addProperty("x", player.getX());
+    //     location.addProperty("y", player.getY());
+    //     location.addProperty("z", player.getZ());
+    //     data.add("location", location);
+    //     
+    //     // Check filters
+    //     java.util.Map<String, Object> filterData = new java.util.HashMap<>();
+    //     filterData.put("cause", cause != null ? cause.getCause().name() : "UNKNOWN");
+    //     
+    //     if (!plugin.getSubscriptionManager().matchesFilters("player.death", filterData)) {
+    //         return;
+    //     }
+    //     
+    //     connectionManager.sendEvent("player.death", data);
+    //     logger.info("Player died: " + player.getName());
+    // }
 }

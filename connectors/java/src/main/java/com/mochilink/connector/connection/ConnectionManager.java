@@ -412,8 +412,24 @@ public class ConnectionManager {
     /**
      * Get reconnection status
      */
-    public ReconnectionManager.ReconnectionStatus getReconnectionStatus() {
-        return reconnectionManager.getStatus();
+    public com.mochilink.connector.common.ReconnectionManager.ReconnectionStatus getReconnectionStatus() {
+        return new com.mochilink.connector.common.ReconnectionManager.ReconnectionStatus(
+            isReconnecting.get(),
+            currentAttempts.get(),
+            totalAttempts.get(),
+            calculateNextInterval(),
+            reconnectDisabled.get(),
+            lastAttemptTime.get()
+        );
+    }
+    
+    /**
+     * Calculate next reconnection interval
+     */
+    private long calculateNextInterval() {
+        int attempts = currentAttempts.get();
+        long exponentialInterval = (long) (baseInterval * Math.pow(backoffMultiplier, attempts));
+        return Math.min(exponentialInterval, maxInterval);
     }
     
     /**

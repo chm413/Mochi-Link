@@ -105,12 +105,13 @@ public class MochiLinkNukkitCommand extends Command {
             (connected ? TextFormat.GREEN + status : TextFormat.RED + status));
         
         if (plugin.getConnectionManager() != null) {
-            var reconStatus = plugin.getConnectionManager().getReconnectionStatus();
+            com.mochilink.connector.common.ReconnectionManager.ReconnectionStatus reconStatus = 
+                plugin.getConnectionManager().getReconnectionStatus();
             
             sender.sendMessage(TextFormat.YELLOW + "Reconnect Attempts: " + TextFormat.WHITE + 
-                reconStatus.get("currentAttempts") + "/" + reconStatus.get("totalAttempts"));
+                reconStatus.currentAttempts + "/" + reconStatus.totalAttempts);
             sender.sendMessage(TextFormat.YELLOW + "Reconnection: " + 
-                ((Boolean)reconStatus.get("disabled") ? TextFormat.RED + "Disabled" : TextFormat.GREEN + "Enabled"));
+                (reconStatus.disabled ? TextFormat.RED + "Disabled" : TextFormat.GREEN + "Enabled"));
         }
     }
     
@@ -122,8 +123,9 @@ public class MochiLinkNukkitCommand extends Command {
         
         // 如果重连被禁用，先启用它
         if (plugin.getConnectionManager() != null) {
-            var status = plugin.getConnectionManager().getReconnectionStatus();
-            if ((Boolean)status.get("disabled")) {
+            com.mochilink.connector.common.ReconnectionManager.ReconnectionStatus status = 
+                plugin.getConnectionManager().getReconnectionStatus();
+            if (status.disabled) {
                 plugin.getConnectionManager().enableReconnection();
                 sender.sendMessage(TextFormat.GREEN + "Reconnection re-enabled!");
             }
@@ -157,7 +159,7 @@ public class MochiLinkNukkitCommand extends Command {
      * Handle stats subcommand
      */
     private void handleStats(CommandSender sender) {
-        var server = plugin.getServer();
+        cn.nukkit.Server server = plugin.getServer();
         
         sender.sendMessage(TextFormat.GOLD + "=== Server Statistics ===");
         sender.sendMessage(TextFormat.YELLOW + "Players: " + TextFormat.WHITE + 
@@ -215,7 +217,7 @@ public class MochiLinkNukkitCommand extends Command {
             return;
         }
         
-        var config = plugin.getPluginConfig();
+        com.mochilink.connector.nukkit.config.NukkitPluginConfig config = plugin.getPluginConfig();
         
         sender.sendMessage(TextFormat.GOLD + "=== MochiLink Configuration ===");
         sender.sendMessage(TextFormat.YELLOW + "server-id: " + TextFormat.WHITE + config.getServerId());
@@ -267,7 +269,8 @@ public class MochiLinkNukkitCommand extends Command {
             return;
         }
         
-        var subscriptions = plugin.getSubscriptionManager().getAllSubscriptions();
+        java.util.Collection<com.mochilink.connector.nukkit.subscription.EventSubscription> subscriptions = 
+            plugin.getSubscriptionManager().getAllSubscriptions();
         
         sender.sendMessage(TextFormat.GOLD + "=== Active Event Subscriptions ===");
         
@@ -278,8 +281,9 @@ public class MochiLinkNukkitCommand extends Command {
         
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         
-        subscriptions.forEach((subId, subscription) -> {
-            sender.sendMessage(TextFormat.YELLOW + "ID: " + TextFormat.WHITE + subId);
+        int index = 1;
+        for (com.mochilink.connector.nukkit.subscription.EventSubscription subscription : subscriptions) {
+            sender.sendMessage(TextFormat.YELLOW + "#" + index + ": " + TextFormat.WHITE + subscription.getId());
             sender.sendMessage(TextFormat.GRAY + "  Events: " + String.join(", ", subscription.getEventTypes()));
             
             if (!subscription.getFilters().isEmpty()) {
@@ -288,7 +292,8 @@ public class MochiLinkNukkitCommand extends Command {
             
             sender.sendMessage(TextFormat.GRAY + "  Created: " + 
                 sdf.format(new Date(subscription.getCreatedAt() * 1000)));
-        });
+            index++;
+        }
         
         sender.sendMessage(TextFormat.YELLOW + "Total: " + TextFormat.WHITE + subscriptions.size() + " subscriptions");
     }
@@ -304,24 +309,25 @@ public class MochiLinkNukkitCommand extends Command {
         
         if (args.length == 1) {
             // 显示重连状态
-            var status = plugin.getConnectionManager().getReconnectionStatus();
+            com.mochilink.connector.common.ReconnectionManager.ReconnectionStatus status = 
+                plugin.getConnectionManager().getReconnectionStatus();
             
             sender.sendMessage(TextFormat.GOLD + "=== Reconnection Status ===");
             sender.sendMessage(TextFormat.YELLOW + "Enabled: " + 
-                ((Boolean)status.get("disabled") ? TextFormat.RED + "No" : TextFormat.GREEN + "Yes"));
+                (status.disabled ? TextFormat.RED + "No" : TextFormat.GREEN + "Yes"));
             sender.sendMessage(TextFormat.YELLOW + "Currently Reconnecting: " + 
-                ((Boolean)status.get("isReconnecting") ? TextFormat.GREEN + "Yes" : TextFormat.GRAY + "No"));
+                (status.isReconnecting ? TextFormat.GREEN + "Yes" : TextFormat.GRAY + "No"));
             sender.sendMessage(TextFormat.YELLOW + "Current Attempts: " + TextFormat.WHITE + 
-                status.get("currentAttempts"));
+                status.currentAttempts);
             sender.sendMessage(TextFormat.YELLOW + "Total Attempts: " + TextFormat.WHITE + 
-                status.get("totalAttempts"));
+                status.totalAttempts);
             sender.sendMessage(TextFormat.YELLOW + "Next Interval: " + TextFormat.WHITE + 
-                status.get("nextInterval") + "ms");
+                status.nextInterval + "ms");
             
-            if ((Long)status.get("lastAttemptTime") > 0) {
+            if (status.lastAttemptTime > 0) {
                 SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
                 sender.sendMessage(TextFormat.YELLOW + "Last Attempt: " + TextFormat.WHITE + 
-                    sdf.format(new Date((Long)status.get("lastAttemptTime"))));
+                    sdf.format(new Date(status.lastAttemptTime)));
             }
             
             return;

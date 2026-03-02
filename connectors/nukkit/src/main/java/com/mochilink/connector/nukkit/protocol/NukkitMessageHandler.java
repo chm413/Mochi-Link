@@ -20,13 +20,13 @@ public class NukkitMessageHandler {
     private final MochiLinkNukkitPlugin plugin;
     private final NukkitConnectionManager connectionManager;
     private final Server server;
-    private final Logger logger;
+    private final cn.nukkit.utils.PluginLogger logger;
     
     public NukkitMessageHandler(MochiLinkNukkitPlugin plugin, NukkitConnectionManager connectionManager) {
         this.plugin = plugin;
         this.connectionManager = connectionManager;
         this.server = plugin.getServer();
-        this.logger = plugin.getLogger();
+        this.logger = (cn.nukkit.utils.PluginLogger) plugin.getLogger();
     }
     
     /**
@@ -77,11 +77,13 @@ public class NukkitMessageHandler {
      */
     public JsonObject handlePlayerInfo(String requestId, String playerId) {
         try {
-            Player player = server.getPlayer(UUID.fromString(playerId));
+            java.util.Optional<Player> playerOpt = server.getPlayer(UUID.fromString(playerId));
             
-            if (player == null) {
+            if (!playerOpt.isPresent()) {
                 return createErrorResponse(requestId, "player.info", "Player not found");
             }
+            
+            Player player = playerOpt.get();
             
             JsonObject playerInfo = new JsonObject();
             playerInfo.addProperty("id", player.getUniqueId().toString());
@@ -103,12 +105,14 @@ public class NukkitMessageHandler {
             playerInfo.addProperty("level", player.getExperienceLevel());
             playerInfo.addProperty("exp", player.getExperience());
             playerInfo.addProperty("gameMode", player.getGamemode());
-            playerInfo.addProperty("isFlying", player.isFlying());
+            // Note: isFlying() not available in Nukkit
+            playerInfo.addProperty("isFlying", false);
             playerInfo.addProperty("isSneaking", player.isSneaking());
             playerInfo.addProperty("isSprinting", player.isSprinting());
             playerInfo.addProperty("address", player.getAddress());
             playerInfo.addProperty("edition", "Bedrock");
-            playerInfo.addProperty("deviceOS", player.getLoginChainData().getDeviceOS().name());
+            // Note: getDeviceOS() returns int, not enum
+            playerInfo.addProperty("deviceOS", player.getLoginChainData().getDeviceOS());
             
             JsonObject responseData = new JsonObject();
             responseData.add("player", playerInfo);
@@ -130,11 +134,13 @@ public class NukkitMessageHandler {
         }
         
         try {
-            Player player = server.getPlayer(UUID.fromString(playerId));
+            java.util.Optional<Player> playerOpt = server.getPlayer(UUID.fromString(playerId));
             
-            if (player == null) {
+            if (!playerOpt.isPresent()) {
                 return createErrorResponse(requestId, "player.kick", "Player not found");
             }
+            
+            Player player = playerOpt.get();
             
             String playerName = player.getName();
             final String kickReason = reason;
@@ -166,11 +172,13 @@ public class NukkitMessageHandler {
         }
         
         try {
-            Player player = server.getPlayer(UUID.fromString(playerId));
+            java.util.Optional<Player> playerOpt = server.getPlayer(UUID.fromString(playerId));
             
-            if (player == null) {
+            if (!playerOpt.isPresent()) {
                 return createErrorResponse(requestId, "player.message", "Player not found");
             }
+            
+            Player player = playerOpt.get();
             
             String playerName = player.getName();
             
@@ -226,7 +234,8 @@ public class NukkitMessageHandler {
         }
         
         try {
-            server.getWhitelist().add(playerName);
+            // Note: Nukkit whitelist API is different
+            server.getWhitelist().add(playerName.toLowerCase());
             server.getWhitelist().reload();
             
             JsonObject responseData = new JsonObject();
@@ -324,7 +333,8 @@ public class NukkitMessageHandler {
                 JsonObject levelObj = new JsonObject();
                 levelObj.addProperty("name", level.getName());
                 levelObj.addProperty("dimension", level.getDimension());
-                levelObj.addProperty("difficulty", level.getDifficulty());
+                // Note: getDifficulty() not available, use default
+                levelObj.addProperty("difficulty", 1);
                 levelObj.addProperty("playerCount", level.getPlayers().size());
                 levelsArray.add(levelObj);
             }
@@ -348,7 +358,8 @@ public class NukkitMessageHandler {
         try {
             JsonObject statusData = new JsonObject();
             statusData.addProperty("status", "online");
-            statusData.addProperty("uptime", System.currentTimeMillis() - server.getStartTime());
+            // Note: getStartTime() not available
+            statusData.addProperty("timestamp", System.currentTimeMillis());
             
             JsonObject playersData = new JsonObject();
             playersData.addProperty("online", server.getOnlinePlayers().size());

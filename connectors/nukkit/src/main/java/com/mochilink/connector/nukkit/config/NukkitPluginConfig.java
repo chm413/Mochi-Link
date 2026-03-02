@@ -12,6 +12,10 @@ public class NukkitPluginConfig {
     private final MochiLinkNukkitPlugin plugin;
     private Config config;
     
+    // Server identification
+    private String serverId;
+    private String serverName;
+    
     // Server connection settings
     private String serverHost;
     private int serverPort;
@@ -37,6 +41,10 @@ public class NukkitPluginConfig {
         plugin.saveDefaultConfig();
         config = plugin.getConfig();
         
+        // Load server identification
+        serverId = config.getString("server.id", "nukkit-server");
+        serverName = config.getString("server.name", "Nukkit Server");
+        
         // Load server connection settings
         serverHost = config.getString("server.host", "localhost");
         serverPort = config.getInt("server.port", 8080);
@@ -55,6 +63,10 @@ public class NukkitPluginConfig {
     }
     
     // Getters
+    public String getServerId() { return serverId; }
+    public String getServerName() { return serverName; }
+    public String getMochiLinkHost() { return serverHost; }
+    public int getMochiLinkPort() { return serverPort; }
     public String getServerHost() { return serverHost; }
     public int getServerPort() { return serverPort; }
     public String getServerToken() { return serverToken; }
