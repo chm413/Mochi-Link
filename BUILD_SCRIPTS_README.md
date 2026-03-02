@@ -1,167 +1,315 @@
-# 构建脚本说明 / Build Scripts Guide
+# Build Scripts Documentation
 
-## 新的统一构建系统 / New Unified Build System
+## Overview
 
-我们已经简化了构建脚本，现在只需要使用一个主脚本：
+This document describes the build scripts used for compiling Mochi-Link connectors across different platforms.
 
-### Windows
+## Build Scripts
 
+### 1. build-all-connectors.sh (Linux/macOS)
+
+Builds all Java-based connectors sequentially.
+
+**Usage:**
 ```bash
-# 构建所有连接器
-build-connectors.bat
-
-# 构建特定连接器
-build-connectors.bat --java
-build-connectors.bat --fabric
-build-connectors.bat --forge
-build-connectors.bat --folia
-build-connectors.bat --nukkit
-build-connectors.bat --llbds
-build-connectors.bat --pmmp
-
-# 收集已构建的连接器
-build-connectors.bat --collect
-
-# 使用本地 Gradle 8.8
-build-connectors.bat --all --local-gradle
-```
-
-### Linux/Mac
-
-```bash
-# 构建所有连接器
+chmod +x build-all-connectors.sh
 ./build-all-connectors.sh
-
-# 查看帮助
-./build-all-connectors.sh --help
 ```
 
-## 已废弃的脚本 / Deprecated Scripts
+**Connectors built:**
+- Java (Paper/Spigot)
+- Folia
+- Nukkit
+- Fabric
+- Forge
 
-以下脚本已被统一脚本替代，建议删除：
+### 2. build-all-connectors.bat (Windows)
 
-### 重复的构建脚本
-- `build-fabric-forge.bat` - 使用 `build-connectors.bat --fabric --forge`
-- `build-fabric-forge-cn.bat` - 使用 `build-connectors.bat --fabric --forge`
-- `build-fabric-no-proxy.bat` - 代理配置现在在 gradle.properties 中
-- `build-fabric-with-proxy.bat` - 代理配置现在在 gradle.properties 中
-- `build-fabric-with-env-proxy.bat` - 代理配置现在在 gradle.properties 中
-- `build-forge-simple.bat` - 使用 `build-connectors.bat --forge`
-- `build-forge-with-local-gradle.bat` - 使用 `build-connectors.bat --forge --local-gradle`
-- `build-all-with-local-gradle.bat` - 使用 `build-connectors.bat --all --local-gradle`
-- `rebuild-connectors.bat` - 使用 `build-connectors.bat --java --folia`
+Windows version of the build script.
 
-### 重复的收集脚本
-- `collect-connectors.bat` - 使用 `build-connectors.bat --collect`
-- `build-all-to-collection.bat` - 使用 `build-connectors.bat --all` 然后 `build-connectors.bat --collect`
+**Usage:**
+```cmd
+build-all-connectors.bat
+```
 
-## GitHub Actions 自动构建
+### 3. build-connectors.bat (Windows)
 
-项目已配置 GitHub Actions 自动构建：
+Alternative Windows build script.
 
-- **主插件**: `.github/workflows/build.yml`
-- **所有连接器**: `.github/workflows/build-connectors.yml`
-- **版本发布**: `.github/workflows/release.yml`
+**Usage:**
+```cmd
+build-connectors.bat
+```
 
-推送代码后会自动触发构建，无需手动运行脚本。
+### 4. build-fabric-forge.sh (Linux/macOS)
 
-## 构建输出
+Specialized script for building Fabric and Forge connectors with proper Gradle version.
 
-### 本地构建
-- 输出目录: `build-output/`
-- 收集目录: `mochi-link-connectors/`
+**Usage:**
+```bash
+chmod +x build-fabric-forge.sh
+./build-fabric-forge.sh
+```
 
-### GitHub Actions
-- 构建产物会自动上传到 GitHub Actions Artifacts
-- Release 时会创建完整的发布包
+**Features:**
+- Uses Gradle 8.8 for compatibility
+- Handles Fabric Loom requirements
+- Creates Forge stub dependencies
 
-## 代理配置
+### 5. connectors/forge/create-stubs.sh
 
-代理配置统一在各连接器的 `gradle.properties` 文件中：
+Creates stub JAR files for Forge and Minecraft APIs used in CI environments.
 
+**Usage:**
+```bash
+cd connectors/forge
+chmod +x create-stubs.sh
+./create-stubs.sh
+```
+
+**Output:**
+- `libs/minecraft-stub.jar` - Minecraft API stubs
+- `libs/forge-stub.jar` - Forge API stubs
+
+**Note:** This script is automatically executed by GitHub Actions during CI builds.
+
+## GitHub Actions Workflow
+
+The `.github/workflows/build-connectors.yml` workflow automatically builds all connectors on push/PR.
+
+**Key features:**
+- Uses Gradle 8.8 for compatibility with Fabric Loom and Forge
+- Automatically copies ReconnectionManager to Forge
+- Generates stub dependencies for Forge in CI
+- Builds all connectors in parallel
+- Creates release packages with all artifacts
+
+**Workflow jobs:**
+1. `build-java-connectors` - Builds Java, Folia, Nukkit
+2. `build-fabric` - Builds Fabric mod
+3. `build-forge` - Builds Forge mod (with stub generation)
+4. `build-llbds` - Builds LLBDS connector
+5. `build-pmmp` - Packages PMMP connector
+6. `create-release-package` - Combines all artifacts
+
+## Gradle Version Requirements
+
+### Gradle 8.8 (Recommended)
+
+Used for all connectors to ensure compatibility:
+- **Fabric**: Requires Gradle 8.x for Loom 1.7-SNAPSHOT
+- **Forge**: Compatible with Gradle 8.x
+- **Java/Folia/Nukkit**: Work with any Gradle 8.x+
+
+### Why not Gradle 9.x?
+
+Gradle 9.3.1 causes issues:
+- Fabric Loom 1.7-SNAPSHOT is not compatible
+- Forge Gradle plugin has compatibility issues
+- Breaking changes in dependency resolution
+
+## Local Development
+
+### Prerequisites
+
+- Java 17 or higher
+- Gradle 8.8 (or use wrapper)
+- Node.js 18+ (for LLBDS)
+- PHP 8.0+ (for PMMP)
+
+### Building Individual Connectors
+
+**Java-based connectors:**
+```bash
+cd connectors/java  # or folia, nukkit, fabric, forge
+gradle clean build
+```
+
+**LLBDS:**
+```bash
+cd connectors/llbds
+npm install
+npm run build
+```
+
+**PMMP:**
+```bash
+# No build required, PHP source files are used directly
+cd connectors/pmmp
+```
+
+### Building All Connectors
+
+**Linux/macOS:**
+```bash
+./build-all-connectors.sh
+```
+
+**Windows:**
+```cmd
+build-all-connectors.bat
+```
+
+## CI/CD Environment
+
+### Environment Variables
+
+The build scripts detect CI environment:
+- `CI=true` - Generic CI indicator
+- `GITHUB_ACTIONS=true` - GitHub Actions specific
+
+### Forge Stub Generation
+
+In CI environments, Forge uses stub dependencies instead of full Minecraft/Forge APIs:
+
+1. `create-stubs.sh` generates minimal stub classes
+2. Stubs provide compile-time type checking
+3. Runtime dependencies are provided by Forge server
+
+**Stub classes include:**
+- Minecraft server classes (MinecraftServer, ServerPlayer, etc.)
+- Forge event classes (PlayerEvent, ServerChatEvent, etc.)
+- Brigadier command classes (CommandDispatcher, etc.)
+
+### Build Artifacts
+
+All build artifacts are uploaded to GitHub Actions:
+- Retention: 30 days for individual connectors
+- Retention: 90 days for combined release package
+
+**Artifact structure:**
+```
+mochi-link-connectors-all/
+├── java-connector/
+│   └── mochi-link-connector-java-1.0.0.jar
+├── folia-connector/
+│   └── mochi-link-connector-folia-1.0.0.jar
+├── nukkit-connector/
+│   └── mochi-link-connector-nukkit-1.0.0.jar
+├── fabric-connector/
+│   └── mochi-link-connector-fabric-1.0.0.jar
+├── forge-connector/
+│   └── mochi-link-connector-forge-1.0.0.jar
+├── llbds-connector/
+│   ├── dist/
+│   └── package.json
+├── pmmp-connector/
+│   └── (PHP source files)
+├── VERSION.txt
+└── README.md
+```
+
+## Troubleshooting
+
+### Gradle Version Issues
+
+**Problem:** Build fails with Gradle 9.x
+```
+FAILURE: Build failed with an exception.
+* What went wrong:
+Plugin [id: 'fabric-loom', version: '1.7-SNAPSHOT'] was not found
+```
+
+**Solution:** Use Gradle 8.8
+```bash
+gradle wrapper --gradle-version 8.8
+./gradlew build
+```
+
+### Forge Stub Issues
+
+**Problem:** Forge build fails with missing Minecraft classes
+
+**Solution:** Ensure stub generation runs before build
+```bash
+cd connectors/forge
+./create-stubs.sh
+gradle build
+```
+
+### Proxy/Network Issues
+
+**Problem:** Build fails with proxy connection errors
+```
+Connect to 127.0.0.1:2080 failed: Connection refused
+```
+
+**Solution:** Remove proxy settings from `gradle.properties`
 ```properties
-# HTTP 代理配置
-systemProp.http.proxyHost=127.0.0.1
-systemProp.http.proxyPort=2080
-systemProp.http.proxyUser=your_username
-systemProp.http.proxyPassword=your_password
-
-systemProp.https.proxyHost=127.0.0.1
-systemProp.https.proxyPort=2080
-systemProp.https.proxyUser=your_username
-systemProp.https.proxyPassword=your_password
+# Remove these lines:
+# systemProp.http.proxyHost=127.0.0.1
+# systemProp.http.proxyPort=2080
 ```
 
-## 迁移指南
+### Encoding Issues
 
-### 从旧脚本迁移
+**Problem:** Chinese characters display incorrectly
 
-| 旧脚本 | 新命令 |
-|--------|--------|
-| `build-fabric-forge.bat` | `build-connectors.bat --fabric --forge` |
-| `build-all-with-local-gradle.bat` | `build-connectors.bat --all --local-gradle` |
-| `collect-connectors.bat` | `build-connectors.bat --collect` |
-| `rebuild-connectors.bat` | `build-connectors.bat --java --folia` |
-
-### 清理旧脚本
-
-运行以下命令删除废弃的脚本：
-
-```bash
-# Windows
-del build-fabric-forge.bat
-del build-fabric-forge-cn.bat
-del build-fabric-no-proxy.bat
-del build-fabric-with-proxy.bat
-del build-fabric-with-env-proxy.bat
-del build-forge-simple.bat
-del build-forge-with-local-gradle.bat
-del build-all-with-local-gradle.bat
-del build-all-to-collection.bat
-del collect-connectors.bat
-del rebuild-connectors.bat
+**Solution:** Ensure UTF-8 encoding in build files
+```gradle
+tasks.withType(JavaCompile).configureEach {
+    it.options.encoding = "UTF-8"
+}
 ```
 
-## 故障排除
+## Best Practices
 
-### Gradle 构建失败
+### For Contributors
 
-1. 检查 Java 版本（需要 Java 17+）
+1. **Test locally before pushing:**
    ```bash
-   java -version
+   ./build-all-connectors.sh
    ```
 
-2. 检查 Gradle 版本
+2. **Use Gradle wrapper:**
    ```bash
-   gradle --version
+   ./gradlew build  # Instead of gradle build
    ```
 
-3. 清理 Gradle 缓存
+3. **Check diagnostics:**
    ```bash
-   gradle clean --no-daemon
+   gradle build --warning-mode all
    ```
 
-### 代理问题
+### For CI/CD
 
-如果遇到网络问题：
+1. **Use specific Gradle version:**
+   ```yaml
+   - uses: gradle/actions/setup-gradle@v3
+     with:
+       gradle-version: '8.8'
+   ```
 
-1. 检查代理配置是否正确
-2. 尝试不使用代理
-3. 使用本地 Gradle: `--local-gradle`
+2. **Allow Forge build to fail gracefully:**
+   ```yaml
+   - name: Build Forge mod
+     continue-on-error: true
+   ```
 
-### LLBDS 构建失败
+3. **Cache Gradle dependencies:**
+   ```yaml
+   - uses: gradle/actions/setup-gradle@v3
+     with:
+       cache-read-only: false
+   ```
 
-确保已安装 Node.js 和 npm：
+## Related Documentation
 
-```bash
-node --version
-npm --version
-```
+- [Quick Build Guide](docs/QUICK_BUILD_GUIDE.md)
+- [Build Environment Setup](docs/BUILD_ENVIRONMENT_SETUP.md)
+- [Fabric/Forge Setup (CN)](docs/FABRIC_FORGE_SETUP_CN.md)
+- [CI Build Fix](CI_BUILD_FIX.md)
+- [Forge Fix Summary](FORGE_FIX_SUMMARY.md)
 
-## 支持
+## Support
 
-如有问题，请查看：
+For build issues:
+1. Check this documentation
+2. Review error logs in GitHub Actions
+3. Open an issue on GitHub with full error output
 
-- [构建环境设置](docs/BUILD_ENVIRONMENT_SETUP.md)
-- [快速构建指南](docs/QUICK_BUILD_GUIDE.md)
-- [GitHub Issues](https://github.com/chm413/Mochi-Link/issues)
+## Version History
+
+- **2026-03-02**: Added Forge stub generation, fixed Gradle version issues
+- **2026-03-01**: Fixed proxy configuration issues in CI
+- **2026-02-28**: Initial build scripts created

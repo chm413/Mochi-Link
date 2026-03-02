@@ -109,6 +109,12 @@ jobs:
           cp connectors/java/src/main/java/com/mochilink/connector/common/ReconnectionManager.java \
              connectors/forge/src/main/java/com/mochilink/connector/common/
       
+      - name: Create Forge stub dependencies
+        working-directory: connectors/forge
+        run: |
+          chmod +x create-stubs.sh
+          bash create-stubs.sh
+      
       - name: Build Forge mod
         working-directory: connectors/forge
         run: gradle build --no-daemon --warning-mode all
