@@ -109,9 +109,9 @@ public class MochiLinkCommand implements CommandExecutor, TabCompleter {
             var reconStatus = plugin.getConnectionManager().getReconnectionStatus();
             
             sender.sendMessage(ChatColor.YELLOW + "Reconnect Attempts: " + ChatColor.WHITE + 
-                reconStatus.get("currentAttempts") + "/" + reconStatus.get("totalAttempts"));
+                reconStatus.currentAttempts + "/" + reconStatus.totalAttempts);
             sender.sendMessage(ChatColor.YELLOW + "Reconnection: " + 
-                ((Boolean)reconStatus.get("disabled") ? ChatColor.RED + "Disabled" : ChatColor.GREEN + "Enabled"));
+                (reconStatus.disabled ? ChatColor.RED + "Disabled" : ChatColor.GREEN + "Enabled"));
         }
     }
     
@@ -124,7 +124,7 @@ public class MochiLinkCommand implements CommandExecutor, TabCompleter {
         // 如果重连被禁用，先启用它
         if (plugin.getConnectionManager() != null) {
             var status = plugin.getConnectionManager().getReconnectionStatus();
-            if ((Boolean)status.get("disabled")) {
+            if (status.disabled) {
                 plugin.getConnectionManager().enableReconnection();
                 sender.sendMessage(ChatColor.GREEN + "Reconnection re-enabled!");
             }
@@ -283,8 +283,9 @@ public class MochiLinkCommand implements CommandExecutor, TabCompleter {
         
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         
-        subscriptions.forEach((subId, subscription) -> {
-            sender.sendMessage(ChatColor.YELLOW + "ID: " + ChatColor.WHITE + subId);
+        int index = 1;
+        for (var subscription : subscriptions) {
+            sender.sendMessage(ChatColor.YELLOW + "#" + index + ": " + ChatColor.WHITE + subscription.getId());
             sender.sendMessage(ChatColor.GRAY + "  Events: " + String.join(", ", subscription.getEventTypes()));
             
             if (!subscription.getFilters().isEmpty()) {
@@ -293,7 +294,8 @@ public class MochiLinkCommand implements CommandExecutor, TabCompleter {
             
             sender.sendMessage(ChatColor.GRAY + "  Created: " + 
                 sdf.format(new Date(subscription.getCreatedAt() * 1000)));
-        });
+            index++;
+        }
         
         sender.sendMessage(ChatColor.YELLOW + "Total: " + ChatColor.WHITE + subscriptions.size() + " subscriptions");
     }
@@ -313,20 +315,20 @@ public class MochiLinkCommand implements CommandExecutor, TabCompleter {
             
             sender.sendMessage(ChatColor.GOLD + "=== Reconnection Status ===");
             sender.sendMessage(ChatColor.YELLOW + "Enabled: " + 
-                ((Boolean)status.get("disabled") ? ChatColor.RED + "No" : ChatColor.GREEN + "Yes"));
+                (status.disabled ? ChatColor.RED + "No" : ChatColor.GREEN + "Yes"));
             sender.sendMessage(ChatColor.YELLOW + "Currently Reconnecting: " + 
-                ((Boolean)status.get("isReconnecting") ? ChatColor.GREEN + "Yes" : ChatColor.GRAY + "No"));
+                (status.isReconnecting ? ChatColor.GREEN + "Yes" : ChatColor.GRAY + "No"));
             sender.sendMessage(ChatColor.YELLOW + "Current Attempts: " + ChatColor.WHITE + 
-                status.get("currentAttempts"));
+                status.currentAttempts);
             sender.sendMessage(ChatColor.YELLOW + "Total Attempts: " + ChatColor.WHITE + 
-                status.get("totalAttempts"));
+                status.totalAttempts);
             sender.sendMessage(ChatColor.YELLOW + "Next Interval: " + ChatColor.WHITE + 
-                status.get("nextInterval") + "ms");
+                status.nextInterval + "ms");
             
-            if ((Long)status.get("lastAttemptTime") > 0) {
+            if (status.lastAttemptTime > 0) {
                 SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
                 sender.sendMessage(ChatColor.YELLOW + "Last Attempt: " + ChatColor.WHITE + 
-                    sdf.format(new Date((Long)status.get("lastAttemptTime"))));
+                    sdf.format(new Date(status.lastAttemptTime)));
             }
             
             return;

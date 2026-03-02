@@ -212,6 +212,31 @@ public class UWBPv2Protocol {
         
         return gson.toJson(message);
     }
+    /**
+         * Create response message with JsonObject data
+         */
+        public String createResponseMessage(String requestId, String op, JsonObject data, boolean success, String error) {
+            JsonObject message = new JsonObject();
+            message.addProperty("type", MESSAGE_TYPE_RESPONSE);
+            message.addProperty("id", requestId);
+            message.addProperty("op", op);
+            message.addProperty("version", PROTOCOL_VERSION);
+            message.addProperty("timestamp", System.currentTimeMillis());
+
+            // Add success field to data if not present
+            if (!data.has("success")) {
+                data.addProperty("success", success);
+            }
+
+            // Add error field if provided
+            if (error != null && !data.has("error")) {
+                data.addProperty("error", error);
+            }
+
+            message.add("data", data);
+
+            return gson.toJson(message);
+        }
     
     /**
      * Create status message

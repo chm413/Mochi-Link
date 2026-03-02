@@ -245,7 +245,7 @@ public class MessageHandler {
             responseData.addProperty("max", plugin.getServer().getMaxPlayers());
             
             String response = protocol.createResponseMessage(
-                requestId, "player.list", responseData, true, null
+                requestId, "player.list", responseData.toString()
             );
             plugin.getConnectionManager().sendMessage(response);
             
@@ -299,7 +299,7 @@ public class MessageHandler {
             responseData.add("player", playerInfo);
             
             String response = protocol.createResponseMessage(
-                requestId, "player.info", responseData, true, null
+                requestId, "player.info", responseData.toString()
             );
             plugin.getConnectionManager().sendMessage(response);
             
@@ -343,7 +343,7 @@ public class MessageHandler {
             responseData.addProperty("reason", kickReason);
             
             String response = protocol.createResponseMessage(
-                requestId, "player.kick", responseData, true, null
+                requestId, "player.kick", responseData.toString()
             );
             plugin.getConnectionManager().sendMessage(response);
             
@@ -375,7 +375,7 @@ public class MessageHandler {
             responseData.addProperty("count", whitelistArray.size());
             
             String response = protocol.createResponseMessage(
-                requestId, "whitelist.list", responseData, true, null
+                requestId, "whitelist.list", responseData.toString()
             );
             plugin.getConnectionManager().sendMessage(response);
             
@@ -413,7 +413,7 @@ public class MessageHandler {
             responseData.addProperty("playerId", player.getUniqueId().toString());
             
             String response = protocol.createResponseMessage(
-                requestId, "whitelist.add", responseData, true, null
+                requestId, "whitelist.add", responseData.toString()
             );
             plugin.getConnectionManager().sendMessage(response);
             
@@ -451,7 +451,7 @@ public class MessageHandler {
             responseData.addProperty("playerId", player.getUniqueId().toString());
             
             String response = protocol.createResponseMessage(
-                requestId, "whitelist.remove", responseData, true, null
+                requestId, "whitelist.remove", responseData.toString()
             );
             plugin.getConnectionManager().sendMessage(response);
             
@@ -470,7 +470,7 @@ public class MessageHandler {
         try {
             JsonObject serverInfo = new JsonObject();
             serverInfo.addProperty("serverId", plugin.getPluginConfig().getServerId());
-            serverInfo.addProperty("name", plugin.getPluginConfig().getServerName());
+            serverInfo.addProperty("name", plugin.getServer().getMotd());
             serverInfo.addProperty("version", plugin.getServer().getVersion());
             serverInfo.addProperty("bukkitVersion", plugin.getServer().getBukkitVersion());
             serverInfo.addProperty("coreType", "Java");
@@ -498,7 +498,7 @@ public class MessageHandler {
             responseData.add("info", serverInfo);
             
             String response = protocol.createResponseMessage(
-                requestId, "server.info", responseData, true, null
+                requestId, "server.info", responseData.toString()
             );
             plugin.getConnectionManager().sendMessage(response);
             
@@ -517,7 +517,8 @@ public class MessageHandler {
         try {
             JsonObject statusData = new JsonObject();
             statusData.addProperty("status", "online");
-            statusData.addProperty("uptime", System.currentTimeMillis() - plugin.getServer().getStartTime());
+            // Note: Server uptime not available in standard Bukkit API
+            statusData.addProperty("timestamp", System.currentTimeMillis());
             
             JsonObject playersData = new JsonObject();
             playersData.addProperty("online", plugin.getServer().getOnlinePlayers().size());
@@ -539,7 +540,7 @@ public class MessageHandler {
             responseData.add("status", statusData);
             
             String response = protocol.createResponseMessage(
-                requestId, "server.status", responseData, true, null
+                requestId, "server.status", responseData.toString()
             );
             plugin.getConnectionManager().sendMessage(response);
             
@@ -853,7 +854,7 @@ public class MessageHandler {
             responseData.addProperty("playerName", playerName);
             
             String response = protocol.createResponseMessage(
-                requestId, "player.message", responseData, true, null
+                requestId, "player.message", responseData.toString()
             );
             plugin.getConnectionManager().sendMessage(response);
             
@@ -878,7 +879,7 @@ public class MessageHandler {
             responseData.addProperty("message", "Server will restart in " + delay + " seconds");
             
             String response = protocol.createResponseMessage(
-                requestId, "server.restart", responseData, true, null
+                requestId, "server.restart", responseData.toString()
             );
             plugin.getConnectionManager().sendMessage(response);
             
@@ -920,7 +921,7 @@ public class MessageHandler {
             responseData.addProperty("message", "Server will stop in " + delay + " seconds");
             
             String response = protocol.createResponseMessage(
-                requestId, "server.stop", responseData, true, null
+                requestId, "server.stop", responseData.toString()
             );
             plugin.getConnectionManager().sendMessage(response);
             
