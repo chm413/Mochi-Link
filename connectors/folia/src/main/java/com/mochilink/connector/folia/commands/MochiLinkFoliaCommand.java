@@ -271,7 +271,8 @@ public class MochiLinkFoliaCommand implements CommandExecutor, TabCompleter {
             return;
         }
         
-        var subscriptions = plugin.getSubscriptionManager().getAllSubscriptions();
+        java.util.Collection<com.mochilink.connector.subscription.EventSubscription> subscriptions = 
+            plugin.getSubscriptionManager().getAllSubscriptions();
         
         sender.sendMessage(ChatColor.GOLD + "=== Active Event Subscriptions ===");
         
@@ -280,7 +281,7 @@ public class MochiLinkFoliaCommand implements CommandExecutor, TabCompleter {
             return;
         }
         
-        subscriptions.forEach(subscription -> {
+        for (com.mochilink.connector.subscription.EventSubscription subscription : subscriptions) {
             sender.sendMessage(ChatColor.YELLOW + "ID: " + ChatColor.WHITE + subscription.getId());
             sender.sendMessage(ChatColor.GRAY + "  Events: " + String.join(", ", subscription.getEventTypes()));
             
@@ -291,7 +292,7 @@ public class MochiLinkFoliaCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(ChatColor.GRAY + "  Created: " + 
                 new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(
                     new java.util.Date(subscription.getCreatedAt())));
-        });
+        }
         
         sender.sendMessage(ChatColor.YELLOW + "Total: " + ChatColor.WHITE + subscriptions.size() + " subscriptions");
     }
