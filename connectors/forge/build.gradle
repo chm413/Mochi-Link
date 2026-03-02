@@ -25,6 +25,9 @@ dependencies {
     
     // JSON processing
     embed 'com.google.code.gson:gson:2.10.1'
+    
+    // SLF4J API (for logging compatibility)
+    compileOnly 'org.slf4j:slf4j-api:2.0.9'
 }
 
 def targetJavaVersion = 17
@@ -76,7 +79,7 @@ publishing {
     }
     repositories {
         maven {
-            url "file://${project.projectDir}/mcmodsrepo"
+            url = "file://${project.projectDir}/mcmodsrepo"
         }
     }
 }

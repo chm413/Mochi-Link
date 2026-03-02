@@ -48,7 +48,7 @@ public class ForgeConnectionManager {
             ReconnectionManager.ReconnectionConfig.defaults();
         
         this.reconnectionManager = new ReconnectionManager(
-            new org.slf4j.helpers.NOPLogger(), // 转换 SLF4J Logger
+            java.util.logging.Logger.getLogger("MochiLink-Forge"),
             scheduler,
             reconnectConfig,
             new ReconnectionManager.ReconnectionCallback() {
