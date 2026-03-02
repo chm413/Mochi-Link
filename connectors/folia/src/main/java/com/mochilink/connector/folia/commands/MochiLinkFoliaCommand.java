@@ -280,8 +280,8 @@ public class MochiLinkFoliaCommand implements CommandExecutor, TabCompleter {
             return;
         }
         
-        subscriptions.forEach((subId, subscription) -> {
-            sender.sendMessage(ChatColor.YELLOW + "ID: " + ChatColor.WHITE + subId);
+        subscriptions.forEach(subscription -> {
+            sender.sendMessage(ChatColor.YELLOW + "ID: " + ChatColor.WHITE + subscription.getId());
             sender.sendMessage(ChatColor.GRAY + "  Events: " + String.join(", ", subscription.getEventTypes()));
             
             if (!subscription.getFilters().isEmpty()) {

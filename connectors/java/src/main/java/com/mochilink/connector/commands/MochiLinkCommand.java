@@ -106,7 +106,8 @@ public class MochiLinkCommand implements CommandExecutor, TabCompleter {
             (connected ? ChatColor.GREEN + status : ChatColor.RED + status));
         
         if (plugin.getConnectionManager() != null) {
-            var reconStatus = plugin.getConnectionManager().getReconnectionStatus();
+            com.mochilink.connector.common.ReconnectionManager.ReconnectionStatus reconStatus = 
+                plugin.getConnectionManager().getReconnectionStatus();
             
             sender.sendMessage(ChatColor.YELLOW + "Reconnect Attempts: " + ChatColor.WHITE + 
                 reconStatus.currentAttempts + "/" + reconStatus.totalAttempts);
@@ -123,7 +124,8 @@ public class MochiLinkCommand implements CommandExecutor, TabCompleter {
         
         // 如果重连被禁用，先启用它
         if (plugin.getConnectionManager() != null) {
-            var status = plugin.getConnectionManager().getReconnectionStatus();
+            com.mochilink.connector.common.ReconnectionManager.ReconnectionStatus status = 
+                plugin.getConnectionManager().getReconnectionStatus();
             if (status.disabled) {
                 plugin.getConnectionManager().enableReconnection();
                 sender.sendMessage(ChatColor.GREEN + "Reconnection re-enabled!");
@@ -158,7 +160,7 @@ public class MochiLinkCommand implements CommandExecutor, TabCompleter {
      * Handle stats subcommand
      */
     private void handleStats(CommandSender sender) {
-        var server = plugin.getServer();
+        org.bukkit.Server server = plugin.getServer();
         
         sender.sendMessage(ChatColor.GOLD + "=== Server Statistics ===");
         sender.sendMessage(ChatColor.YELLOW + "Players: " + ChatColor.WHITE + 
@@ -272,7 +274,8 @@ public class MochiLinkCommand implements CommandExecutor, TabCompleter {
             return;
         }
         
-        var subscriptions = plugin.getSubscriptionManager().getAllSubscriptions();
+        java.util.Collection<com.mochilink.connector.subscription.EventSubscription> subscriptions = 
+            plugin.getSubscriptionManager().getAllSubscriptions();
         
         sender.sendMessage(ChatColor.GOLD + "=== Active Event Subscriptions ===");
         
@@ -284,7 +287,7 @@ public class MochiLinkCommand implements CommandExecutor, TabCompleter {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         
         int index = 1;
-        for (var subscription : subscriptions) {
+        for (com.mochilink.connector.subscription.EventSubscription subscription : subscriptions) {
             sender.sendMessage(ChatColor.YELLOW + "#" + index + ": " + ChatColor.WHITE + subscription.getId());
             sender.sendMessage(ChatColor.GRAY + "  Events: " + String.join(", ", subscription.getEventTypes()));
             
@@ -311,7 +314,8 @@ public class MochiLinkCommand implements CommandExecutor, TabCompleter {
         
         if (args.length == 0) {
             // 显示重连状态
-            var status = plugin.getConnectionManager().getReconnectionStatus();
+            com.mochilink.connector.common.ReconnectionManager.ReconnectionStatus status = 
+                plugin.getConnectionManager().getReconnectionStatus();
             
             sender.sendMessage(ChatColor.GOLD + "=== Reconnection Status ===");
             sender.sendMessage(ChatColor.YELLOW + "Enabled: " + 
