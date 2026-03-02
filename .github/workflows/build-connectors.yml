@@ -105,12 +105,6 @@ jobs:
         with:
           gradle-version: '8.8'
       
-      - name: Copy ReconnectionManager to Forge
-        run: |
-          mkdir -p connectors/forge/src/main/java/com/mochilink/connector/common
-          cp connectors/java/src/main/java/com/mochilink/connector/common/ReconnectionManager.java \
-             connectors/forge/src/main/java/com/mochilink/connector/common/
-      
       - name: Create Forge stub dependencies
         working-directory: connectors/forge
         run: |

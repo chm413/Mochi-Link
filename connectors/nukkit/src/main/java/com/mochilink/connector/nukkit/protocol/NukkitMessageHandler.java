@@ -9,7 +9,6 @@ import com.mochilink.connector.nukkit.MochiLinkNukkitPlugin;
 import com.mochilink.connector.nukkit.connection.NukkitConnectionManager;
 
 import java.util.UUID;
-import java.util.logging.Logger;
 
 /**
  * Nukkit Message Handler
@@ -20,13 +19,13 @@ public class NukkitMessageHandler {
     private final MochiLinkNukkitPlugin plugin;
     private final NukkitConnectionManager connectionManager;
     private final Server server;
-    private final cn.nukkit.utils.PluginLogger logger;
+    private final cn.nukkit.utils.Logger logger;
     
     public NukkitMessageHandler(MochiLinkNukkitPlugin plugin, NukkitConnectionManager connectionManager) {
         this.plugin = plugin;
         this.connectionManager = connectionManager;
         this.server = plugin.getServer();
-        this.logger = (cn.nukkit.utils.PluginLogger) plugin.getLogger();
+        this.logger = plugin.getLogger();
     }
     
     /**
@@ -67,7 +66,7 @@ public class NukkitMessageHandler {
             return createSuccessResponse(requestId, "player.list", responseData);
             
         } catch (Exception e) {
-            logger.log(java.util.logging.Level.WARNING, "Failed to get player list", e);
+            logger.warning("Failed to get player list: " + e.getMessage());
             return createErrorResponse(requestId, "player.list", e.getMessage());
         }
     }
@@ -120,7 +119,7 @@ public class NukkitMessageHandler {
             return createSuccessResponse(requestId, "player.info", responseData);
             
         } catch (Exception e) {
-            logger.log(java.util.logging.Level.WARNING, "Failed to get player info", e);
+            logger.warning("Failed to get player info: " + e.getMessage());
             return createErrorResponse(requestId, "player.info", e.getMessage());
         }
     }
@@ -158,7 +157,7 @@ public class NukkitMessageHandler {
             return createSuccessResponse(requestId, "player.kick", responseData);
             
         } catch (Exception e) {
-            logger.log(java.util.logging.Level.WARNING, "Failed to kick player", e);
+            logger.warning("Failed to kick player: " + e.getMessage());
             return createErrorResponse(requestId, "player.kick", e.getMessage());
         }
     }
@@ -194,7 +193,7 @@ public class NukkitMessageHandler {
             return createSuccessResponse(requestId, "player.message", responseData);
             
         } catch (Exception e) {
-            logger.log(java.util.logging.Level.WARNING, "Failed to send message to player", e);
+            logger.warning("Failed to send message to player: " + e.getMessage());
             return createErrorResponse(requestId, "player.message", e.getMessage());
         }
     }
@@ -220,7 +219,7 @@ public class NukkitMessageHandler {
             return createSuccessResponse(requestId, "whitelist.list", responseData);
             
         } catch (Exception e) {
-            logger.log(java.util.logging.Level.WARNING, "Failed to get whitelist", e);
+            logger.warning("Failed to get whitelist: " + e.getMessage());
             return createErrorResponse(requestId, "whitelist.list", e.getMessage());
         }
     }
@@ -234,8 +233,9 @@ public class NukkitMessageHandler {
         }
         
         try {
-            // Note: Nukkit whitelist API is different
-            server.getWhitelist().add(playerName.toLowerCase());
+            // Nukkit whitelist API: set value in config
+            server.getWhitelist().set(playerName.toLowerCase(), true);
+            server.getWhitelist().save();
             server.getWhitelist().reload();
             
             JsonObject responseData = new JsonObject();
@@ -245,7 +245,7 @@ public class NukkitMessageHandler {
             return createSuccessResponse(requestId, "whitelist.add", responseData);
             
         } catch (Exception e) {
-            logger.log(java.util.logging.Level.WARNING, "Failed to add to whitelist", e);
+            logger.warning("Failed to add to whitelist: " + e.getMessage());
             return createErrorResponse(requestId, "whitelist.add", e.getMessage());
         }
     }
@@ -259,7 +259,8 @@ public class NukkitMessageHandler {
         }
         
         try {
-            server.getWhitelist().remove(playerName);
+            server.getWhitelist().remove(playerName.toLowerCase());
+            server.getWhitelist().save();
             server.getWhitelist().reload();
             
             JsonObject responseData = new JsonObject();
@@ -269,7 +270,7 @@ public class NukkitMessageHandler {
             return createSuccessResponse(requestId, "whitelist.remove", responseData);
             
         } catch (Exception e) {
-            logger.log(java.util.logging.Level.WARNING, "Failed to remove from whitelist", e);
+            logger.warning("Failed to remove from whitelist: " + e.getMessage());
             return createErrorResponse(requestId, "whitelist.remove", e.getMessage());
         }
     }
@@ -304,7 +305,7 @@ public class NukkitMessageHandler {
             return createSuccessResponse(requestId, "command.execute", responseData);
             
         } catch (Exception e) {
-            logger.log(java.util.logging.Level.WARNING, "Failed to execute command", e);
+            logger.warning("Failed to execute command: " + e.getMessage());
             return createErrorResponse(requestId, "command.execute", e.getMessage());
         }
     }
@@ -346,7 +347,7 @@ public class NukkitMessageHandler {
             return createSuccessResponse(requestId, "server.info", responseData);
             
         } catch (Exception e) {
-            logger.log(java.util.logging.Level.WARNING, "Failed to get server info", e);
+            logger.warning("Failed to get server info: " + e.getMessage());
             return createErrorResponse(requestId, "server.info", e.getMessage());
         }
     }
@@ -384,7 +385,7 @@ public class NukkitMessageHandler {
             return createSuccessResponse(requestId, "server.status", responseData);
             
         } catch (Exception e) {
-            logger.log(java.util.logging.Level.WARNING, "Failed to get server status", e);
+            logger.warning("Failed to get server status: " + e.getMessage());
             return createErrorResponse(requestId, "server.status", e.getMessage());
         }
     }
@@ -413,7 +414,7 @@ public class NukkitMessageHandler {
             return createSuccessResponse(requestId, "server.restart", responseData);
             
         } catch (Exception e) {
-            logger.log(java.util.logging.Level.WARNING, "Failed to restart server", e);
+            logger.warning("Failed to restart server: " + e.getMessage());
             return createErrorResponse(requestId, "server.restart", e.getMessage());
         }
     }
@@ -442,7 +443,7 @@ public class NukkitMessageHandler {
             return createSuccessResponse(requestId, "server.stop", responseData);
             
         } catch (Exception e) {
-            logger.log(java.util.logging.Level.WARNING, "Failed to stop server", e);
+            logger.warning("Failed to stop server: " + e.getMessage());
             return createErrorResponse(requestId, "server.stop", e.getMessage());
         }
     }
@@ -480,3 +481,4 @@ public class NukkitMessageHandler {
         return response;
     }
 }
+
