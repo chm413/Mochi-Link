@@ -176,6 +176,11 @@ public class MochiLinkNukkitCommand extends Command {
      * Handle config subcommand
      */
     private void handleConfig(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(TextFormat.RED + "Usage: /mochilink config <get|set> [key] [value]");
+            return;
+        }
+        
         String action = args[1].toLowerCase();
         
         switch (action) {
@@ -319,6 +324,11 @@ public class MochiLinkNukkitCommand extends Command {
                     sdf.format(new Date((Long)status.get("lastAttemptTime"))));
             }
             
+            return;
+        }
+        
+        if (args.length < 2) {
+            sender.sendMessage(TextFormat.RED + "Usage: /mochilink reconnection <enable|disable|status|reset>");
             return;
         }
         

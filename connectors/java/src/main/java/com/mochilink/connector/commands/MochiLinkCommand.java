@@ -177,7 +177,7 @@ public class MochiLinkCommand implements CommandExecutor, TabCompleter {
      * Handle config subcommand
      */
     private void handleConfig(CommandSender sender, String[] args) {
-        if (args.length == 0) {
+        if (args.length < 1) {
             sender.sendMessage(ChatColor.RED + "Usage: /mochilink config <get|set> [key] [value]");
             return;
         }
