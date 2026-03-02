@@ -290,7 +290,7 @@ public class MochiLinkFoliaCommand implements CommandExecutor, TabCompleter {
             
             sender.sendMessage(ChatColor.GRAY + "  Created: " + 
                 new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(
-                    new java.util.Date(subscription.getCreatedAt() * 1000)));
+                    new java.util.Date(subscription.getCreatedAt())));
         });
         
         sender.sendMessage(ChatColor.YELLOW + "Total: " + ChatColor.WHITE + subscriptions.size() + " subscriptions");
