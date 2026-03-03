@@ -45,7 +45,7 @@ export const DEFAULT_ROLES: Record<ServerRole, RoleDefinition> = {
   owner: {
     name: 'owner',
     permissions: ['*'], // All permissions
-    description: 'Server owner with full administrative access'
+    description: 'Server owner with full administrative access and permission management'
   },
   admin: {
     name: 'admin',
@@ -53,38 +53,95 @@ export const DEFAULT_ROLES: Record<ServerRole, RoleDefinition> = {
       'server.manage',
       'server.restart',
       'server.stop',
+      'server.save',
+      'server.status',
+      'server.config.view',
       'server.command',
       'player.manage',
       'player.kick',
       'player.ban',
       'player.unban',
+      'player.message',
+      'player.view',
+      'player.teleport',
       'whitelist.manage',
       'whitelist.add',
       'whitelist.remove',
+      'whitelist.view',
+      'whitelist.sync',
       'console.access',
+      'console.view',
+      'monitoring.view',
+      'monitoring.export',
+      'log.view',
+      'metric.view',
+      'message.broadcast',
+      'message.private',
+      'message.announcement',
+      'command.execute',
+      'command.batch'
+    ],
+    inherits: ['sm', 'pm'],
+    description: 'Server administrator with extensive management permissions (combines SM and PM)'
+  },
+  sm: {
+    name: 'sm',
+    permissions: [
+      'server.restart',
+      'server.stop',
+      'server.save',
+      'server.status',
+      'command.execute',
+      'command.batch',
+      'log.view',
+      'metric.view',
+      'metric.export',
       'monitoring.view'
     ],
-    inherits: ['moderator'],
-    description: 'Server administrator with extensive management permissions'
+    description: 'Server Manager - Focused on server operations and maintenance'
+  },
+  pm: {
+    name: 'pm',
+    permissions: [
+      'player.kick',
+      'player.ban',
+      'player.unban',
+      'player.warn',
+      'player.message',
+      'player.view',
+      'player.teleport',
+      'whitelist.add',
+      'whitelist.remove',
+      'whitelist.view',
+      'whitelist.sync',
+      'message.broadcast',
+      'message.private',
+      'message.announcement'
+    ],
+    description: 'Player Manager - Focused on player management and moderation'
   },
   moderator: {
     name: 'moderator',
     permissions: [
       'player.kick',
+      'player.warn',
       'player.message',
+      'player.view',
       'whitelist.view',
-      'monitoring.view',
-      'console.view'
+      'message.private'
     ],
     inherits: ['viewer'],
-    description: 'Server moderator with player management permissions'
+    description: 'Server moderator with basic player management permissions'
   },
   viewer: {
     name: 'viewer',
     permissions: [
       'server.view',
+      'server.status',
       'player.view',
-      'monitoring.view'
+      'whitelist.view',
+      'monitoring.view',
+      'metric.view'
     ],
     description: 'Read-only access to server information'
   }
@@ -437,6 +494,7 @@ export class PermissionManager {
 
   /**
    * Assign role to user for server
+   * Only server owner can assign roles
    */
   async assignRole(
     userId: string,
@@ -446,6 +504,38 @@ export class PermissionManager {
     expiresAt?: Date
   ): Promise<ServerACL> {
     try {
+      // CRITICAL: Only owner can assign roles
+      const granterRole = await this.getUserRole(grantedBy, serverId);
+      if (granterRole !== 'owner') {
+        throw new PermissionDeniedError(
+          'Only server owner can assign roles',
+          grantedBy,
+          serverId,
+          'permission.grant'
+        );
+      }
+
+      // Cannot assign owner role
+      if (role === 'owner') {
+        throw new PermissionDeniedError(
+          'Cannot assign owner role - ownership is determined by server creation',
+          grantedBy,
+          serverId,
+          'permission.grant'
+        );
+      }
+
+      // Cannot modify owner's permissions
+      const targetRole = await this.getUserRole(userId, serverId);
+      if (targetRole === 'owner') {
+        throw new PermissionDeniedError(
+          'Cannot modify owner permissions',
+          grantedBy,
+          serverId,
+          'permission.grant'
+        );
+      }
+
       // Get role permissions
       const rolePermissions = await this.getRolePermissions(role, serverId);
       
@@ -485,6 +575,7 @@ export class PermissionManager {
 
   /**
    * Remove role from user for server
+   * Only server owner can remove roles
    */
   async removeRole(
     userId: string,
@@ -492,6 +583,28 @@ export class PermissionManager {
     removedBy: string
   ): Promise<boolean> {
     try {
+      // CRITICAL: Only owner can remove roles
+      const removerRole = await this.getUserRole(removedBy, serverId);
+      if (removerRole !== 'owner') {
+        throw new PermissionDeniedError(
+          'Only server owner can remove roles',
+          removedBy,
+          serverId,
+          'permission.revoke'
+        );
+      }
+
+      // Cannot remove owner role
+      const targetRole = await this.getUserRole(userId, serverId);
+      if (targetRole === 'owner') {
+        throw new PermissionDeniedError(
+          'Cannot remove owner role',
+          removedBy,
+          serverId,
+          'permission.revoke'
+        );
+      }
+
       const success = await this.aclOps.revokePermission(userId, serverId);
 
       // Log role removal
@@ -516,6 +629,167 @@ export class PermissionManager {
       );
       throw error;
     }
+  }
+
+  /**
+   * Update user's role for server
+   * Only server owner can update roles
+   */
+  async updateRole(
+    userId: string,
+    serverId: string,
+    newRole: ServerRole,
+    updatedBy: string,
+    expiresAt?: Date,
+    reason?: string
+  ): Promise<ServerACL> {
+    try {
+      // CRITICAL: Only owner can update roles
+      const updaterRole = await this.getUserRole(updatedBy, serverId);
+      if (updaterRole !== 'owner') {
+        throw new PermissionDeniedError(
+          'Only server owner can update roles',
+          updatedBy,
+          serverId,
+          'permission.update'
+        );
+      }
+
+      // Cannot update to owner role
+      if (newRole === 'owner') {
+        throw new PermissionDeniedError(
+          'Cannot assign owner role',
+          updatedBy,
+          serverId,
+          'permission.update'
+        );
+      }
+
+      // Cannot update owner's role
+      const targetRole = await this.getUserRole(userId, serverId);
+      if (targetRole === 'owner') {
+        throw new PermissionDeniedError(
+          'Cannot modify owner permissions',
+          updatedBy,
+          serverId,
+          'permission.update'
+        );
+      }
+
+      // Remove old role and assign new one
+      await this.aclOps.revokePermission(userId, serverId);
+      const acl = await this.assignRole(userId, serverId, newRole, updatedBy, expiresAt);
+
+      // Log role update
+      await this.auditOps.logOperation(
+        updatedBy,
+        serverId,
+        'role.update',
+        { targetUserId: userId, oldRole: targetRole, newRole, expiresAt, reason },
+        'success'
+      );
+
+      return acl;
+
+    } catch (error) {
+      await this.auditOps.logOperation(
+        updatedBy,
+        serverId,
+        'role.update',
+        { targetUserId: userId, newRole, error: (error as Error).message },
+        'error',
+        (error as Error).message
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Get all servers that a user can manage
+   */
+  async getUserManagedServers(userId: string): Promise<Array<{
+    serverId: string;
+    serverName: string;
+    role: ServerRole;
+    permissions: string[];
+    grantedAt: Date;
+    expiresAt?: Date;
+  }>> {
+    const result = [];
+
+    // Get servers where user is owner
+    const ownedServers = await this.ctx.database.get(TableNames.minecraftServers as any, { 
+      owner_id: userId 
+    });
+
+    for (const server of ownedServers) {
+      result.push({
+        serverId: server.id,
+        serverName: server.name,
+        role: 'owner' as ServerRole,
+        permissions: ['*'],
+        grantedAt: server.created_at,
+        expiresAt: undefined
+      });
+    }
+
+    // Get servers where user has ACL permissions
+    const acls = await this.aclOps.getUserACLs(userId);
+    
+    for (const acl of acls) {
+      // Skip expired ACLs
+      if (acl.expiresAt && acl.expiresAt < new Date()) {
+        continue;
+      }
+
+      // Get server name
+      const servers = await this.ctx.database.get(TableNames.minecraftServers as any, { 
+        id: acl.serverId 
+      });
+
+      if (servers.length > 0) {
+        result.push({
+          serverId: acl.serverId,
+          serverName: servers[0].name,
+          role: acl.role,
+          permissions: acl.permissions,
+          grantedAt: acl.grantedAt,
+          expiresAt: acl.expiresAt
+        });
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Check if user can access a specific server
+   */
+  async canAccessServer(userId: string, serverId: string): Promise<boolean> {
+    const role = await this.getUserRole(userId, serverId);
+    return role !== null;
+  }
+
+  /**
+   * Get role level (higher number = more permissions)
+   */
+  getRoleLevel(role: ServerRole): number {
+    const levels: Record<ServerRole, number> = {
+      owner: 5,
+      admin: 4,
+      sm: 3,
+      pm: 3,
+      moderator: 2,
+      viewer: 1
+    };
+    return levels[role] || 0;
+  }
+
+  /**
+   * Compare two roles
+   */
+  isRoleHigherOrEqual(role1: ServerRole, role2: ServerRole): boolean {
+    return this.getRoleLevel(role1) >= this.getRoleLevel(role2);
   }
 
   /**

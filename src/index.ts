@@ -237,7 +237,8 @@ export function apply(ctx: Context, config: PluginConfig) {
                                     playerAction: serviceManager.playerAction,
                                     serverControl: serviceManager.serverControl,
                                     whitelist: serviceManager.whitelist,
-                                    command: serviceManager.command
+                                    command: serviceManager.command,
+                                    permission: serviceManager.permission
                                 });
                                 
                                 const response = await requestHandler.handleRequest(message, connection);
@@ -920,6 +921,411 @@ export function apply(ctx: Context, config: PluginConfig) {
           logger.error('Failed to get audit logs:', error);
           return '获取审计日志失败';
         }
+      });
+    
+    // ========================================================================
+    // 权限管理命令
+    // ========================================================================
+    
+    // Permission management - Level 3 (管理员)
+    ctx.command('mochi.permission', '权限管理')
+      .alias('mochi.perm')
+      .alias('mochi.op')
+      .userFields(['authority']);
+    
+    // Grant permission - Level 4 (仅服务器所有者)
+    ctx.command('mochi.permission.grant <userId> <serverId> <role>', '授予权限')
+      .alias('mochi.op.grant')
+      .userFields(['authority'])
+      .option('expires', '-e <date:string> 过期时间 (ISO 8601格式)', { fallback: undefined })
+      .option('reason', '-r <reason:text> 授权原因', { fallback: undefined })
+      .before(({ session }) => {
+        if ((session?.user?.authority ?? 0) < 4) {
+          return '权限不足：只有服务器所有者可以授予权限（等级 4）';
+        }
+      })
+      .action(async ({ session, options }, userId, serverId, role) => {
+        if (!isInitialized || !serviceManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!userId || !serverId || !role) {
+          return '用法: mochi.permission.grant <userId> <serverId> <role>\n' +
+                 '可用角色: admin, sm, pm, moderator, viewer\n' +
+                 '选项:\n' +
+                 '  -e <date> 过期时间 (例如: 2024-12-31T23:59:59Z)\n' +
+                 '  -r <reason> 授权原因';
+        }
+        
+        // 验证角色
+        const validRoles = ['admin', 'sm', 'pm', 'moderator', 'viewer'];
+        if (!validRoles.includes(role)) {
+          return `无效的角色: ${role}\n可用角色: ${validRoles.join(', ')}`;
+        }
+        
+        try {
+          // 验证服务器存在
+          const server = await dbManager!.getServer(serverId);
+          if (!server) {
+            return `服务器 ${serverId} 不存在`;
+          }
+          
+          // 检查是否为服务器所有者
+          if (server.owner_id !== session?.userId) {
+            return `权限不足：只有服务器所有者 (${server.owner_id}) 可以授予权限`;
+          }
+          
+          const expiresAt = options?.expires ? new Date(options.expires) : undefined;
+          
+          const acl = await serviceManager.permission.assignRole(
+            userId,
+            serverId,
+            role as any,
+            session?.userId || 'system',
+            expiresAt
+          );
+          
+          let message = `✅ 已授予用户 ${userId} 在服务器 ${server.name} (${serverId}) 的 ${role} 权限`;
+          if (expiresAt) {
+            message += `\n⏰ 过期时间: ${expiresAt.toLocaleString()}`;
+          }
+          if (options?.reason) {
+            message += `\n📝 原因: ${options.reason}`;
+          }
+          
+          return message;
+        } catch (error) {
+          logger.error('Failed to grant permission:', error);
+          return `授予权限失败: ${error instanceof Error ? error.message : String(error)}`;
+        }
+      });
+    
+    // Revoke permission - Level 4 (仅服务器所有者)
+    ctx.command('mochi.permission.revoke <userId> <serverId>', '撤销权限')
+      .alias('mochi.op.revoke')
+      .userFields(['authority'])
+      .option('reason', '-r <reason:text> 撤销原因', { fallback: undefined })
+      .before(({ session }) => {
+        if ((session?.user?.authority ?? 0) < 4) {
+          return '权限不足：只有服务器所有者可以撤销权限（等级 4）';
+        }
+      })
+      .action(async ({ session, options }, userId, serverId) => {
+        if (!isInitialized || !serviceManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!userId || !serverId) {
+          return '用法: mochi.permission.revoke <userId> <serverId>\n' +
+                 '选项:\n' +
+                 '  -r <reason> 撤销原因';
+        }
+        
+        try {
+          // 验证服务器存在
+          const server = await dbManager!.getServer(serverId);
+          if (!server) {
+            return `服务器 ${serverId} 不存在`;
+          }
+          
+          // 检查是否为服务器所有者
+          if (server.owner_id !== session?.userId) {
+            return `权限不足：只有服务器所有者 (${server.owner_id}) 可以撤销权限`;
+          }
+          
+          const success = await serviceManager.permission.removeRole(
+            userId,
+            serverId,
+            session?.userId || 'system'
+          );
+          
+          if (success) {
+            let message = `✅ 已撤销用户 ${userId} 在服务器 ${server.name} (${serverId}) 的权限`;
+            if (options?.reason) {
+              message += `\n📝 原因: ${options.reason}`;
+            }
+            return message;
+          } else {
+            return `撤销权限失败：用户可能没有该服务器的权限`;
+          }
+        } catch (error) {
+          logger.error('Failed to revoke permission:', error);
+          return `撤销权限失败: ${error instanceof Error ? error.message : String(error)}`;
+        }
+      });
+    
+    // Update permission - Level 4 (仅服务器所有者)
+    ctx.command('mochi.permission.update <userId> <serverId> <role>', '更新权限')
+      .alias('mochi.op.update')
+      .userFields(['authority'])
+      .option('expires', '-e <date:string> 过期时间 (ISO 8601格式)', { fallback: undefined })
+      .option('reason', '-r <reason:text> 更新原因', { fallback: undefined })
+      .before(({ session }) => {
+        if ((session?.user?.authority ?? 0) < 4) {
+          return '权限不足：只有服务器所有者可以更新权限（等级 4）';
+        }
+      })
+      .action(async ({ session, options }, userId, serverId, role) => {
+        if (!isInitialized || !serviceManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!userId || !serverId || !role) {
+          return '用法: mochi.permission.update <userId> <serverId> <role>\n' +
+                 '可用角色: admin, sm, pm, moderator, viewer\n' +
+                 '选项:\n' +
+                 '  -e <date> 过期时间 (例如: 2024-12-31T23:59:59Z)\n' +
+                 '  -r <reason> 更新原因';
+        }
+        
+        // 验证角色
+        const validRoles = ['admin', 'sm', 'pm', 'moderator', 'viewer'];
+        if (!validRoles.includes(role)) {
+          return `无效的角色: ${role}\n可用角色: ${validRoles.join(', ')}`;
+        }
+        
+        try {
+          // 验证服务器存在
+          const server = await dbManager!.getServer(serverId);
+          if (!server) {
+            return `服务器 ${serverId} 不存在`;
+          }
+          
+          // 检查是否为服务器所有者
+          if (server.owner_id !== session?.userId) {
+            return `权限不足：只有服务器所有者 (${server.owner_id}) 可以更新权限`;
+          }
+          
+          const expiresAt = options?.expires ? new Date(options.expires) : undefined;
+          
+          await serviceManager.permission.updateRole(
+            userId,
+            serverId,
+            role as any,
+            session?.userId || 'system',
+            expiresAt,
+            options?.reason
+          );
+          
+          let message = `✅ 已更新用户 ${userId} 在服务器 ${server.name} (${serverId}) 的权限为 ${role}`;
+          if (expiresAt) {
+            message += `\n⏰ 过期时间: ${expiresAt.toLocaleString()}`;
+          }
+          if (options?.reason) {
+            message += `\n📝 原因: ${options.reason}`;
+          }
+          
+          return message;
+        } catch (error) {
+          logger.error('Failed to update permission:', error);
+          return `更新权限失败: ${error instanceof Error ? error.message : String(error)}`;
+        }
+      });
+    
+    // Query permission - Level 1 (所有用户可查询自己的权限)
+    ctx.command('mochi.permission.query [userId] [serverId]', '查询权限')
+      .alias('mochi.op.query')
+      .userFields(['authority'])
+      .action(async ({ session }, userId, serverId) => {
+        if (!isInitialized || !serviceManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        // 如果没有指定 userId，查询自己的权限
+        const targetUserId = userId || session?.userId;
+        if (!targetUserId) {
+          return '无法确定用户 ID';
+        }
+        
+        // 如果查询他人权限，需要管理员权限
+        if (userId && userId !== session?.userId && (session?.user?.authority ?? 0) < 3) {
+          return '权限不足：查询他人权限需要管理员权限（等级 3）';
+        }
+        
+        try {
+          if (serverId) {
+            // 查询特定服务器的权限
+            const server = await dbManager!.getServer(serverId);
+            if (!server) {
+              return `服务器 ${serverId} 不存在`;
+            }
+            
+            const role = await serviceManager.permission.getUserRole(targetUserId, serverId);
+            if (!role) {
+              return `用户 ${targetUserId} 在服务器 ${server.name} (${serverId}) 没有权限`;
+            }
+            
+            const permissions = await serviceManager.permission.getUserPermissions(targetUserId, serverId);
+            const serverUsers = await serviceManager.permission.getServerUsers(serverId);
+            const userInfo = serverUsers.find(u => u.userId === targetUserId);
+            
+            let message = `👤 用户 ${targetUserId} 在服务器 ${server.name} (${serverId}) 的权限：\n`;
+            message += `📋 角色: ${role}\n`;
+            message += `🔑 权限数量: ${permissions.length}\n`;
+            if (userInfo) {
+              message += `👨‍💼 授予者: ${userInfo.grantedBy}\n`;
+              message += `📅 授予时间: ${userInfo.grantedAt.toLocaleString()}\n`;
+              if (userInfo.expiresAt) {
+                message += `⏰ 过期时间: ${userInfo.expiresAt.toLocaleString()}\n`;
+              }
+            }
+            
+            return message;
+          } else {
+            // 查询所有服务器的权限
+            const managedServers = await serviceManager.permission.getUserManagedServers(targetUserId);
+            
+            if (managedServers.length === 0) {
+              return `用户 ${targetUserId} 没有管理任何服务器的权限`;
+            }
+            
+            let message = `👤 用户 ${targetUserId} 的权限列表：\n\n`;
+            for (const server of managedServers) {
+              message += `📦 ${server.serverName} (${server.serverId})\n`;
+              message += `  📋 角色: ${server.role}\n`;
+              message += `  📅 授予时间: ${server.grantedAt.toLocaleString()}\n`;
+              if (server.expiresAt) {
+                message += `  ⏰ 过期时间: ${server.expiresAt.toLocaleString()}\n`;
+              }
+              message += '\n';
+            }
+            
+            return message;
+          }
+        } catch (error) {
+          logger.error('Failed to query permission:', error);
+          return `查询权限失败: ${error instanceof Error ? error.message : String(error)}`;
+        }
+      });
+    
+    // List permissions - Level 3 (管理员)
+    ctx.command('mochi.permission.list <serverId> [role]', '列出服务器权限')
+      .alias('mochi.op.list')
+      .userFields(['authority'])
+      .before(({ session }) => {
+        if ((session?.user?.authority ?? 0) < 3) {
+          return '权限不足：需要管理员权限（等级 3）';
+        }
+      })
+      .action(async ({ session }, serverId, role) => {
+        if (!isInitialized || !serviceManager) {
+          return '插件尚未初始化完成';
+        }
+        
+        if (!serverId) {
+          return '用法: mochi.permission.list <serverId> [role]\n' +
+                 '可选角色过滤: admin, sm, pm, moderator, viewer';
+        }
+        
+        try {
+          // 验证服务器存在
+          const server = await dbManager!.getServer(serverId);
+          if (!server) {
+            return `服务器 ${serverId} 不存在`;
+          }
+          
+          const serverUsers = await serviceManager.permission.getServerUsers(serverId);
+          
+          // 按角色过滤
+          const filteredUsers = role 
+            ? serverUsers.filter(u => u.role === role)
+            : serverUsers;
+          
+          if (filteredUsers.length === 0) {
+            return role 
+              ? `服务器 ${server.name} (${serverId}) 没有 ${role} 角色的用户`
+              : `服务器 ${server.name} (${serverId}) 没有配置任何权限`;
+          }
+          
+          let message = `📋 服务器 ${server.name} (${serverId}) 的权限列表`;
+          if (role) {
+            message += ` (角色: ${role})`;
+          }
+          message += '：\n\n';
+          
+          // 按角色分组
+          const roleGroups: Record<string, typeof filteredUsers> = {};
+          for (const user of filteredUsers) {
+            if (!roleGroups[user.role]) {
+              roleGroups[user.role] = [];
+            }
+            roleGroups[user.role].push(user);
+          }
+          
+          // 角色排序
+          const roleOrder = ['owner', 'admin', 'sm', 'pm', 'moderator', 'viewer'];
+          const sortedRoles = Object.keys(roleGroups).sort((a, b) => 
+            roleOrder.indexOf(a) - roleOrder.indexOf(b)
+          );
+          
+          for (const roleName of sortedRoles) {
+            const users = roleGroups[roleName];
+            message += `【${roleName.toUpperCase()}】 (${users.length}人)\n`;
+            for (const user of users) {
+              message += `  👤 ${user.userId}\n`;
+              message += `    授予者: ${user.grantedBy}\n`;
+              message += `    授予时间: ${user.grantedAt.toLocaleString()}\n`;
+              if (user.expiresAt) {
+                message += `    过期时间: ${user.expiresAt.toLocaleString()}\n`;
+              }
+            }
+            message += '\n';
+          }
+          
+          return message;
+        } catch (error) {
+          logger.error('Failed to list permissions:', error);
+          return `列出权限失败: ${error instanceof Error ? error.message : String(error)}`;
+        }
+      });
+    
+    // Show role information - Level 1 (所有用户可查看)
+    ctx.command('mochi.permission.roles', '查看角色说明')
+      .alias('mochi.op.roles')
+      .userFields(['authority'])
+      .action(async () => {
+        return `📋 Mochi-Link 权限角色说明：
+
+【Owner - 服主】
+  等级: 5 (最高)
+  权限: 所有权限
+  说明: 服务器创建者，拥有完全控制权
+  特权: 可以授予和撤销其他用户的权限
+
+【Admin - 管理员】
+  等级: 4
+  权限: 服务器管理 + 玩家管理 + 命令执行
+  说明: 全面管理服务器和玩家
+  继承: SM + PM + Moderator 的所有权限
+
+【SM - Server Manager (服务器管理员)】
+  等级: 3
+  权限: 服务器控制、命令执行、日志查看
+  说明: 专注于服务器运维和维护
+  操作: 重启、停止、保存、执行命令、查看日志
+
+【PM - Player Manager (玩家管理员)】
+  等级: 3
+  权限: 玩家管理、白名单、消息发送
+  说明: 专注于玩家管理和社区维护
+  操作: 踢出、封禁、白名单、发送消息
+
+【Moderator - 协管员】
+  等级: 2
+  权限: 基础玩家管理
+  说明: 协助维护服务器秩序
+  操作: 踢出玩家、发送警告、查看信息
+
+【Viewer - 查看者】
+  等级: 1
+  权限: 只读权限
+  说明: 只能查看服务器和玩家信息
+  操作: 查看状态、玩家列表、性能数据
+
+💡 提示：
+  - 只有 Owner 可以授予和撤销权限
+  - SM 和 PM 是平行角色，各有专长
+  - Admin 拥有 SM 和 PM 的所有权限`;
       });
     
     // ========================================================================
@@ -1769,7 +2175,7 @@ export function apply(ctx: Context, config: PluginConfig) {
       .userFields(['authority']);
     
     // Add binding - Level 3 (管理员)
-    ctx.command('mochi.bind.add <serverId>', '添加频道绑定')
+    ctx.command('mochi.bind.add <serverId>', '绑定服务器到当前群组')
       .userFields(['authority'])
       .before(({ session }) => {
         if ((session?.user?.authority ?? 0) < 3) {
@@ -1788,7 +2194,8 @@ export function apply(ctx: Context, config: PluginConfig) {
         
         if (!serverId) {
           return '用法: mochi.bind.add <serverId> [-t type]\n' +
-                 '示例: mochi.bind.add survival -t full';
+                 '示例: mochi.bind.add survival -t full\n\n' +
+                 '提示: 一个群组只能绑定一个服务器';
         }
         
         if (!options) {
@@ -1799,7 +2206,21 @@ export function apply(ctx: Context, config: PluginConfig) {
           // 验证服务器存在
           const server = await dbManager.getServer(serverId);
           if (!server) {
-            return `服务器 ${serverId} 不存在`;
+            return `服务器 ${serverId} 不存在\n使用 mochi.server.list 查看可用服务器`;
+          }
+          
+          // 检查群组是否已有绑定
+          const existingBindings = await dbManager.getGroupBindings(session.guildId);
+          if (existingBindings.length > 0) {
+            const existingBinding = existingBindings[0];
+            const existingServer = await dbManager.getServer(existingBinding.server_id);
+            const existingServerName = existingServer ? existingServer.name : existingBinding.server_id;
+            
+            return `❌ 当前群组已绑定服务器: ${existingServerName} (${existingBinding.server_id})\n` +
+                   `绑定 ID: ${existingBinding.id}\n\n` +
+                   `💡 一个群组只能绑定一个服务器\n` +
+                   `如需更换，请先使用以下命令解除绑定：\n` +
+                   `mochi.bind.remove ${existingBinding.id}`;
           }
           
           // 使用 BindingManager 创建绑定
@@ -1815,22 +2236,24 @@ export function apply(ctx: Context, config: PluginConfig) {
                 }
               );
               
-              return `已将服务器 ${server.name} 绑定到当前群组\n` +
-                     `绑定类型: ${options.type}\n` +
-                     `绑定 ID: ${binding.id}\n` +
-                     `提示: 现在可以在群组中直接使用命令，无需指定服务器 ID`;
+              return `✅ 已将服务器 ${server.name} 绑定到当前群组\n` +
+                     `📋 绑定类型: ${options.type}\n` +
+                     `🆔 绑定 ID: ${binding.id}\n\n` +
+                     `💡 提示: 现在可以在群组中直接使用命令，无需指定服务器 ID\n` +
+                     `例如: 在线、添加白名单 <玩家名>`;
             } catch (error) {
               logger.error('Failed to create binding:', error);
-              return `创建绑定失败: ${(error as Error).message}`;
+              const errorMsg = (error as Error).message;
+              
+              // 处理已绑定的错误
+              if (errorMsg.includes('already bound')) {
+                return `❌ ${errorMsg}`;
+              }
+              
+              return `创建绑定失败: ${errorMsg}`;
             }
           } else {
-            // 降级到直接数据库操作
-            const existingBindings = await dbManager.getGroupBindings(session.guildId);
-            const alreadyBound = existingBindings.find((b: any) => b.server_id === serverId);
-            if (alreadyBound) {
-              return `服务器 ${server.name} 已绑定到此群组`;
-            }
-            
+            // 降级到直接数据库操作（保持向后兼容）
             const binding = await dbManager.createGroupBinding({
               group_id: session.guildId,
               server_id: serverId,
@@ -1855,19 +2278,20 @@ export function apply(ctx: Context, config: PluginConfig) {
               );
             }
             
-            return `已将服务器 ${server.name} 绑定到当前群组\n` +
-                   `绑定类型: ${options.type}\n` +
-                   `绑定 ID: ${binding.id}\n` +
-                   `提示: 现在可以在群组中直接使用命令，无需指定服务器 ID`;
+            return `✅ 已将服务器 ${server.name} 绑定到当前群组\n` +
+                   `📋 绑定类型: ${options.type}\n` +
+                   `🆔 绑定 ID: ${binding.id}\n\n` +
+                   `💡 提示: 现在可以在群组中直接使用命令，无需指定服务器 ID`;
           }
         } catch (error) {
           logger.error('Failed to create binding:', error);
-          return '创建绑定失败';
+          return `创建绑定失败: ${(error as Error).message}`;
         }
       });
     
     // List bindings - Level 1 (所有用户可查看)
-    ctx.command('mochi.bind.list', '查看频道绑定')
+    ctx.command('mochi.bind.list', '查看当前群组绑定的服务器')
+      .alias('mochi.bind.info')
       .userFields(['authority'])
       .action(async ({ session }) => {
         if (!isInitialized || !dbManager) {
@@ -1882,27 +2306,47 @@ export function apply(ctx: Context, config: PluginConfig) {
           const bindings = await dbManager.getGroupBindings(session.guildId);
           
           if (bindings.length === 0) {
-            return '当前群组暂无绑定的服务器\n' +
-                   '使用 mochi.bind.add <serverId> 绑定服务器';
+            return '📭 当前群组暂未绑定服务器\n\n' +
+                   '💡 使用以下命令绑定服务器：\n' +
+                   'mochi.bind.add <服务器ID>\n\n' +
+                   '查看可用服务器：mochi.server.list';
           }
           
-          let result = '当前群组绑定的服务器：\n';
-          for (const binding of bindings) {
-            const server = await dbManager.getServer(binding.server_id);
-            if (server) {
-              result += `  [${binding.id}] ${server.name} (${server.id}) - ${binding.binding_type} - ${binding.status}\n`;
-            }
+          // 一个群组只应该有一个绑定
+          const binding = bindings[0];
+          const server = await dbManager.getServer(binding.server_id);
+          
+          if (!server) {
+            return `⚠️ 绑定的服务器 ${binding.server_id} 不存在\n` +
+                   `建议使用以下命令解除绑定：\n` +
+                   `mochi.bind.remove ${binding.id}`;
+          }
+          
+          let result = '📋 当前群组绑定信息：\n\n';
+          result += `🎮 服务器: ${server.name}\n`;
+          result += `🆔 服务器 ID: ${server.id}\n`;
+          result += `📊 状态: ${server.status === 'online' ? '🟢 在线' : '🔴 离线'}\n`;
+          result += `🔗 绑定类型: ${binding.binding_type}\n`;
+          result += `🆔 绑定 ID: ${binding.id}\n`;
+          result += `📅 绑定时间: ${binding.created_at.toLocaleString()}\n\n`;
+          result += `💡 提示: 可以直接使用命令，无需指定服务器 ID\n`;
+          result += `例如: 在线、添加白名单 <玩家名>`;
+          
+          // 如果有多个绑定（不应该发生，但作为安全检查）
+          if (bindings.length > 1) {
+            result += `\n\n⚠️ 警告: 检测到多个绑定（不推荐）\n`;
+            result += `建议保留一个，删除其他绑定`;
           }
           
           return result;
         } catch (error) {
           logger.error('Failed to list bindings:', error);
-          return '获取绑定列表失败';
+          return '获取绑定信息失败';
         }
       });
     
     // Remove binding - Level 3 (管理员)
-    ctx.command('mochi.bind.remove <bindingId:number>', '移除频道绑定')
+    ctx.command('mochi.bind.remove <bindingId:number>', '解除服务器绑定')
       .userFields(['authority'])
       .before(({ session }) => {
         if ((session?.user?.authority ?? 0) < 3) {
@@ -1919,15 +2363,33 @@ export function apply(ctx: Context, config: PluginConfig) {
         }
         
         if (!bindingId) {
-          return '用法: mochi.bind.remove <bindingId>';
+          return '用法: mochi.bind.remove <bindingId>\n\n' +
+                 '💡 使用 mochi.bind.list 查看绑定 ID';
         }
         
         try {
           // 使用 BindingManager 删除绑定
           if (serviceManager?.binding) {
             try {
+              // 先获取绑定信息用于显示
+              const binding = await serviceManager.binding.getBinding(bindingId);
+              if (!binding) {
+                return `❌ 绑定 ${bindingId} 不存在`;
+              }
+              
+              // 检查是否属于当前群组
+              if (binding.groupId !== session.guildId) {
+                return `❌ 绑定 ${bindingId} 不属于当前群组`;
+              }
+              
+              const server = await dbManager.getServer(binding.serverId);
+              const serverName = server ? server.name : binding.serverId;
+              
               await serviceManager.binding.deleteBinding(session.userId || 'unknown', bindingId);
-              return `已解除绑定 ${bindingId}`;
+              
+              return `✅ 已解除与服务器 ${serverName} 的绑定\n\n` +
+                     `💡 如需绑定其他服务器，使用：\n` +
+                     `mochi.bind.add <服务器ID>`;
             } catch (error) {
               logger.error('Failed to remove binding:', error);
               return `解除绑定失败: ${(error as Error).message}`;
@@ -1938,10 +2400,12 @@ export function apply(ctx: Context, config: PluginConfig) {
             const binding = bindings.find((b: any) => b.id === bindingId);
             
             if (!binding) {
-              return `绑定 ${bindingId} 不存在或不属于当前群组`;
+              return `❌ 绑定 ${bindingId} 不存在或不属于当前群组\n\n` +
+                     `💡 使用 mochi.bind.list 查看当前绑定`;
             }
             
             const server = await dbManager.getServer(binding.server_id);
+            const serverName = server ? server.name : binding.server_id;
             
             await dbManager.deleteGroupBinding(bindingId);
             
@@ -1960,11 +2424,13 @@ export function apply(ctx: Context, config: PluginConfig) {
               );
             }
             
-            return `已解除服务器 ${server?.name || binding.server_id} 的绑定`;
+            return `✅ 已解除与服务器 ${serverName} 的绑定\n\n` +
+                   `💡 如需绑定其他服务器，使用：\n` +
+                   `mochi.bind.add <服务器ID>`;
           }
         } catch (error) {
           logger.error('Failed to remove binding:', error);
-          return '解除绑定失败';
+          return `解除绑定失败: ${(error as Error).message}`;
         }
       });
     

@@ -142,6 +142,7 @@ export class BindingManager {
 
   /**
    * Create a new group-server binding
+   * Note: A group can only have ONE active binding at a time
    */
   async createBinding(
     userId: string,
@@ -171,17 +172,22 @@ export class BindingManager {
       );
     }
 
-    // Check for duplicate binding
-    const existing = await this.ctx.database.get(TableNames.serverBindings as any, {
-      group_id: options.groupId,
-      server_id: options.serverId,
-      binding_type: options.bindingType
+    // IMPORTANT: Check if group already has ANY binding (one group = one server)
+    const existingGroupBindings = await this.ctx.database.get(TableNames.serverBindings as any, {
+      group_id: options.groupId
     });
 
-    if (existing.length > 0) {
+    if (existingGroupBindings.length > 0) {
+      const existingBinding = existingGroupBindings[0];
+      const existingServer = await this.ctx.database.get(TableNames.minecraftServers as any, { 
+        id: existingBinding.server_id 
+      });
+      const serverName = existingServer.length > 0 ? existingServer[0].name : existingBinding.server_id;
+      
       throw new MochiLinkError(
-        `Binding already exists for group ${options.groupId} and server ${options.serverId} with type ${options.bindingType}`,
-        'BINDING_EXISTS'
+        `This group is already bound to server "${serverName}" (${existingBinding.server_id}). ` +
+        `Please remove the existing binding first using: mochi.bind.remove ${existingBinding.id}`,
+        'GROUP_ALREADY_BOUND'
       );
     }
 

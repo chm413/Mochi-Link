@@ -10,6 +10,10 @@ export { TokenManager, type TokenGenerationOptions, type TokenValidationResult, 
 export { ServerManager } from './server';
 export type { ServerRegistrationOptions, ServerUpdateOptions, ServerStatusInfo, ServerSummary } from './server';
 export { PlayerInformationService } from './player';
+export { PlayerActionService } from './player-action';
+export type { PlayerKickOptions, PlayerKickResult, PlayerMessageOptions, PlayerMessageResult, PlayerTeleportOptions, PlayerTeleportResult } from './player-action';
+export { ServerControlService } from './server-control';
+export type { ServerRestartOptions, ServerRestartResult, ServerShutdownOptions, ServerShutdownResult, ServerSaveOptions, ServerSaveResult, ServerReloadOptions, ServerReloadResult } from './server-control';
 export { WhitelistManager } from './whitelist';
 export type { WhitelistEntry, WhitelistOperation, WhitelistSyncStatus, WhitelistCache } from './whitelist';
 export { CommandExecutionService } from './command';
@@ -43,6 +47,8 @@ import { PermissionManager } from './permission';
 import { TokenManager } from './token';
 import { ServerManager } from './server';
 import { PlayerInformationService } from './player';
+import { PlayerActionService } from './player-action';
+import { ServerControlService } from './server-control';
 import { WhitelistManager } from './whitelist';
 import { CommandExecutionService } from './command';
 import { EventService } from './event';
@@ -61,6 +67,8 @@ export declare class ServiceManager {
     token: TokenManager;
     server: ServerManager;
     player: PlayerInformationService;
+    playerAction: PlayerActionService;
+    serverControl: ServerControlService;
     whitelist: WhitelistManager;
     command: CommandExecutionService;
     event: EventService;
@@ -90,6 +98,8 @@ export declare class ServiceManager {
             token: any;
             server: any;
             player: any;
+            playerAction: any;
+            serverControl: any;
             whitelist: any;
             command: any;
             event: any;

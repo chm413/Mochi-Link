@@ -329,6 +329,8 @@ export class ServiceManager {
       token: any;
       server: any;
       player: any;
+      playerAction: any;
+      serverControl: any;
       whitelist: any;
       command: any;
       event: any;

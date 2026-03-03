@@ -20,6 +20,7 @@ import { PlayerActionService } from './player-action';
 import { ServerControlService } from './server-control';
 import { WhitelistManager } from './whitelist';
 import { CommandExecutionService } from './command';
+import { PermissionManager } from './permission';
 
 // ============================================================================
 // Request Handler
@@ -39,6 +40,7 @@ export class RequestHandler {
       serverControl: ServerControlService;
       whitelist: WhitelistManager;
       command: CommandExecutionService;
+      permission: PermissionManager;
     }
   ) {
     this.logger = ctx.logger('mochi-link:request-handler');
@@ -104,6 +106,10 @@ export class RequestHandler {
       // Command operations
       case 'command':
         return this.handleCommandOperation(action, request, connection);
+
+      // Permission operations
+      case 'permission':
+        return this.handlePermissionOperation(action, request, connection);
 
       // System operations
       case 'system':
@@ -190,6 +196,15 @@ export class RequestHandler {
 
       case 'kick':
         return this.handlePlayerKick(request, connection);
+
+      case 'ban':
+        return this.handlePlayerBan(request, connection);
+
+      case 'unban':
+        return this.handlePlayerUnban(request, connection);
+
+      case 'banlist':
+        return this.handlePlayerBanlist(request, connection);
 
       case 'message':
         return this.handlePlayerMessage(request, connection);
@@ -509,6 +524,102 @@ export class RequestHandler {
     });
   }
 
+  private async handlePlayerBan(
+    request: UWBPRequest,
+    connection: Connection
+  ): Promise<UWBPResponse> {
+    const { playerId, playerName, reason, duration, banType } = request.data;
+    if (!playerId || !reason || !banType) {
+      return MessageFactory.createError(
+        request.id,
+        request.op,
+        'playerId, reason, and banType are required',
+        'INVALID_PARAMETERS'
+      );
+    }
+
+    const result = await this.services.playerAction.banPlayer(
+      connection.serverId,
+      {
+        playerId,
+        playerName,
+        reason,
+        duration,
+        banType,
+        executor: 'system'
+      }
+    );
+    
+    return MessageFactory.createResponse(request.id, request.op, {
+      success: result.success,
+      playerId: result.playerId,
+      reason: result.reason,
+      duration: result.duration,
+      banType: result.banType,
+      bannedAt: result.timestamp.toISOString(),
+      message: result.success ? 'Player banned successfully' : 'Failed to ban player'
+    }, {
+      success: result.success,
+      error: result.error,
+      serverId: connection.serverId
+    });
+  }
+
+  private async handlePlayerUnban(
+    request: UWBPRequest,
+    connection: Connection
+  ): Promise<UWBPResponse> {
+    const { playerId, reason } = request.data;
+    if (!playerId) {
+      return MessageFactory.createError(
+        request.id,
+        request.op,
+        'playerId is required',
+        'INVALID_PARAMETERS'
+      );
+    }
+
+    const result = await this.services.playerAction.unbanPlayer(
+      connection.serverId,
+      {
+        playerId,
+        reason,
+        executor: 'system'
+      }
+    );
+    
+    return MessageFactory.createResponse(request.id, request.op, {
+      success: result.success,
+      playerId: result.playerId,
+      unbannedAt: result.timestamp.toISOString(),
+      message: result.success ? 'Player unbanned successfully' : 'Failed to unban player'
+    }, {
+      success: result.success,
+      error: result.error,
+      serverId: connection.serverId
+    });
+  }
+
+  private async handlePlayerBanlist(
+    request: UWBPRequest,
+    connection: Connection
+  ): Promise<UWBPResponse> {
+    const { banType } = request.data;
+    
+    const result = await this.services.playerAction.getBanList(
+      connection.serverId,
+      banType || 'all'
+    );
+    
+    return MessageFactory.createResponse(request.id, request.op, {
+      bans: result.bans
+    }, {
+      success: result.success,
+      error: result.error,
+      serverId: connection.serverId
+    });
+  }
+
   // ============================================================================
   // Whitelist Operation Handlers
   // ============================================================================
@@ -615,5 +726,317 @@ export class RequestHandler {
       success: true,
       serverId: connection.serverId
     });
+  }
+
+  // ============================================================================
+  // Permission Operation Handlers
+  // ============================================================================
+
+  /**
+   * Handle permission operations
+   */
+  private async handlePermissionOperation(
+    action: string,
+    request: UWBPRequest,
+    connection: Connection
+  ): Promise<UWBPResponse> {
+    switch (action) {
+      case 'grant':
+        return this.handlePermissionGrant(request, connection);
+
+      case 'revoke':
+        return this.handlePermissionRevoke(request, connection);
+
+      case 'update':
+        return this.handlePermissionUpdate(request, connection);
+
+      case 'query':
+        return this.handlePermissionQuery(request, connection);
+
+      case 'list':
+        return this.handlePermissionList(request, connection);
+
+      default:
+        throw new Error(`Unknown permission operation: ${action}`);
+    }
+  }
+
+  private async handlePermissionGrant(
+    request: UWBPRequest,
+    connection: Connection
+  ): Promise<UWBPResponse> {
+    const { userId, serverId, role, customPermissions, expiresAt, reason } = request.data;
+    
+    if (!userId || !serverId || !role) {
+      return MessageFactory.createError(
+        request.id,
+        request.op,
+        'userId, serverId, and role are required',
+        'INVALID_PARAMETERS'
+      );
+    }
+
+    try {
+      // Get the granter's user ID from connection metadata
+      // In a real implementation, this would come from authentication
+      const grantedBy = 'system'; // TODO: Get from authenticated user
+
+      const expiresAtDate = expiresAt ? new Date(expiresAt) : undefined;
+      
+      const acl = await this.services.permission.assignRole(
+        userId,
+        serverId,
+        role,
+        grantedBy,
+        expiresAtDate
+      );
+
+      const permissions = await this.services.permission.getRolePermissions(role, serverId);
+
+      return MessageFactory.createResponse(request.id, request.op, {
+        success: true,
+        userId,
+        serverId,
+        role,
+        permissions,
+        grantedBy: acl.grantedBy,
+        grantedAt: acl.grantedAt.toISOString(),
+        expiresAt: acl.expiresAt?.toISOString()
+      }, {
+        success: true,
+        serverId: connection.serverId
+      });
+
+    } catch (error) {
+      this.logger.error('Failed to grant permission:', error);
+      return MessageFactory.createError(
+        request.id,
+        request.op,
+        error instanceof Error ? error.message : 'Failed to grant permission',
+        'PERMISSION_GRANT_FAILED',
+        { error: String(error) }
+      );
+    }
+  }
+
+  private async handlePermissionRevoke(
+    request: UWBPRequest,
+    connection: Connection
+  ): Promise<UWBPResponse> {
+    const { userId, serverId, reason } = request.data;
+    
+    if (!userId || !serverId) {
+      return MessageFactory.createError(
+        request.id,
+        request.op,
+        'userId and serverId are required',
+        'INVALID_PARAMETERS'
+      );
+    }
+
+    try {
+      const removedBy = 'system'; // TODO: Get from authenticated user
+
+      const success = await this.services.permission.removeRole(
+        userId,
+        serverId,
+        removedBy
+      );
+
+      return MessageFactory.createResponse(request.id, request.op, {
+        success,
+        message: success ? 'Permission revoked successfully' : 'Failed to revoke permission',
+        userId,
+        serverId,
+        revokedAt: new Date().toISOString()
+      }, {
+        success,
+        serverId: connection.serverId
+      });
+
+    } catch (error) {
+      this.logger.error('Failed to revoke permission:', error);
+      return MessageFactory.createError(
+        request.id,
+        request.op,
+        error instanceof Error ? error.message : 'Failed to revoke permission',
+        'PERMISSION_REVOKE_FAILED',
+        { error: String(error) }
+      );
+    }
+  }
+
+  private async handlePermissionUpdate(
+    request: UWBPRequest,
+    connection: Connection
+  ): Promise<UWBPResponse> {
+    const { userId, serverId, role, expiresAt, reason } = request.data;
+    
+    if (!userId || !serverId || !role) {
+      return MessageFactory.createError(
+        request.id,
+        request.op,
+        'userId, serverId, and role are required',
+        'INVALID_PARAMETERS'
+      );
+    }
+
+    try {
+      const updatedBy = 'system'; // TODO: Get from authenticated user
+      const expiresAtDate = expiresAt ? new Date(expiresAt) : undefined;
+
+      const acl = await this.services.permission.updateRole(
+        userId,
+        serverId,
+        role,
+        updatedBy,
+        expiresAtDate,
+        reason
+      );
+
+      const permissions = await this.services.permission.getRolePermissions(role, serverId);
+
+      return MessageFactory.createResponse(request.id, request.op, {
+        success: true,
+        userId,
+        serverId,
+        role,
+        permissions,
+        updatedBy: acl.grantedBy,
+        updatedAt: new Date().toISOString(),
+        expiresAt: acl.expiresAt?.toISOString()
+      }, {
+        success: true,
+        serverId: connection.serverId
+      });
+
+    } catch (error) {
+      this.logger.error('Failed to update permission:', error);
+      return MessageFactory.createError(
+        request.id,
+        request.op,
+        error instanceof Error ? error.message : 'Failed to update permission',
+        'PERMISSION_UPDATE_FAILED',
+        { error: String(error) }
+      );
+    }
+  }
+
+  private async handlePermissionQuery(
+    request: UWBPRequest,
+    connection: Connection
+  ): Promise<UWBPResponse> {
+    const { userId, serverId } = request.data;
+    
+    if (!serverId) {
+      return MessageFactory.createError(
+        request.id,
+        request.op,
+        'serverId is required',
+        'INVALID_PARAMETERS'
+      );
+    }
+
+    try {
+      // If userId not provided, query current user
+      const targetUserId = userId || 'system'; // TODO: Get from authenticated user
+
+      const role = await this.services.permission.getUserRole(targetUserId, serverId);
+      
+      if (!role) {
+        return MessageFactory.createResponse(request.id, request.op, {
+          userId: targetUserId,
+          serverId,
+          role: null,
+          permissions: [],
+          message: 'User has no permissions for this server'
+        }, {
+          success: true,
+          serverId: connection.serverId
+        });
+      }
+
+      const permissions = await this.services.permission.getUserPermissions(targetUserId, serverId);
+      const serverUsers = await this.services.permission.getServerUsers(serverId);
+      const userInfo = serverUsers.find(u => u.userId === targetUserId);
+
+      return MessageFactory.createResponse(request.id, request.op, {
+        userId: targetUserId,
+        serverId,
+        role,
+        permissions: permissions.map(p => p.operation),
+        grantedBy: userInfo?.grantedBy || 'system',
+        grantedAt: userInfo?.grantedAt.toISOString(),
+        expiresAt: userInfo?.expiresAt?.toISOString()
+      }, {
+        success: true,
+        serverId: connection.serverId
+      });
+
+    } catch (error) {
+      this.logger.error('Failed to query permission:', error);
+      return MessageFactory.createError(
+        request.id,
+        request.op,
+        error instanceof Error ? error.message : 'Failed to query permission',
+        'PERMISSION_QUERY_FAILED',
+        { error: String(error) }
+      );
+    }
+  }
+
+  private async handlePermissionList(
+    request: UWBPRequest,
+    connection: Connection
+  ): Promise<UWBPResponse> {
+    const { serverId, role } = request.data;
+    
+    if (!serverId) {
+      return MessageFactory.createError(
+        request.id,
+        request.op,
+        'serverId is required',
+        'INVALID_PARAMETERS'
+      );
+    }
+
+    try {
+      const serverUsers = await this.services.permission.getServerUsers(serverId);
+      
+      // Filter by role if specified
+      const filteredUsers = role 
+        ? serverUsers.filter(u => u.role === role)
+        : serverUsers;
+
+      const users = await Promise.all(filteredUsers.map(async (user) => {
+        const permissions = await this.services.permission.getUserPermissions(user.userId, serverId);
+        return {
+          userId: user.userId,
+          role: user.role,
+          permissions: permissions.map(p => p.operation),
+          grantedBy: user.grantedBy,
+          grantedAt: user.grantedAt.toISOString(),
+          expiresAt: user.expiresAt?.toISOString()
+        };
+      }));
+
+      return MessageFactory.createResponse(request.id, request.op, {
+        serverId,
+        users
+      }, {
+        success: true,
+        serverId: connection.serverId
+      });
+
+    } catch (error) {
+      this.logger.error('Failed to list permissions:', error);
+      return MessageFactory.createError(
+        request.id,
+        request.op,
+        error instanceof Error ? error.message : 'Failed to list permissions',
+        'PERMISSION_LIST_FAILED',
+        { error: String(error) }
+      );
+    }
   }
 }

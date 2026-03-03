@@ -67,12 +67,42 @@ export declare class PermissionManager {
     private checkOwnerPermission;
     /**
      * Assign role to user for server
+     * Only server owner can assign roles
      */
     assignRole(userId: string, serverId: string, role: ServerRole, grantedBy: string, expiresAt?: Date): Promise<ServerACL>;
     /**
      * Remove role from user for server
+     * Only server owner can remove roles
      */
     removeRole(userId: string, serverId: string, removedBy: string): Promise<boolean>;
+    /**
+     * Update user's role for server
+     * Only server owner can update roles
+     */
+    updateRole(userId: string, serverId: string, newRole: ServerRole, updatedBy: string, expiresAt?: Date, reason?: string): Promise<ServerACL>;
+    /**
+     * Get all servers that a user can manage
+     */
+    getUserManagedServers(userId: string): Promise<Array<{
+        serverId: string;
+        serverName: string;
+        role: ServerRole;
+        permissions: string[];
+        grantedAt: Date;
+        expiresAt?: Date;
+    }>>;
+    /**
+     * Check if user can access a specific server
+     */
+    canAccessServer(userId: string, serverId: string): Promise<boolean>;
+    /**
+     * Get role level (higher number = more permissions)
+     */
+    getRoleLevel(role: ServerRole): number;
+    /**
+     * Compare two roles
+     */
+    isRoleHigherOrEqual(role1: ServerRole, role2: ServerRole): boolean;
     /**
      * Get user's role for server
      */

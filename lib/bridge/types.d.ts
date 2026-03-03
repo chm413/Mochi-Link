@@ -4,7 +4,7 @@
  * Type definitions for the unified server operation interface that abstracts
  * differences between Java and Bedrock editions.
  */
-import { Player, PerformanceMetrics } from '../types/index';
+import { Player, Position, PerformanceMetrics } from '../types/index';
 export type BridgeCapability = 'player_management' | 'world_management' | 'command_execution' | 'performance_monitoring' | 'event_streaming' | 'plugin_integration' | 'whitelist_management' | 'ban_management' | 'operator_management' | 'server_control';
 export interface BridgeInfo {
     serverId: string;
@@ -17,11 +17,16 @@ export interface BridgeInfo {
     lastUpdate: Date;
 }
 export interface PlayerAction {
-    type: 'kick' | 'ban' | 'tempban' | 'mute' | 'tempmute' | 'warn' | 'teleport';
-    target: string;
+    type: 'kick' | 'ban' | 'tempban' | 'mute' | 'tempmute' | 'warn' | 'teleport' | 'message';
+    target?: string;
+    playerId?: string;
+    playerName?: string;
+    targetPlayerId?: string;
+    location?: Position;
     reason?: string;
     duration?: number;
     executor?: string;
+    message?: string;
     metadata?: Record<string, any>;
 }
 export interface PlayerActionResult {
@@ -51,6 +56,8 @@ export interface BanEntry {
 export interface WorldOperation {
     type: 'save' | 'backup' | 'reload' | 'unload' | 'load' | 'delete';
     worldName?: string;
+    worlds?: string[];
+    graceful?: boolean;
     parameters?: Record<string, any>;
 }
 export interface WorldOperationResult {
@@ -71,10 +78,12 @@ export interface WorldSettings {
     gamerules: Record<string, any>;
 }
 export interface ServerOperation {
-    type: 'start' | 'stop' | 'restart' | 'reload' | 'save' | 'backup';
+    type: 'start' | 'stop' | 'restart' | 'reload' | 'save' | 'backup' | 'shutdown';
     graceful?: boolean;
     timeout?: number;
     message?: string;
+    delay?: number;
+    reloadType?: string;
 }
 export interface ServerOperationResult {
     success: boolean;
@@ -144,8 +153,8 @@ export interface BridgeConfig {
 export declare class BridgeError extends Error {
     code: string;
     serverId: string;
-    details?: any;
-    constructor(message: string, code: string, serverId: string, details?: any);
+    details?: any | undefined;
+    constructor(message: string, code: string, serverId: string, details?: any | undefined);
 }
 export declare class UnsupportedOperationError extends BridgeError {
     constructor(operation: string, serverId: string, coreType: string);

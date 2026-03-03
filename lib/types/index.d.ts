@@ -7,7 +7,7 @@
 export type CoreType = 'Java' | 'Bedrock';
 export type ConnectionMode = 'plugin' | 'rcon' | 'terminal';
 export type ServerStatus = 'online' | 'offline' | 'error' | 'maintenance';
-export type ServerRole = 'owner' | 'admin' | 'moderator' | 'viewer';
+export type ServerRole = 'owner' | 'admin' | 'sm' | 'pm' | 'moderator' | 'viewer';
 export type OperationStatus = 'pending' | 'executing' | 'completed' | 'failed';
 export interface ServerConfig {
     id: string;
@@ -56,6 +56,10 @@ export interface Player {
     edition: 'Java' | 'Bedrock';
     deviceType?: string;
     ipAddress?: string;
+    health?: number;
+    level?: number;
+    gameMode?: string;
+    isOnline?: boolean;
 }
 export interface PlayerDetail extends Player {
     firstJoinAt: Date;
@@ -391,13 +395,13 @@ export interface PluginConfig {
 }
 export declare class MochiLinkError extends Error {
     code: string;
-    details?: any;
-    constructor(message: string, code: string, details?: any);
+    details?: any | undefined;
+    constructor(message: string, code: string, details?: any | undefined);
 }
 export declare class ConnectionError extends MochiLinkError {
     serverId: string;
-    retryAfter?: number;
-    constructor(message: string, serverId: string, retryAfter?: number);
+    retryAfter?: number | undefined;
+    constructor(message: string, serverId: string, retryAfter?: number | undefined);
 }
 export declare class AuthenticationError extends MochiLinkError {
     serverId: string;
@@ -410,9 +414,9 @@ export declare class PermissionDeniedError extends MochiLinkError {
     constructor(message: string, userId: string, serverId: string, operation: string);
 }
 export declare class ProtocolError extends MochiLinkError {
-    messageId?: string;
+    messageId?: string | undefined;
     severity: 'minor' | 'major' | 'critical';
-    constructor(message: string, messageId?: string, severity?: 'minor' | 'major' | 'critical');
+    constructor(message: string, messageId?: string | undefined, severity?: 'minor' | 'major' | 'critical');
 }
 export declare class ServerUnavailableError extends MochiLinkError {
     serverId: string;
@@ -420,8 +424,8 @@ export declare class ServerUnavailableError extends MochiLinkError {
 }
 export declare class MaintenanceError extends MochiLinkError {
     serverId: string;
-    estimatedEnd?: Date;
-    constructor(message: string, serverId: string, estimatedEnd?: Date);
+    estimatedEnd?: Date | undefined;
+    constructor(message: string, serverId: string, estimatedEnd?: Date | undefined);
 }
 export declare class ConnectionModeError extends MochiLinkError {
     mode: string;

@@ -7,7 +7,7 @@
 import { UWBPMessage, UWBPRequest, UWBPResponse, UWBPEvent, UWBPSystemMessage, Player, PlayerDetail, ServerInfo, PerformanceMetrics, CommandResult } from '../types';
 export declare const UWBP_VERSION = "2.0.0";
 export declare const PROTOCOL_NAME = "U-WBP";
-export type RequestOperation = 'server.getInfo' | 'server.getStatus' | 'server.getMetrics' | 'server.shutdown' | 'server.restart' | 'server.reload' | 'server.save' | 'player.list' | 'player.getInfo' | 'player.kick' | 'player.ban' | 'player.unban' | 'player.message' | 'player.teleport' | 'whitelist.get' | 'whitelist.add' | 'whitelist.remove' | 'whitelist.enable' | 'whitelist.disable' | 'command.execute' | 'command.suggest' | 'world.list' | 'world.getInfo' | 'world.setTime' | 'world.setWeather' | 'world.broadcast';
+export type RequestOperation = 'server.getInfo' | 'server.getStatus' | 'server.getMetrics' | 'server.shutdown' | 'server.restart' | 'server.reload' | 'server.save' | 'player.list' | 'player.getInfo' | 'player.kick' | 'player.ban' | 'player.unban' | 'player.banlist' | 'player.message' | 'player.teleport' | 'whitelist.get' | 'whitelist.add' | 'whitelist.remove' | 'whitelist.enable' | 'whitelist.disable' | 'command.execute' | 'command.suggest' | 'command.batch' | 'permission.grant' | 'permission.revoke' | 'permission.update' | 'permission.query' | 'permission.list' | 'world.list' | 'world.getInfo' | 'world.setTime' | 'world.setWeather' | 'world.broadcast';
 export type EventOperation = 'player.join' | 'player.leave' | 'player.chat' | 'player.death' | 'player.advancement' | 'player.move' | 'server.status' | 'server.logLine' | 'server.metrics' | 'alert.tpsLow' | 'alert.memoryHigh' | 'alert.playerFlood' | 'alert.diskSpace' | 'alert.connectionLost';
 export type SystemOperation = 'ping' | 'pong' | 'handshake' | 'capabilities' | 'disconnect' | 'error';
 export declare class MessageFactory {
@@ -215,4 +215,76 @@ export declare class MessageUtils {
      * Get expected response time for operation (in milliseconds)
      */
     static getExpectedResponseTime(op: string): number;
+}
+export interface PermissionGrantData {
+    userId: string;
+    serverId: string;
+    role: 'admin' | 'sm' | 'pm' | 'moderator' | 'viewer';
+    customPermissions?: string[];
+    expiresAt?: string;
+    reason?: string;
+}
+export interface PermissionRevokeData {
+    userId: string;
+    serverId: string;
+    reason?: string;
+}
+export interface PermissionUpdateData {
+    userId: string;
+    serverId: string;
+    role: 'admin' | 'sm' | 'pm' | 'moderator' | 'viewer';
+    expiresAt?: string;
+    reason?: string;
+}
+export interface PermissionQueryData {
+    userId?: string;
+    serverId: string;
+}
+export interface PermissionQueryResultData {
+    userId: string;
+    serverId: string;
+    role: 'owner' | 'admin' | 'sm' | 'pm' | 'moderator' | 'viewer';
+    permissions: string[];
+    grantedBy: string;
+    grantedAt: string;
+    expiresAt?: string;
+}
+export interface PermissionListData {
+    serverId: string;
+    role?: 'admin' | 'sm' | 'pm' | 'moderator' | 'viewer';
+}
+export interface PermissionListResultData {
+    serverId: string;
+    users: Array<{
+        userId: string;
+        role: 'owner' | 'admin' | 'sm' | 'pm' | 'moderator' | 'viewer';
+        permissions: string[];
+        grantedBy: string;
+        grantedAt: string;
+        expiresAt?: string;
+    }>;
+}
+export interface PlayerBanData {
+    playerId: string;
+    reason: string;
+    duration?: number;
+    banType: 'uuid' | 'ip' | 'both';
+}
+export interface PlayerUnbanData {
+    playerId: string;
+    reason?: string;
+}
+export interface PlayerBanlistData {
+    banType: 'uuid' | 'ip' | 'all';
+}
+export interface PlayerBanlistResultData {
+    bans: Array<{
+        playerId: string;
+        playerName?: string;
+        reason: string;
+        bannedBy: string;
+        bannedAt: string;
+        expiresAt?: string;
+        banType: 'uuid' | 'ip';
+    }>;
 }

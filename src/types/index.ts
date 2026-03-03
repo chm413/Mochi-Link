@@ -12,7 +12,7 @@
 export type CoreType = 'Java' | 'Bedrock';
 export type ConnectionMode = 'plugin' | 'rcon' | 'terminal';
 export type ServerStatus = 'online' | 'offline' | 'error' | 'maintenance';
-export type ServerRole = 'owner' | 'admin' | 'moderator' | 'viewer';
+export type ServerRole = 'owner' | 'admin' | 'sm' | 'pm' | 'moderator' | 'viewer';
 export type OperationStatus = 'pending' | 'executing' | 'completed' | 'failed';
 
 // ============================================================================

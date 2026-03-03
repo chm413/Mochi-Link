@@ -45,6 +45,7 @@ export type RequestOperation =
   | 'player.kick'
   | 'player.ban'
   | 'player.unban'
+  | 'player.banlist'
   | 'player.message'
   | 'player.teleport'
   
@@ -58,6 +59,14 @@ export type RequestOperation =
   // Command operations
   | 'command.execute'
   | 'command.suggest'
+  | 'command.batch'
+  
+  // Permission operations
+  | 'permission.grant'
+  | 'permission.revoke'
+  | 'permission.update'
+  | 'permission.query'
+  | 'permission.list'
   
   // World operations
   | 'world.list'
@@ -504,4 +513,89 @@ export class MessageUtils {
     };
     return timeouts[op] || 3000; // Default 3 seconds
   }
+}
+
+// Permission operation data types
+export interface PermissionGrantData {
+  userId: string;
+  serverId: string;
+  role: 'admin' | 'sm' | 'pm' | 'moderator' | 'viewer';
+  customPermissions?: string[];
+  expiresAt?: string; // ISO 8601 timestamp
+  reason?: string;
+}
+
+export interface PermissionRevokeData {
+  userId: string;
+  serverId: string;
+  reason?: string;
+}
+
+export interface PermissionUpdateData {
+  userId: string;
+  serverId: string;
+  role: 'admin' | 'sm' | 'pm' | 'moderator' | 'viewer';
+  expiresAt?: string; // ISO 8601 timestamp
+  reason?: string;
+}
+
+export interface PermissionQueryData {
+  userId?: string; // If not provided, query current user
+  serverId: string;
+}
+
+export interface PermissionQueryResultData {
+  userId: string;
+  serverId: string;
+  role: 'owner' | 'admin' | 'sm' | 'pm' | 'moderator' | 'viewer';
+  permissions: string[];
+  grantedBy: string;
+  grantedAt: string; // ISO 8601 timestamp
+  expiresAt?: string; // ISO 8601 timestamp
+}
+
+export interface PermissionListData {
+  serverId: string;
+  role?: 'admin' | 'sm' | 'pm' | 'moderator' | 'viewer'; // Filter by role
+}
+
+export interface PermissionListResultData {
+  serverId: string;
+  users: Array<{
+    userId: string;
+    role: 'owner' | 'admin' | 'sm' | 'pm' | 'moderator' | 'viewer';
+    permissions: string[];
+    grantedBy: string;
+    grantedAt: string; // ISO 8601 timestamp
+    expiresAt?: string; // ISO 8601 timestamp
+  }>;
+}
+
+// Player ban operation data types
+export interface PlayerBanData {
+  playerId: string;
+  reason: string;
+  duration?: number; // Duration in seconds, null for permanent
+  banType: 'uuid' | 'ip' | 'both';
+}
+
+export interface PlayerUnbanData {
+  playerId: string;
+  reason?: string;
+}
+
+export interface PlayerBanlistData {
+  banType: 'uuid' | 'ip' | 'all';
+}
+
+export interface PlayerBanlistResultData {
+  bans: Array<{
+    playerId: string;
+    playerName?: string;
+    reason: string;
+    bannedBy: string;
+    bannedAt: string; // ISO 8601 timestamp
+    expiresAt?: string; // ISO 8601 timestamp
+    banType: 'uuid' | 'ip';
+  }>;
 }

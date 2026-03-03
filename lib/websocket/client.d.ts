@@ -25,6 +25,7 @@ export interface WebSocketClientConfig {
     maxReconnectAttempts?: number;
     reconnectBackoffMultiplier?: number;
     maxReconnectInterval?: number;
+    disableReconnectOnMaxAttempts?: boolean;
     heartbeatInterval?: number;
     heartbeatTimeout?: number;
     protocolVersion?: string;
@@ -73,9 +74,20 @@ export declare class MochiWebSocketClient extends EventEmitter {
     getReconnectionStatus(): {
         isReconnecting: boolean;
         attempts: number;
+        totalAttempts: number;
         nextAttemptIn?: number;
         lastError?: string;
+        disabled: boolean;
+        lastAttemptTime?: number;
     };
+    /**
+     * Re-enable auto-reconnection after it was disabled
+     */
+    enableReconnection(): void;
+    /**
+     * Manually disable auto-reconnection
+     */
+    disableReconnection(): void;
     /**
      * Get client statistics
      */

@@ -39,11 +39,16 @@ export interface BridgeInfo {
 // ============================================================================
 
 export interface PlayerAction {
-  type: 'kick' | 'ban' | 'tempban' | 'mute' | 'tempmute' | 'warn' | 'teleport';
-  target: string; // player name or UUID
+  type: 'kick' | 'ban' | 'tempban' | 'mute' | 'tempmute' | 'warn' | 'teleport' | 'message';
+  target?: string; // player name or UUID (optional for some operations)
+  playerId?: string; // UUID for message type
+  playerName?: string; // player name
+  targetPlayerId?: string; // target player UUID for teleport
+  location?: Position; // location for teleport
   reason?: string;
   duration?: number; // in seconds for temporary actions
   executor?: string;
+  message?: string; // for message type
   metadata?: Record<string, any>;
 }
 
@@ -81,6 +86,8 @@ export interface BanEntry {
 export interface WorldOperation {
   type: 'save' | 'backup' | 'reload' | 'unload' | 'load' | 'delete';
   worldName?: string;
+  worlds?: string[]; // for batch operations
+  graceful?: boolean; // for graceful operations
   parameters?: Record<string, any>;
 }
 
@@ -108,10 +115,12 @@ export interface WorldSettings {
 // ============================================================================
 
 export interface ServerOperation {
-  type: 'start' | 'stop' | 'restart' | 'reload' | 'save' | 'backup';
+  type: 'start' | 'stop' | 'restart' | 'reload' | 'save' | 'backup' | 'shutdown';
   graceful?: boolean;
   timeout?: number;
   message?: string;
+  delay?: number; // for shutdown delay
+  reloadType?: string; // for reload type
 }
 
 export interface ServerOperationResult {

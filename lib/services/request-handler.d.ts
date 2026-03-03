@@ -9,8 +9,11 @@ import { UWBPRequest, UWBPResponse, Connection } from '../types';
 import { EventService } from './event';
 import { ServerManager } from './server';
 import { PlayerInformationService } from './player';
+import { PlayerActionService } from './player-action';
+import { ServerControlService } from './server-control';
 import { WhitelistManager } from './whitelist';
 import { CommandExecutionService } from './command';
+import { PermissionManager } from './permission';
 export declare class RequestHandler {
     private ctx;
     private services;
@@ -20,8 +23,11 @@ export declare class RequestHandler {
         event: EventService;
         server: ServerManager;
         player: PlayerInformationService;
+        playerAction: PlayerActionService;
+        serverControl: ServerControlService;
         whitelist: WhitelistManager;
         command: CommandExecutionService;
+        permission: PermissionManager;
     });
     /**
      * Handle incoming request
@@ -65,9 +71,21 @@ export declare class RequestHandler {
     private handlePlayerGetInfo;
     private handlePlayerKick;
     private handlePlayerMessage;
+    private handlePlayerBan;
+    private handlePlayerUnban;
+    private handlePlayerBanlist;
     private handleWhitelistGet;
     private handleWhitelistAdd;
     private handleWhitelistRemove;
     private handleCommandExecute;
     private handleSystemPing;
+    /**
+     * Handle permission operations
+     */
+    private handlePermissionOperation;
+    private handlePermissionGrant;
+    private handlePermissionRevoke;
+    private handlePermissionUpdate;
+    private handlePermissionQuery;
+    private handlePermissionList;
 }

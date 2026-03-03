@@ -560,22 +560,132 @@ GET /api/servers/{serverId}/permissions/{userId}
 POST /api/servers/{serverId}/permissions
 ```
 
+**权限要求**: 仅 `owner` 可以调用此接口
+
 **请求体**:
 ```json
 {
   "userId": "user_002",
-  "role": "admin",
-  "permissions": [
+  "role": "pm",  // 可选值: admin, sm, pm, moderator, viewer
+  "customPermissions": [  // 可选，自定义权限列表
     "server_001.player.kick",
-    "server_001.command.execute"
+    "server_001.player.warn"
   ],
-  "expiresAt": "2024-12-31T23:59:59Z"
+  "expiresAt": "2024-12-31T23:59:59Z",  // 可选，null 表示永久
+  "reason": "负责玩家管理工作"  // 可选，授权原因
 }
 ```
 
-#### 3. 移除权限
+**响应**:
+```json
+{
+  "success": true,
+  "data": {
+    "userId": "user_002",
+    "serverId": "server_001",
+    "role": "pm",
+    "permissions": [
+      "server_001.player.kick",
+      "server_001.player.ban",
+      "server_001.player.unban",
+      "server_001.player.warn",
+      "server_001.player.message",
+      "server_001.player.view",
+      "server_001.whitelist.add",
+      "server_001.whitelist.remove",
+      "server_001.whitelist.view",
+      "server_001.message.broadcast",
+      "server_001.message.private"
+    ],
+    "grantedBy": "user_001",
+    "grantedAt": "2024-01-01T12:00:00Z",
+    "expiresAt": "2024-12-31T23:59:59Z"
+  }
+}
+```
+
+**错误响应**:
+```json
+{
+  "success": false,
+  "error": {
+    "code": "PERMISSION_DENIED",
+    "message": "只有服务器拥有者可以授予权限",
+    "details": {
+      "requiredRole": "owner",
+      "currentRole": "admin"
+    }
+  }
+}
+```
+
+#### 3. 撤销权限
 ```http
 DELETE /api/servers/{serverId}/permissions/{userId}
+```
+
+**权限要求**: 仅 `owner` 可以调用此接口
+
+**响应**:
+```json
+{
+  "success": true,
+  "data": {
+    "message": "权限已撤销",
+    "userId": "user_002",
+    "serverId": "server_001",
+    "revokedAt": "2024-01-01T12:00:00Z"
+  }
+}
+```
+
+#### 4. 更新权限
+```http
+PATCH /api/servers/{serverId}/permissions/{userId}
+```
+
+**权限要求**: 仅 `owner` 可以调用此接口
+
+**请求体**:
+```json
+{
+  "role": "moderator",  // 降级为协管员
+  "expiresAt": "2024-06-30T23:59:59Z",
+  "reason": "调整权限范围"
+}
+```
+
+#### 5. 查询用户可管理的服务器
+```http
+GET /api/users/{userId}/servers
+```
+
+**响应**:
+```json
+{
+  "success": true,
+  "data": {
+    "servers": [
+      {
+        "serverId": "server_001",
+        "serverName": "主生存服",
+        "role": "owner",
+        "permissions": ["server_001.*"],
+        "grantedAt": "2024-01-01T00:00:00Z",
+        "expiresAt": null
+      },
+      {
+        "serverId": "server_002",
+        "serverName": "小游戏服",
+        "role": "pm",
+        "permissions": ["server_002.player.*", "server_002.whitelist.*"],
+        "grantedAt": "2024-01-15T00:00:00Z",
+        "expiresAt": "2024-12-31T23:59:59Z"
+      }
+    ],
+    "total": 2
+  }
+}
 ```
 
 ### 审计日志 API
@@ -750,6 +860,7 @@ wss://<host>:<port>/ws  # SSL
     "serverId": "server_001"
   }
 }
+// 权限要求: owner, admin, sm
 
 // 重启服务器
 {
@@ -758,9 +869,11 @@ wss://<host>:<port>/ws  # SSL
   "op": "server.restart",
   "data": {
     "serverId": "server_001",
-    "delay": 10
+    "delay": 10,  // 延迟秒数
+    "reason": "例行维护"  // 可选
   }
 }
+// 权限要求: owner, admin, sm
 
 // 停止服务器
 {
@@ -768,9 +881,128 @@ wss://<host>:<port>/ws  # SSL
   "id": "req_010",
   "op": "server.stop",
   "data": {
-    "serverId": "server_001"
+    "serverId": "server_001",
+    "reason": "服务器维护"  // 可选
   }
 }
+// 权限要求: owner, admin, sm
+```
+
+#### 7. 权限管理操作
+```json
+// 授予权限
+{
+  "type": "request",
+  "id": "req_011",
+  "op": "permission.grant",
+  "data": {
+    "serverId": "server_001",
+    "userId": "user_002",
+    "role": "pm",
+    "customPermissions": [],  // 可选
+    "expiresAt": "2024-12-31T23:59:59Z",  // 可选
+    "reason": "负责玩家管理"  // 可选
+  }
+}
+// 权限要求: 仅 owner
+
+// 响应
+{
+  "type": "response",
+  "id": "req_011",
+  "op": "permission.grant",
+  "data": {
+    "success": true,
+    "userId": "user_002",
+    "role": "pm",
+    "permissions": [
+      "server_001.player.*",
+      "server_001.whitelist.*",
+      "server_001.message.*"
+    ],
+    "grantedAt": "2024-01-01T12:00:00Z"
+  }
+}
+
+// 撤销权限
+{
+  "type": "request",
+  "id": "req_012",
+  "op": "permission.revoke",
+  "data": {
+    "serverId": "server_001",
+    "userId": "user_002",
+    "reason": "不再担任该职位"  // 可选
+  }
+}
+// 权限要求: 仅 owner
+
+// 查询权限
+{
+  "type": "request",
+  "id": "req_013",
+  "op": "permission.query",
+  "data": {
+    "serverId": "server_001",
+    "userId": "user_002"  // 可选，不指定则查询当前用户
+  }
+}
+// 权限要求: owner 可查询所有用户，其他角色只能查询自己
+
+// 列出所有权限
+{
+  "type": "request",
+  "id": "req_014",
+  "op": "permission.list",
+  "data": {
+    "serverId": "server_001",
+    "role": "pm"  // 可选，过滤特定角色
+  }
+}
+// 权限要求: owner, admin
+```
+
+#### 8. 玩家封禁操作
+```json
+// 封禁玩家
+{
+  "type": "request",
+  "id": "req_015",
+  "op": "player.ban",
+  "data": {
+    "serverId": "server_001",
+    "playerId": "uuid_1234567890",
+    "reason": "违反服务器规则",
+    "duration": 86400,  // 可选，封禁时长（秒），null 表示永久
+    "banType": "uuid"  // uuid, ip, both
+  }
+}
+// 权限要求: owner, admin, pm
+
+// 解封玩家
+{
+  "type": "request",
+  "id": "req_016",
+  "op": "player.unban",
+  "data": {
+    "serverId": "server_001",
+    "playerId": "uuid_1234567890",
+    "reason": "申诉通过"  // 可选
+  }
+}
+// 权限要求: owner, admin, pm
+
+// 查询封禁列表
+{
+  "type": "request",
+  "id": "req_017",
+  "op": "player.banlist",
+  "data": {
+    "serverId": "server_001",
+    "banType": "uuid"  // uuid, ip, all
+  }
+}
+// 权限要求: owner, admin, pm, moderator
 ```
 
 ### 事件订阅
@@ -779,7 +1011,7 @@ wss://<host>:<port>/ws  # SSL
 ```json
 {
   "type": "request",
-  "id": "req_011",
+  "id": "req_018",
   "op": "event.subscribe",
   "data": {
     "serverId": "server_001",
@@ -787,13 +1019,14 @@ wss://<host>:<port>/ws  # SSL
     "useDefaults": false  // 可选，true 则使用默认基础事件
   }
 }
+// 权限要求: 所有角色都可以订阅事件，但接收的事件内容会根据权限过滤
 ```
 
 **响应**:
 ```json
 {
   "type": "response",
-  "id": "req_011",
+  "id": "req_018",
   "op": "event.subscribe",
   "data": {
     "subscriptionId": "sub_1234567890",
@@ -803,6 +1036,7 @@ wss://<host>:<port>/ws  # SSL
   },
   "metadata": {
     "isDefaultSubscription": false,
+    "userRole": "pm",
     "availableBasicEvents": [
       "server.start",
       "server.stop",
@@ -818,6 +1052,9 @@ wss://<host>:<port>/ws  # SSL
       "alert.tpsLow",
       "alert.memoryHigh",
       "alert.playerFlood"
+    ],
+    "restrictedEvents": [
+      "server.logLine"  // viewer 角色无法订阅
     ]
   }
 }
@@ -832,13 +1069,43 @@ wss://<host>:<port>/ws  # SSL
 ```json
 {
   "type": "request",
-  "id": "req_012",
+  "id": "req_019",
   "op": "event.unsubscribe",
   "data": {
     "subscriptionId": "sub_1234567890"
   }
 }
 ```
+
+### 操作权限映射表
+
+以下表格列出了所有 WebSocket 操作及其所需的最低权限等级：
+
+| 操作 (op) | owner | admin | sm | pm | moderator | viewer |
+|-----------|-------|-------|----|----|-----------|--------|
+| `server.get_status` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `server.save` | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ |
+| `server.restart` | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ |
+| `server.stop` | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ |
+| `player.list` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `player.kick` | ✓ | ✓ | ✗ | ✓ | ✓ | ✗ |
+| `player.ban` | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
+| `player.unban` | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
+| `player.banlist` | ✓ | ✓ | ✗ | ✓ | ✓ | ✗ |
+| `player.message` | ✓ | ✓ | ✗ | ✓ | ✓ | ✗ |
+| `command.execute` | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ |
+| `command.batch` | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ |
+| `whitelist.add` | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
+| `whitelist.remove` | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
+| `whitelist.list` | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ |
+| `permission.grant` | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| `permission.revoke` | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| `permission.query` | ✓* | ✓* | ✓* | ✓* | ✓* | ✓* |
+| `permission.list` | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
+| `event.subscribe` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `event.unsubscribe` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+注：`permission.query` 标记 * 表示所有角色都可以查询自己的权限，但只有 owner 可以查询其他用户的权限。
 
 ## 数据模型
 
@@ -984,6 +1251,12 @@ interface ServerStatus {
 - `PERMISSION_DENIED`: 权限不足
 - `SERVER_ACCESS_DENIED`: 无权访问该服务器
 - `OPERATION_NOT_ALLOWED`: 操作不被允许
+- `ROLE_INSUFFICIENT`: 角色等级不足
+- `CANNOT_MODIFY_OWNER`: 不能修改服主权限
+- `CANNOT_GRANT_HIGHER_ROLE`: 不能授予高于自己的角色
+- `ONLY_OWNER_CAN_GRANT`: 只有服主可以授予权限
+- `PERMISSION_EXPIRED`: 权限已过期
+- `INVALID_ROLE`: 无效的角色类型
 
 #### 服务器错误
 - `SERVER_NOT_FOUND`: 服务器不存在
@@ -1012,7 +1285,137 @@ interface ServerStatus {
     "message": "用户无权执行此操作",
     "details": {
       "userId": "user_001",
-      "operation": "player.kick"
+      "operation": "player.kick",
+      "requiredPermission": "server_001.player.kick",
+      "currentRole": "viewer",
+      "requiredRole": "moderator"
+    }
+  }
+}
+```
+
+### 权限验证示例
+
+#### 示例 1: 成功的操作
+```json
+// 请求：pm 角色踢出玩家
+{
+  "type": "request",
+  "id": "req_001",
+  "op": "player.kick",
+  "data": {
+    "serverId": "server_001",
+    "playerId": "uuid_1234567890",
+    "reason": "违反规则"
+  }
+}
+
+// 响应：成功
+{
+  "type": "response",
+  "id": "req_001",
+  "op": "player.kick",
+  "data": {
+    "success": true,
+    "playerId": "uuid_1234567890",
+    "playerName": "Steve",
+    "kickedAt": "2024-01-01T12:00:00Z"
+  }
+}
+```
+
+#### 示例 2: 权限不足
+```json
+// 请求：moderator 尝试封禁玩家
+{
+  "type": "request",
+  "id": "req_002",
+  "op": "player.ban",
+  "data": {
+    "serverId": "server_001",
+    "playerId": "uuid_1234567890",
+    "reason": "作弊"
+  }
+}
+
+// 响应：权限不足
+{
+  "type": "response",
+  "id": "req_002",
+  "op": "error",
+  "data": {
+    "code": "ROLE_INSUFFICIENT",
+    "message": "协管员无权封禁玩家，需要 pm 或更高权限",
+    "details": {
+      "operation": "player.ban",
+      "currentRole": "moderator",
+      "requiredRole": "pm",
+      "suggestion": "请联系服主或管理员进行封禁操作"
+    }
+  }
+}
+```
+
+#### 示例 3: 非服主尝试授权
+```json
+// 请求：admin 尝试授予权限
+{
+  "type": "request",
+  "id": "req_003",
+  "op": "permission.grant",
+  "data": {
+    "serverId": "server_001",
+    "userId": "user_003",
+    "role": "moderator"
+  }
+}
+
+// 响应：只有服主可以授权
+{
+  "type": "response",
+  "id": "req_003",
+  "op": "error",
+  "data": {
+    "code": "ONLY_OWNER_CAN_GRANT",
+    "message": "只有服务器拥有者可以授予或撤销权限",
+    "details": {
+      "operation": "permission.grant",
+      "currentRole": "admin",
+      "requiredRole": "owner",
+      "ownerId": "user_001",
+      "ownerName": "ServerOwner"
+    }
+  }
+}
+```
+
+#### 示例 4: 跨服务器操作限制
+```json
+// 请求：用户尝试操作无权限的服务器
+{
+  "type": "request",
+  "id": "req_004",
+  "op": "player.kick",
+  "data": {
+    "serverId": "server_002",
+    "playerId": "uuid_1234567890",
+    "reason": "测试"
+  }
+}
+
+// 响应：无权访问该服务器
+{
+  "type": "response",
+  "id": "req_004",
+  "op": "error",
+  "data": {
+    "code": "SERVER_ACCESS_DENIED",
+    "message": "您没有访问该服务器的权限",
+    "details": {
+      "serverId": "server_002",
+      "serverName": "小游戏服",
+      "userId": "user_002",
+      "availableServers": ["server_001"]
     }
   }
 }
@@ -1039,23 +1442,124 @@ interface ServerStatus {
 <serverId>.<resource>.<action>
 ```
 
+#### 权限资源类型
+- `server`: 服务器控制（restart, stop, save, status, delete, config）
+- `player`: 玩家管理（kick, ban, unban, warn, message, view, teleport）
+- `whitelist`: 白名单管理（add, remove, view, sync）
+- `command`: 命令执行（execute, batch）
+- `permission`: 权限管理（grant, revoke, view）
+- `message`: 消息发送（broadcast, private, announcement）
+- `log`: 日志查看（view, export）
+- `metric`: 性能监控（view, export）
+
 #### 示例权限
 - `server_001.player.kick`: 踢出玩家
+- `server_001.player.ban`: 封禁玩家
 - `server_001.command.execute`: 执行命令
-- `server_001.whitelist.manage`: 管理白名单
+- `server_001.whitelist.add`: 添加白名单
+- `server_001.whitelist.remove`: 移除白名单
 - `server_001.server.restart`: 重启服务器
+- `server_001.server.stop`: 停止服务器
+- `server_001.permission.grant`: 授予权限（仅 owner）
+- `server_001.permission.revoke`: 撤销权限（仅 owner）
+- `server_001.*`: 所有权限（仅 owner）
 
 #### 角色定义
-- `owner`: 服主，拥有所有权限
-- `admin`: 管理员，拥有大部分权限
-- `moderator`:  moderator，拥有玩家管理权限
-- `viewer`: 查看者，只读权限
+
+系统采用严格的层级权限模型，每个角色拥有特定的权限范围：
+
+- `owner`: 服主（最高权限）
+  - 拥有服务器的所有权限
+  - 可以授予和撤销其他用户的权限
+  - 可以删除服务器
+  - 可以修改服务器核心配置
+  - 权限格式：`<serverId>.*`
+
+- `admin`: 管理员
+  - 拥有服务器管理和玩家管理的完整权限
+  - 可以执行所有命令
+  - 可以管理白名单、OP、封禁
+  - 可以重启/停止服务器
+  - 不能授予权限或删除服务器
+  - 权限格式：`<serverId>.server.*`, `<serverId>.player.*`, `<serverId>.command.*`
+
+- `sm` (Server Manager): 服务器管理员
+  - 专注于服务器运维管理
+  - 可以执行服务器控制命令（重启、停止、保存）
+  - 可以查看服务器性能和日志
+  - 可以执行管理类命令
+  - 不能管理玩家或修改白名单
+  - 权限格式：`<serverId>.server.restart`, `<serverId>.server.stop`, `<serverId>.server.save`, `<serverId>.server.status`, `<serverId>.command.execute`
+
+- `pm` (Player Manager): 玩家管理员
+  - 专注于玩家管理
+  - 可以踢出、封禁、解封玩家
+  - 可以管理白名单
+  - 可以发送公告和私聊
+  - 可以查看玩家信息
+  - 不能执行服务器控制命令
+  - 权限格式：`<serverId>.player.*`, `<serverId>.whitelist.*`, `<serverId>.message.*`
+
+- `moderator`: 协管员
+  - 基础玩家管理权限
+  - 可以踢出玩家（不能封禁）
+  - 可以发送警告和私聊
+  - 可以查看玩家信息
+  - 不能管理白名单或执行命令
+  - 权限格式：`<serverId>.player.kick`, `<serverId>.player.warn`, `<serverId>.player.message`, `<serverId>.player.view`
+
+- `viewer`: 查看者
+  - 只读权限
+  - 可以查看服务器状态
+  - 可以查看玩家列表
+  - 可以查看服务器日志
+  - 不能执行任何操作
+  - 权限格式：`<serverId>.*.view`
 
 ### 权限检查流程
-1. 验证用户是否可访问目标服务器
-2. 检查用户是否拥有操作权限
-3. 验证操作参数是否有效
-4. 执行操作并记录审计日志
+1. 验证用户身份和令牌有效性
+2. 检查用户是否可访问目标服务器
+3. 验证用户角色和权限等级
+4. 检查用户是否拥有特定操作权限
+5. 验证操作参数是否有效
+6. 执行操作并记录审计日志
+
+### 权限授予规则
+
+#### 授权限制
+- 只有服务器的 `owner` 可以授予或撤销该服务器的权限
+- 用户不能授予高于自己等级的权限
+- 用户不能修改 `owner` 的权限
+- 权限授予必须指定过期时间（可选永久）
+
+#### 权限继承
+- `owner` 继承所有权限
+- `admin` 继承 `sm` + `pm` + `moderator` 的所有权限
+- `sm` 和 `pm` 是平行角色，互不继承
+- `moderator` 是 `pm` 的子集
+- `viewer` 只有查看权限
+
+#### 权限冲突处理
+- 当用户拥有多个角色时，取最高权限
+- 显式拒绝权限优先于授予权限
+- 临时权限优先于永久权限
+
+### 角色权限矩阵
+
+| 操作 | owner | admin | sm | pm | moderator | viewer |
+|------|-------|-------|----|----|-----------|--------|
+| 授予/撤销权限 | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| 删除服务器 | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| 修改服务器配置 | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
+| 重启/停止服务器 | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ |
+| 执行命令 | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ |
+| 查看服务器日志 | ✓ | ✓ | ✓ | ✗ | ✗ | ✓ |
+| 封禁/解封玩家 | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
+| 踢出玩家 | ✓ | ✓ | ✗ | ✓ | ✓ | ✗ |
+| 管理白名单 | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
+| 发送私聊/公告 | ✓ | ✓ | ✗ | ✓ | ✓ | ✗ |
+| 查看玩家信息 | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ |
+| 查看服务器状态 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 ## 事件系统
 
@@ -1142,6 +1646,218 @@ interface ServerStatus {
 ```
 
 ## 附录
+
+### 角色权限完整参考
+
+#### Owner (服主)
+```json
+{
+  "role": "owner",
+  "displayName": "服主",
+  "level": 5,
+  "permissions": [
+    "<serverId>.*"  // 所有权限
+  ],
+  "capabilities": [
+    "授予和撤销权限",
+    "删除服务器",
+    "修改服务器配置",
+    "执行所有管理操作",
+    "查看所有数据和日志",
+    "管理所有用户权限"
+  ],
+  "restrictions": []
+}
+```
+
+#### Admin (管理员)
+```json
+{
+  "role": "admin",
+  "displayName": "管理员",
+  "level": 4,
+  "permissions": [
+    "<serverId>.server.restart",
+    "<serverId>.server.stop",
+    "<serverId>.server.save",
+    "<serverId>.server.status",
+    "<serverId>.server.config.view",
+    "<serverId>.player.*",
+    "<serverId>.whitelist.*",
+    "<serverId>.command.*",
+    "<serverId>.message.*",
+    "<serverId>.log.view",
+    "<serverId>.metric.view"
+  ],
+  "capabilities": [
+    "重启和停止服务器",
+    "执行所有命令",
+    "管理所有玩家",
+    "管理白名单",
+    "查看服务器日志和性能",
+    "发送公告和私聊"
+  ],
+  "restrictions": [
+    "不能授予或撤销权限",
+    "不能删除服务器",
+    "不能修改核心配置"
+  ]
+}
+```
+
+#### SM (Server Manager - 服务器管理员)
+```json
+{
+  "role": "sm",
+  "displayName": "服务器管理员",
+  "level": 3,
+  "permissions": [
+    "<serverId>.server.restart",
+    "<serverId>.server.stop",
+    "<serverId>.server.save",
+    "<serverId>.server.status",
+    "<serverId>.command.execute",
+    "<serverId>.command.batch",
+    "<serverId>.log.view",
+    "<serverId>.metric.view",
+    "<serverId>.metric.export"
+  ],
+  "capabilities": [
+    "重启和停止服务器",
+    "保存世界数据",
+    "执行服务器命令",
+    "查看服务器日志",
+    "监控服务器性能",
+    "导出性能数据"
+  ],
+  "restrictions": [
+    "不能管理玩家",
+    "不能管理白名单",
+    "不能修改服务器配置",
+    "不能授予权限"
+  ]
+}
+```
+
+#### PM (Player Manager - 玩家管理员)
+```json
+{
+  "role": "pm",
+  "displayName": "玩家管理员",
+  "level": 3,
+  "permissions": [
+    "<serverId>.player.kick",
+    "<serverId>.player.ban",
+    "<serverId>.player.unban",
+    "<serverId>.player.warn",
+    "<serverId>.player.message",
+    "<serverId>.player.view",
+    "<serverId>.player.teleport",
+    "<serverId>.whitelist.add",
+    "<serverId>.whitelist.remove",
+    "<serverId>.whitelist.view",
+    "<serverId>.whitelist.sync",
+    "<serverId>.message.broadcast",
+    "<serverId>.message.private",
+    "<serverId>.message.announcement"
+  ],
+  "capabilities": [
+    "踢出和封禁玩家",
+    "管理白名单",
+    "发送警告和私聊",
+    "发送公告",
+    "查看玩家信息",
+    "传送玩家"
+  ],
+  "restrictions": [
+    "不能执行服务器命令",
+    "不能重启或停止服务器",
+    "不能查看服务器日志",
+    "不能授予权限"
+  ]
+}
+```
+
+#### Moderator (协管员)
+```json
+{
+  "role": "moderator",
+  "displayName": "协管员",
+  "level": 2,
+  "permissions": [
+    "<serverId>.player.kick",
+    "<serverId>.player.warn",
+    "<serverId>.player.message",
+    "<serverId>.player.view",
+    "<serverId>.whitelist.view",
+    "<serverId>.message.private"
+  ],
+  "capabilities": [
+    "踢出玩家（不能封禁）",
+    "发送警告",
+    "发送私聊",
+    "查看玩家信息",
+    "查看白名单"
+  ],
+  "restrictions": [
+    "不能封禁玩家",
+    "不能管理白名单",
+    "不能执行命令",
+    "不能发送公告",
+    "不能查看服务器日志"
+  ]
+}
+```
+
+#### Viewer (查看者)
+```json
+{
+  "role": "viewer",
+  "displayName": "查看者",
+  "level": 1,
+  "permissions": [
+    "<serverId>.server.status",
+    "<serverId>.player.view",
+    "<serverId>.whitelist.view",
+    "<serverId>.metric.view"
+  ],
+  "capabilities": [
+    "查看服务器状态",
+    "查看玩家列表",
+    "查看白名单",
+    "查看性能数据"
+  ],
+  "restrictions": [
+    "不能执行任何操作",
+    "只有只读权限",
+    "不能查看敏感日志"
+  ]
+}
+```
+
+### 权限授予命令参考
+
+在实现时，建议提供以下命令接口：
+
+```bash
+# 授予权限
+/mochilink permission grant <userId> <role> [serverId] [--expires <date>] [--reason <text>]
+
+# 撤销权限
+/mochilink permission revoke <userId> [serverId]
+
+# 查询权限
+/mochilink permission query <userId> [serverId]
+
+# 列出所有权限
+/mochilink permission list [serverId] [--role <role>]
+
+# 更新权限
+/mochilink permission update <userId> <role> [serverId] [--expires <date>]
+
+# 查看自己的权限
+/mochilink permission me
+```
 
 ### 状态码参考
 

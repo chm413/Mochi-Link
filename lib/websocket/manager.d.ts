@@ -21,6 +21,9 @@ export interface ConnectionManagerConfig {
     autoReconnect?: boolean;
     reconnectInterval?: number;
     maxReconnectAttempts?: number;
+    reconnectBackoffMultiplier?: number;
+    maxReconnectInterval?: number;
+    disableReconnectOnMaxAttempts?: boolean;
     protocolHandler?: ProtocolHandler;
     authenticationRequired?: boolean;
     encryptionEnabled?: boolean;
@@ -111,6 +114,18 @@ export declare class WebSocketConnectionManager extends EventEmitter {
      * Get connection info for debugging
      */
     getConnectionInfo(serverId: string): any;
+    /**
+     * Get reconnection status for a specific server
+     */
+    getReconnectionStatus(serverId: string): any;
+    /**
+     * Enable reconnection for a specific server
+     */
+    enableReconnection(serverId: string): void;
+    /**
+     * Disable reconnection for a specific server
+     */
+    disableReconnection(serverId: string): void;
     private setupManagerHandlers;
     private setupConnectionSecurityHandlers;
     private setupServerHandlers;

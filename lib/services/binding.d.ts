@@ -105,6 +105,7 @@ export declare class BindingManager {
     constructor(ctx: Context, audit: AuditService, permission: PermissionManager);
     /**
      * Create a new group-server binding
+     * Note: A group can only have ONE active binding at a time
      */
     createBinding(userId: string, options: BindingCreateOptions): Promise<ServerBinding>;
     /**
