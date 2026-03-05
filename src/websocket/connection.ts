@@ -50,6 +50,21 @@ export class WebSocketConnection extends EventEmitter implements Connection {
   private authToken?: string;
   private encryptionEnabled = false;
   private encryptionKey?: string;
+  private serverInfo?: {
+    name?: string;
+    version?: string;
+    coreType?: string;
+    coreName?: string;
+    config?: {
+      whitelistEnabled?: boolean;
+      onlineMode?: boolean;
+      maxPlayers?: number;
+      port?: number;
+      motd?: string;
+      difficulty?: string;
+      pvpEnabled?: boolean;
+    };
+  };
 
   constructor(
     ws: WebSocket,
@@ -220,6 +235,20 @@ export class WebSocketConnection extends EventEmitter implements Connection {
   updateCapabilities(capabilities: string[]): void {
     this.capabilities = [...capabilities];
     this.emit('capabilitiesUpdated', capabilities);
+  }
+
+  /**
+   * Set server info from handshake
+   */
+  setServerInfo(info: any): void {
+    this.serverInfo = info;
+  }
+
+  /**
+   * Get server info
+   */
+  getServerInfo(): any {
+    return this.serverInfo;
   }
 
   /**

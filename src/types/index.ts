@@ -30,6 +30,16 @@ export interface ServerConfig {
   status: ServerStatus;
   ownerId: string;
   tags: string[];
+  // Server configuration
+  whitelistEnabled?: boolean;
+  onlineMode?: boolean;
+  maxPlayers?: number;
+  serverPort?: number;
+  serverMotd?: string;
+  difficulty?: string;
+  pvpEnabled?: boolean;
+  configUpdatedAt?: Date;
+  // Timestamps
   createdAt: Date;
   updatedAt: Date;
   lastSeen?: Date;
@@ -357,6 +367,16 @@ export interface DatabaseServer {
   status: string;
   owner_id: string;
   tags: string; // JSON string
+  // Server configuration
+  whitelist_enabled?: boolean;
+  online_mode?: boolean;
+  max_players?: number;
+  server_port?: number;
+  server_motd?: string;
+  difficulty?: string;
+  pvp_enabled?: boolean;
+  config_updated_at?: Date;
+  // Timestamps
   created_at: Date;
   updated_at: Date;
   last_seen?: Date;

@@ -206,6 +206,61 @@ export function apply(ctx: Context, config: PluginConfig) {
                         try {
                             await serviceManager.server.updateServerStatus(connection.serverId, 'online');
                             
+                            // Update server info from handshake
+                            const serverInfo = connection.getServerInfo();
+                            if (serverInfo) {
+                                const updates: any = {};
+                                
+                                // Update version information
+                                if (serverInfo.version) {
+                                    updates.coreVersion = serverInfo.version;
+                                }
+                                if (serverInfo.coreName) {
+                                    updates.coreName = serverInfo.coreName;
+                                }
+                                if (serverInfo.coreType) {
+                                    updates.coreType = serverInfo.coreType;
+                                }
+                                
+                                // Update server configuration if present
+                                if (serverInfo.config) {
+                                    if (serverInfo.config.whitelistEnabled !== undefined) {
+                                        updates.whitelistEnabled = serverInfo.config.whitelistEnabled;
+                                    }
+                                    if (serverInfo.config.onlineMode !== undefined) {
+                                        updates.onlineMode = serverInfo.config.onlineMode;
+                                    }
+                                    if (serverInfo.config.maxPlayers !== undefined) {
+                                        updates.maxPlayers = serverInfo.config.maxPlayers;
+                                    }
+                                    if (serverInfo.config.port !== undefined) {
+                                        updates.serverPort = serverInfo.config.port;
+                                    }
+                                    if (serverInfo.config.motd !== undefined) {
+                                        updates.serverMotd = serverInfo.config.motd;
+                                    }
+                                    if (serverInfo.config.difficulty !== undefined) {
+                                        updates.difficulty = serverInfo.config.difficulty;
+                                    }
+                                    if (serverInfo.config.pvpEnabled !== undefined) {
+                                        updates.pvpEnabled = serverInfo.config.pvpEnabled;
+                                    }
+                                    updates.configUpdatedAt = new Date();
+                                    
+                                    logger.info(`Server ${connection.serverId} config:`, {
+                                        whitelistEnabled: serverInfo.config.whitelistEnabled,
+                                        onlineMode: serverInfo.config.onlineMode,
+                                        maxPlayers: serverInfo.config.maxPlayers
+                                    });
+                                }
+                                
+                                // Update database if we have any updates
+                                if (Object.keys(updates).length > 0) {
+                                    await serviceManager.server.updateServer(connection.serverId, updates);
+                                    logger.info(`Updated server info for ${connection.serverId}:`, updates);
+                                }
+                            }
+                            
                             // Create WebSocket bridge for command execution
                             await serviceManager.server.createWebSocketBridge(connection.serverId, connection);
                             
@@ -295,6 +350,32 @@ export function apply(ctx: Context, config: PluginConfig) {
                 // Helper function to handle system messages
                 async function handleSystemMessage(message: any, connection: WebSocketConnection) {
                     switch (message.systemOp || message.op) {
+                        case 'handshake':
+                            // Handle handshake message (authentication)
+                            if (wsManager && wsManager.authManager) {
+                                const authResult = await wsManager.authManager.handleAuthenticationMessage(
+                                    message,
+                                    connection.ws?.['_socket']?.remoteAddress
+                                );
+                                
+                                if (authResult) {
+                                    // Extract server info before sending response
+                                    if (authResult.data?.serverInfo) {
+                                        connection.setServerInfo(authResult.data.serverInfo);
+                                    }
+                                    
+                                    // Send authentication response
+                                    await connection.send(authResult);
+                                    
+                                    // If authentication successful, emit authenticated event
+                                    if (authResult.data?.success) {
+                                        connection.setAuthenticated(true);
+                                        connection.emit('authenticated');
+                                    }
+                                }
+                            }
+                            break;
+
                         case 'ping':
                             // Respond with pong
                             const { MessageFactory } = await import('./protocol/messages');

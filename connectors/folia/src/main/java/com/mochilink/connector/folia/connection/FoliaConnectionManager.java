@@ -167,7 +167,7 @@ public class FoliaConnectionManager {
             handshake.addProperty("type", "system");
             handshake.addProperty("id", generateId());
             handshake.addProperty("op", "handshake");
-            handshake.addProperty("timestamp", System.currentTimeMillis());
+            handshake.addProperty("timestamp", java.time.Instant.now().toString());
             handshake.addProperty("version", "2.0");
             handshake.addProperty("systemOp", "handshake");
             
@@ -176,11 +176,36 @@ public class FoliaConnectionManager {
             data.addProperty("serverType", "connector");
             data.addProperty("serverId", config.getServerId());
             
+            // Add authentication information
+            JsonObject authentication = new JsonObject();
+            authentication.addProperty("token", config.getServerToken());
+            authentication.addProperty("method", "token");
+            data.add("authentication", authentication);
+            
+            // Add server information
             JsonObject serverInfo = new JsonObject();
             serverInfo.addProperty("name", plugin.getServer().getName());
             serverInfo.addProperty("version", plugin.getServer().getVersion());
             serverInfo.addProperty("coreType", "Java");
             serverInfo.addProperty("coreName", "Folia");
+            
+            // Add server configuration
+            JsonObject serverConfig = new JsonObject();
+            serverConfig.addProperty("whitelistEnabled", plugin.getServer().hasWhitelist());
+            serverConfig.addProperty("onlineMode", plugin.getServer().getOnlineMode());
+            serverConfig.addProperty("maxPlayers", plugin.getServer().getMaxPlayers());
+            serverConfig.addProperty("port", plugin.getServer().getPort());
+            serverConfig.addProperty("motd", plugin.getServer().getMotd());
+            
+            // Get difficulty from first world (Folia may have multiple worlds)
+            if (!plugin.getServer().getWorlds().isEmpty()) {
+                org.bukkit.World firstWorld = plugin.getServer().getWorlds().get(0);
+                serverConfig.addProperty("difficulty", firstWorld.getDifficulty().name());
+            }
+            
+            serverConfig.addProperty("pvpEnabled", plugin.getServer().isPVPEnabled());
+            serverInfo.add("config", serverConfig);
+            
             data.add("serverInfo", serverInfo);
             
             handshake.add("data", data);
@@ -247,7 +272,8 @@ public class FoliaConnectionManager {
             case "player.list":
                 response = messageHandler.handlePlayerList(requestId);
                 break;
-            case "player.info":
+            case "player.getInfo":  // Koishi 命名
+            case "player.info":     // 兼容旧命名
                 String playerId = data.has("playerId") ? data.get("playerId").getAsString() : null;
                 response = messageHandler.handlePlayerInfo(requestId, playerId);
                 break;
@@ -261,7 +287,8 @@ public class FoliaConnectionManager {
                 String message = data.has("message") ? data.get("message").getAsString() : null;
                 response = messageHandler.handlePlayerMessage(requestId, msgPlayerId, message);
                 break;
-            case "whitelist.list":
+            case "whitelist.get":   // Koishi 命名
+            case "whitelist.list":  // 兼容旧命名
                 response = messageHandler.handleWhitelistList(requestId);
                 break;
             case "whitelist.add":
@@ -278,17 +305,20 @@ public class FoliaConnectionManager {
                 String command = data.has("command") ? data.get("command").getAsString() : null;
                 response = messageHandler.handleCommandExecute(requestId, command);
                 break;
-            case "server.info":
+            case "server.getInfo":  // Koishi 命名
+            case "server.info":     // 兼容旧命名
                 response = messageHandler.handleServerInfo(requestId);
                 break;
-            case "server.status":
+            case "server.getStatus":  // Koishi 命名
+            case "server.status":     // 兼容旧命名
                 response = messageHandler.handleServerStatus(requestId);
                 break;
             case "server.restart":
                 int restartDelay = data.has("delay") ? data.get("delay").getAsInt() : 10;
                 response = messageHandler.handleServerRestart(requestId, restartDelay);
                 break;
-            case "server.stop":
+            case "server.shutdown":  // Koishi 命名
+            case "server.stop":      // 兼容旧命名
                 int stopDelay = data.has("delay") ? data.get("delay").getAsInt() : 10;
                 response = messageHandler.handleServerStop(requestId, stopDelay);
                 break;
@@ -352,7 +382,7 @@ public class FoliaConnectionManager {
             response.addProperty("type", "response");
             response.addProperty("id", requestId);
             response.addProperty("op", "event.subscribe");
-            response.addProperty("timestamp", System.currentTimeMillis());
+            response.addProperty("timestamp", java.time.Instant.now().toString());
             response.addProperty("version", "2.0");
             
             JsonObject responseData = new JsonObject();
@@ -389,7 +419,7 @@ public class FoliaConnectionManager {
             response.addProperty("type", "response");
             response.addProperty("id", requestId);
             response.addProperty("op", "event.unsubscribe");
-            response.addProperty("timestamp", System.currentTimeMillis());
+            response.addProperty("timestamp", java.time.Instant.now().toString());
             response.addProperty("version", "2.0");
             
             JsonObject responseData = new JsonObject();
@@ -415,7 +445,7 @@ public class FoliaConnectionManager {
             response.addProperty("type", "response");
             response.addProperty("id", requestId);
             response.addProperty("op", op);
-            response.addProperty("timestamp", System.currentTimeMillis());
+            response.addProperty("timestamp", java.time.Instant.now().toString());
             response.addProperty("version", "2.0");
             
             JsonObject data = new JsonObject();
@@ -449,7 +479,7 @@ public class FoliaConnectionManager {
         pong.addProperty("type", "system");
         pong.addProperty("id", generateId());
         pong.addProperty("op", "pong");
-        pong.addProperty("timestamp", System.currentTimeMillis());
+        pong.addProperty("timestamp", java.time.Instant.now().toString());
         pong.addProperty("version", "2.0");
         pong.addProperty("systemOp", "pong");
         
@@ -473,7 +503,7 @@ public class FoliaConnectionManager {
             disconnect.addProperty("type", "system");
             disconnect.addProperty("id", generateId());
             disconnect.addProperty("op", "disconnect");
-            disconnect.addProperty("timestamp", System.currentTimeMillis());
+            disconnect.addProperty("timestamp", java.time.Instant.now().toString());
             disconnect.addProperty("version", "2.0");
             disconnect.addProperty("systemOp", "disconnect");
             

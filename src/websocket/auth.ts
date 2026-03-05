@@ -40,6 +40,21 @@ export interface AuthenticationResult {
   token?: APIToken;
   error?: string;
   capabilities?: string[];
+  serverInfo?: {
+    name?: string;
+    version?: string;
+    coreType?: string;
+    coreName?: string;
+    config?: {
+      whitelistEnabled?: boolean;
+      onlineMode?: boolean;
+      maxPlayers?: number;
+      port?: number;
+      motd?: string;
+      difficulty?: string;
+      pvpEnabled?: boolean;
+    };
+  };
 }
 
 // ============================================================================
@@ -346,6 +361,29 @@ export class AuthenticationManager extends EventEmitter {
       result = await this.authenticateWithToken(serverId, token, clientIP);
     }
 
+    // Extract server info from handshake message
+    if (result.success && data.serverInfo) {
+      result.serverInfo = {
+        name: data.serverInfo.name,
+        version: data.serverInfo.version,
+        coreType: data.serverInfo.coreType,
+        coreName: data.serverInfo.coreName
+      };
+      
+      // Extract server config if present
+      if (data.serverInfo.config) {
+        result.serverInfo.config = {
+          whitelistEnabled: data.serverInfo.config.whitelistEnabled,
+          onlineMode: data.serverInfo.config.onlineMode,
+          maxPlayers: data.serverInfo.config.maxPlayers,
+          port: data.serverInfo.config.port,
+          motd: data.serverInfo.config.motd,
+          difficulty: data.serverInfo.config.difficulty,
+          pvpEnabled: data.serverInfo.config.pvpEnabled
+        };
+      }
+    }
+
     if (result.success) {
       return this.createAuthSuccessResponse(message.id, result);
     } else {
@@ -397,16 +435,23 @@ export class AuthenticationManager extends EventEmitter {
     requestId: string,
     result: AuthenticationResult
   ): UWBPSystemMessage {
+    const responseData: any = {
+      success: true,
+      serverId: result.serverId,
+      capabilities: result.capabilities || [],
+      protocolVersion: '2.0'
+    };
+    
+    // Include server info if available
+    if (result.serverInfo) {
+      responseData.serverInfo = result.serverInfo;
+    }
+    
     return {
       type: 'system',
       id: `auth-success-${Date.now()}`,
       op: 'handshake',
-      data: {
-        success: true,
-        serverId: result.serverId,
-        capabilities: result.capabilities || [],
-        protocolVersion: '2.0'
-      },
+      data: responseData,
       timestamp: new Date().toISOString(),
       serverId: result.serverId,
       version: '2.0',

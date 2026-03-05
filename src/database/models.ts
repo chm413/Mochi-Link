@@ -49,6 +49,16 @@ export function defineModels(ctx: Context): void {
     status: { type: 'string', initial: 'offline' },
     owner_id: 'string',
     tags: 'text',
+    // Server configuration fields
+    whitelist_enabled: 'boolean',
+    online_mode: 'boolean',
+    max_players: 'integer',
+    server_port: 'integer',
+    server_motd: 'text',
+    difficulty: 'string',
+    pvp_enabled: 'boolean',
+    config_updated_at: 'timestamp',
+    // Timestamps
     created_at: { type: 'timestamp', initial: new Date() },
     updated_at: { type: 'timestamp', initial: new Date() },
     last_seen: 'timestamp'
@@ -224,6 +234,16 @@ export class ModelUtils {
       status: dbServer.status as any,
       ownerId: dbServer.owner_id,
       tags,
+      // Server configuration
+      whitelistEnabled: dbServer.whitelist_enabled,
+      onlineMode: dbServer.online_mode,
+      maxPlayers: dbServer.max_players,
+      serverPort: dbServer.server_port,
+      serverMotd: dbServer.server_motd,
+      difficulty: dbServer.difficulty,
+      pvpEnabled: dbServer.pvp_enabled,
+      configUpdatedAt: dbServer.config_updated_at,
+      // Timestamps
       createdAt: dbServer.created_at,
       updatedAt: dbServer.updated_at,
       lastSeen: dbServer.last_seen
@@ -234,7 +254,7 @@ export class ModelUtils {
    * Convert application model to database server record
    */
   static modelToDbServer(model: any): Partial<DatabaseServer> {
-    return {
+    const dbServer: Partial<DatabaseServer> = {
       id: model.id,
       name: model.name,
       core_type: model.coreType,
@@ -247,6 +267,34 @@ export class ModelUtils {
       tags: JSON.stringify(model.tags || []),
       updated_at: new Date()
     };
+    
+    // Add server configuration if present
+    if (model.whitelistEnabled !== undefined) {
+      dbServer.whitelist_enabled = model.whitelistEnabled;
+    }
+    if (model.onlineMode !== undefined) {
+      dbServer.online_mode = model.onlineMode;
+    }
+    if (model.maxPlayers !== undefined) {
+      dbServer.max_players = model.maxPlayers;
+    }
+    if (model.serverPort !== undefined) {
+      dbServer.server_port = model.serverPort;
+    }
+    if (model.serverMotd !== undefined) {
+      dbServer.server_motd = model.serverMotd;
+    }
+    if (model.difficulty !== undefined) {
+      dbServer.difficulty = model.difficulty;
+    }
+    if (model.pvpEnabled !== undefined) {
+      dbServer.pvp_enabled = model.pvpEnabled;
+    }
+    if (model.configUpdatedAt !== undefined) {
+      dbServer.config_updated_at = model.configUpdatedAt;
+    }
+    
+    return dbServer;
   }
 
   /**
