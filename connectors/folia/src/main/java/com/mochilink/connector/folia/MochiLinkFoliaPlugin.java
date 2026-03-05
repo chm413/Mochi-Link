@@ -11,6 +11,7 @@ import com.mochilink.connector.folia.subscription.SubscriptionManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 
 /**
@@ -60,6 +61,13 @@ public class MochiLinkFoliaPlugin extends JavaPlugin {
             getLogger().info("Mochi-Link Folia Connector has been enabled successfully!");
             getLogger().info("大福连 Folia 版连接器已成功启用！");
             
+            // Send server.start event after connection is established
+            getServer().getAsyncScheduler().runDelayed(this, (task) -> {
+                if (connectionManager != null && connectionManager.isConnected()) {
+                    sendServerStartEvent();
+                }
+            }, 5, TimeUnit.SECONDS);
+            
         } catch (Exception e) {
             getLogger().log(Level.SEVERE, "Failed to enable Mochi-Link Folia Connector", e);
             getServer().getPluginManager().disablePlugin(this);
@@ -69,6 +77,28 @@ public class MochiLinkFoliaPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         try {
+            // Send server.stop event before disconnecting
+            if (connectionManager != null && connectionManager.isConnected()) {
+                try {
+                    sendServerStopEvent();
+                    // Use async scheduler to wait with timeout
+                    java.util.concurrent.CompletableFuture<Void> sendFuture = 
+                        java.util.concurrent.CompletableFuture.runAsync(() -> {
+                            try {
+                                Thread.sleep(500);
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                            }
+                        });
+                    
+                    sendFuture.get(500, java.util.concurrent.TimeUnit.MILLISECONDS);
+                } catch (java.util.concurrent.TimeoutException e) {
+                    getLogger().warning("Server stop event send timeout");
+                } catch (Exception e) {
+                    getLogger().log(Level.WARNING, "Failed to send server stop event", e);
+                }
+            }
+            
             // Cancel Folia tasks
             if (connectionTask != null && !connectionTask.isCancelled()) {
                 connectionTask.cancel();
@@ -308,6 +338,44 @@ public class MochiLinkFoliaPlugin extends JavaPlugin {
         }
         
         return "Unknown";
+    }
+    
+    /**
+     * Send server.start event
+     */
+    private void sendServerStartEvent() {
+        try {
+            com.google.gson.JsonObject eventData = new com.google.gson.JsonObject();
+            eventData.addProperty("serverName", getServer().getName());
+            eventData.addProperty("serverVersion", getServer().getVersion());
+            eventData.addProperty("coreType", "Java");
+            eventData.addProperty("coreName", "Folia");
+            eventData.addProperty("onlinePlayers", getServer().getOnlinePlayers().size());
+            eventData.addProperty("maxPlayers", getServer().getMaxPlayers());
+            eventData.addProperty("startTime", java.time.Instant.now().toString());
+            
+            connectionManager.sendEvent("server.start", eventData);
+            getLogger().info("Server start event sent");
+        } catch (Exception e) {
+            getLogger().log(Level.WARNING, "Failed to send server.start event", e);
+        }
+    }
+    
+    /**
+     * Send server.stop event
+     */
+    private void sendServerStopEvent() {
+        try {
+            com.google.gson.JsonObject eventData = new com.google.gson.JsonObject();
+            eventData.addProperty("serverName", getServer().getName());
+            eventData.addProperty("reason", "Plugin disabled");
+            eventData.addProperty("stopTime", java.time.Instant.now().toString());
+            
+            connectionManager.sendEvent("server.stop", eventData);
+            getLogger().info("Server stop event sent");
+        } catch (Exception e) {
+            getLogger().log(Level.WARNING, "Failed to send server.stop event", e);
+        }
     }
     
     /**

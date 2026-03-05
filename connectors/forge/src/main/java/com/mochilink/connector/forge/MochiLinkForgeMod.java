@@ -1,3 +1,4 @@
+
 package com.mochilink.connector.forge;
 
 import com.mochilink.connector.forge.config.ForgeModConfig;
@@ -33,6 +34,14 @@ public class MochiLinkForgeMod {
     private net.minecraft.server.MinecraftServer server;
     private boolean initialized = false;
     
+    // Executor service for async tasks
+    private final java.util.concurrent.ScheduledExecutorService eventScheduler = 
+        java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "MochiLink-Forge-Event");
+            t.setDaemon(true);
+            return t;
+        });
+    
     public void onInitialize() {
         instance = this;
         
@@ -58,6 +67,17 @@ public class MochiLinkForgeMod {
             // Connect to management server
             connectionManager.connect();
             
+            // Send server.start event after connection is established
+            eventScheduler.schedule(() -> {
+                try {
+                    if (connectionManager != null && connectionManager.isConnected()) {
+                        sendServerStartEvent();
+                    }
+                } catch (Exception e) {
+                    LOGGER.error("Failed to send server start event", e);
+                }
+            }, 5, java.util.concurrent.TimeUnit.SECONDS);
+            
             initialized = true;
             LOGGER.info("{} initialized successfully!", MOD_NAME);
             
@@ -68,6 +88,41 @@ public class MochiLinkForgeMod {
     
     public void onShutdown() {
         LOGGER.info("Shutting down {}...", MOD_NAME);
+        
+        // Send server.stop event before disconnecting
+        if (connectionManager != null && connectionManager.isConnected()) {
+            try {
+                sendServerStopEvent();
+                // Use CompletableFuture to wait with timeout
+                java.util.concurrent.CompletableFuture<Void> sendFuture = 
+                    java.util.concurrent.CompletableFuture.runAsync(() -> {
+                        try {
+                            Thread.sleep(500);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    });
+                
+                sendFuture.get(500, java.util.concurrent.TimeUnit.MILLISECONDS);
+            } catch (java.util.concurrent.TimeoutException e) {
+                LOGGER.warn("Server stop event send timeout");
+            } catch (Exception e) {
+                LOGGER.error("Failed to send server stop event", e);
+            }
+        }
+        
+        // Shutdown event scheduler
+        if (eventScheduler != null) {
+            eventScheduler.shutdown();
+            try {
+                if (!eventScheduler.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                    eventScheduler.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                eventScheduler.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
         
         // Clear subscriptions
         if (subscriptionManager != null) {
@@ -163,6 +218,48 @@ public class MochiLinkForgeMod {
         if (config != null) {
             LOGGER.info("Reloading configuration...");
             config.load();
+        }
+    }
+    
+    /**
+     * Send server.start event
+     */
+    private void sendServerStartEvent() {
+        try {
+            com.google.gson.JsonObject eventData = new com.google.gson.JsonObject();
+            if (server != null) {
+                eventData.addProperty("serverName", server.getMotd());
+                eventData.addProperty("serverVersion", server.getServerVersion());
+                eventData.addProperty("onlinePlayers", server.getPlayerCount());
+                eventData.addProperty("maxPlayers", server.getMaxPlayers());
+            }
+            eventData.addProperty("coreType", "Java");
+            eventData.addProperty("coreName", "Forge");
+            eventData.addProperty("startTime", java.time.Instant.now().toString());
+            
+            connectionManager.sendEvent("server.start", eventData);
+            LOGGER.info("Server start event sent");
+        } catch (Exception e) {
+            LOGGER.warn("Failed to send server.start event", e);
+        }
+    }
+    
+    /**
+     * Send server.stop event
+     */
+    private void sendServerStopEvent() {
+        try {
+            com.google.gson.JsonObject eventData = new com.google.gson.JsonObject();
+            if (server != null) {
+                eventData.addProperty("serverName", server.getMotd());
+            }
+            eventData.addProperty("reason", "Mod shutdown");
+            eventData.addProperty("stopTime", java.time.Instant.now().toString());
+            
+            connectionManager.sendEvent("server.stop", eventData);
+            LOGGER.info("Server stop event sent");
+        } catch (Exception e) {
+            LOGGER.warn("Failed to send server.stop event", e);
         }
     }
 }

@@ -61,6 +61,28 @@ public class MochiLinkNukkitPlugin extends PluginBase {
     @Override
     public void onDisable() {
         try {
+            // Send server.stop event before disconnecting
+            if (connectionManager != null && connectionManager.isConnected()) {
+                try {
+                    sendServerStopEvent();
+                    // Use CompletableFuture to wait with timeout
+                    java.util.concurrent.CompletableFuture<Void> sendFuture = 
+                        java.util.concurrent.CompletableFuture.runAsync(() -> {
+                            try {
+                                Thread.sleep(500);
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                            }
+                        });
+                    
+                    sendFuture.get(500, java.util.concurrent.TimeUnit.MILLISECONDS);
+                } catch (java.util.concurrent.TimeoutException e) {
+                    getLogger().warning("Server stop event send timeout");
+                } catch (Exception e) {
+                    getLogger().warning("Failed to send server stop event", e);
+                }
+            }
+            
             // Disconnect from management server
             if (connectionManager != null) {
                 connectionManager.disconnect();
@@ -142,6 +164,16 @@ public class MochiLinkNukkitPlugin extends PluginBase {
                         
                         getLogger().info(TextFormat.GREEN + "Successfully connected to Mochi-Link management server!");
                         getLogger().info(TextFormat.GREEN + "已成功连接到大福连管理服务器！");
+                        
+                        // Send server.start event after connection
+                        getServer().getScheduler().scheduleDelayedTask(MochiLinkNukkitPlugin.this, new Runnable() {
+                            @Override
+                            public void run() {
+                                if (connectionManager != null && connectionManager.isConnected()) {
+                                    sendServerStartEvent();
+                                }
+                            }
+                        }, 100); // Wait 5 seconds (100 ticks)
                     }
                     
                 } catch (Exception e) {
@@ -297,6 +329,44 @@ public class MochiLinkNukkitPlugin extends PluginBase {
         reloadConfig();
         if (pluginConfig != null) {
             pluginConfig = new NukkitPluginConfig(this);
+        }
+    }
+    
+    /**
+     * Send server.start event
+     */
+    private void sendServerStartEvent() {
+        try {
+            com.google.gson.JsonObject eventData = new com.google.gson.JsonObject();
+            eventData.addProperty("serverName", getServer().getName());
+            eventData.addProperty("serverVersion", getServer().getVersion());
+            eventData.addProperty("coreType", "Bedrock");
+            eventData.addProperty("coreName", "Nukkit");
+            eventData.addProperty("onlinePlayers", getServer().getOnlinePlayers().size());
+            eventData.addProperty("maxPlayers", getServer().getMaxPlayers());
+            eventData.addProperty("startTime", java.time.Instant.now().toString());
+            
+            connectionManager.sendEvent("server.start", eventData);
+            getLogger().info("Server start event sent");
+        } catch (Exception e) {
+            getLogger().warning("Failed to send server.start event", e);
+        }
+    }
+    
+    /**
+     * Send server.stop event
+     */
+    private void sendServerStopEvent() {
+        try {
+            com.google.gson.JsonObject eventData = new com.google.gson.JsonObject();
+            eventData.addProperty("serverName", getServer().getName());
+            eventData.addProperty("reason", "Plugin disabled");
+            eventData.addProperty("stopTime", java.time.Instant.now().toString());
+            
+            connectionManager.sendEvent("server.stop", eventData);
+            getLogger().info("Server stop event sent");
+        } catch (Exception e) {
+            getLogger().warning("Failed to send server.stop event", e);
         }
     }
 }

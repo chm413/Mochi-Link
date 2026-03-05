@@ -129,33 +129,44 @@ public class NukkitConnectionManager {
      */
     private void sendHandshake() {
         if (wsClient == null || !wsClient.isOpen()) {
+            logger.warning("Cannot send handshake: WebSocket client not ready");
             return;
         }
         
-        JsonObject handshake = new JsonObject();
-        handshake.addProperty("type", "system");
-        handshake.addProperty("id", generateId());
-        handshake.addProperty("op", "handshake");
-        handshake.addProperty("timestamp", System.currentTimeMillis());
-        handshake.addProperty("version", "2.0");
-        handshake.addProperty("systemOp", "handshake");
-        
-        JsonObject data = new JsonObject();
-        data.addProperty("protocolVersion", "2.0");
-        data.addProperty("serverType", "connector");
-        data.addProperty("serverId", plugin.getServer().getServerUniqueId().toString());
-        
-        JsonObject serverInfo = new JsonObject();
-        serverInfo.addProperty("name", plugin.getServer().getName());
-        serverInfo.addProperty("version", plugin.getServer().getVersion());
-        serverInfo.addProperty("coreType", "Bedrock");
-        serverInfo.addProperty("coreName", "Nukkit");
-        data.add("serverInfo", serverInfo);
-        
-        handshake.add("data", data);
-        
-        wsClient.send(handshake.toString());
-        logger.info("Handshake sent: " + handshake.toString());
+        try {
+            JsonObject handshake = new JsonObject();
+            handshake.addProperty("type", "system");
+            handshake.addProperty("id", generateId());
+            handshake.addProperty("op", "handshake");
+            handshake.addProperty("timestamp", java.time.Instant.now().toString());
+            handshake.addProperty("version", "2.0");
+            handshake.addProperty("systemOp", "handshake");
+            
+            JsonObject data = new JsonObject();
+            data.addProperty("protocolVersion", "2.0");
+            data.addProperty("serverType", "connector");
+            data.addProperty("serverId", config.getServerId());
+            
+            // Add authentication information
+            JsonObject authentication = new JsonObject();
+            authentication.addProperty("token", config.getServerToken());
+            authentication.addProperty("method", "token");
+            data.add("authentication", authentication);
+            
+            JsonObject serverInfo = new JsonObject();
+            serverInfo.addProperty("name", config.getServerName());
+            serverInfo.addProperty("version", plugin.getServer().getVersion());
+            serverInfo.addProperty("coreType", "Bedrock");
+            serverInfo.addProperty("coreName", "Nukkit");
+            data.add("serverInfo", serverInfo);
+            
+            handshake.add("data", data);
+            
+            wsClient.send(handshake.toString());
+            logger.info("Handshake sent");
+        } catch (Exception e) {
+            logger.error("Failed to send handshake", e);
+        }
     }
     
     /**
@@ -198,7 +209,7 @@ public class NukkitConnectionManager {
         disconnect.addProperty("type", "system");
         disconnect.addProperty("id", generateId());
         disconnect.addProperty("op", "disconnect");
-        disconnect.addProperty("timestamp", System.currentTimeMillis());
+        disconnect.addProperty("timestamp", java.time.Instant.now().toString());
         disconnect.addProperty("version", "2.0");
         disconnect.addProperty("systemOp", "disconnect");
         
@@ -221,35 +232,43 @@ public class NukkitConnectionManager {
      * Send event message (U-WBP v2)
      */
     public void sendEvent(String eventOp, JsonObject eventData) {
-        if (!connected.get() || wsClient == null) {
+        if (!connected.get() || wsClient == null || !wsClient.isOpen()) {
             logger.warning("Cannot send event: not connected");
             return;
         }
         
-        JsonObject event = new JsonObject();
-        event.addProperty("type", "event");
-        event.addProperty("id", generateId());
-        event.addProperty("op", eventOp);
-        event.addProperty("timestamp", System.currentTimeMillis());
-        event.addProperty("version", "2.0");
-        event.addProperty("eventType", eventOp);
-        event.add("data", eventData);
-        
-        wsClient.send(event.toString());
-        logger.debug("Sending event: " + event.toString());
+        try {
+            JsonObject event = new JsonObject();
+            event.addProperty("type", "event");
+            event.addProperty("id", generateId());
+            event.addProperty("op", eventOp);
+            event.addProperty("timestamp", java.time.Instant.now().toString());
+            event.addProperty("version", "2.0");
+            event.addProperty("eventType", eventOp);
+            event.add("data", eventData);
+            
+            wsClient.send(event.toString());
+            logger.debug("Sending event: " + event.toString());
+        } catch (Exception e) {
+            logger.error("Failed to send event: " + eventOp, e);
+        }
     }
     
     /**
      * Send message to management server
      */
     public void sendMessage(String message) {
-        if (!connected.get() || wsClient == null) {
+        if (!connected.get() || wsClient == null || !wsClient.isOpen()) {
             logger.warning("Cannot send message: not connected");
             return;
         }
         
-        wsClient.send(message);
-        logger.debug("Sending message: " + message);
+        try {
+            wsClient.send(message);
+            logger.debug("Sending message: " + message);
+        } catch (Exception e) {
+            logger.error("Failed to send message", e);
+        }
     }
     
     /**
@@ -290,7 +309,8 @@ public class NukkitConnectionManager {
             case "player.list":
                 response = messageHandler.handlePlayerList(requestId);
                 break;
-            case "player.info":
+            case "player.getInfo":  // Koishi 命名
+            case "player.info":     // 兼容旧命名
                 String playerId = data.has("playerId") ? data.get("playerId").getAsString() : null;
                 response = messageHandler.handlePlayerInfo(requestId, playerId);
                 break;
@@ -304,7 +324,8 @@ public class NukkitConnectionManager {
                 String message = data.has("message") ? data.get("message").getAsString() : null;
                 response = messageHandler.handlePlayerMessage(requestId, msgPlayerId, message);
                 break;
-            case "whitelist.list":
+            case "whitelist.get":   // Koishi 命名
+            case "whitelist.list":  // 兼容旧命名
                 response = messageHandler.handleWhitelistList(requestId);
                 break;
             case "whitelist.add":
@@ -319,17 +340,20 @@ public class NukkitConnectionManager {
                 String command = data.has("command") ? data.get("command").getAsString() : null;
                 response = messageHandler.handleCommandExecute(requestId, command);
                 break;
-            case "server.info":
+            case "server.getInfo":  // Koishi 命名
+            case "server.info":     // 兼容旧命名
                 response = messageHandler.handleServerInfo(requestId);
                 break;
-            case "server.status":
+            case "server.getStatus":  // Koishi 命名
+            case "server.status":     // 兼容旧命名
                 response = messageHandler.handleServerStatus(requestId);
                 break;
             case "server.restart":
                 int restartDelay = data.has("delay") ? data.get("delay").getAsInt() : 10;
                 response = messageHandler.handleServerRestart(requestId, restartDelay);
                 break;
-            case "server.stop":
+            case "server.shutdown":  // Koishi 命名
+            case "server.stop":      // 兼容旧命名
                 int stopDelay = data.has("delay") ? data.get("delay").getAsInt() : 10;
                 response = messageHandler.handleServerStop(requestId, stopDelay);
                 break;
@@ -393,7 +417,7 @@ public class NukkitConnectionManager {
             response.addProperty("type", "response");
             response.addProperty("id", requestId);
             response.addProperty("op", "event.subscribe");
-            response.addProperty("timestamp", System.currentTimeMillis());
+            response.addProperty("timestamp", java.time.Instant.now().toString());
             response.addProperty("version", "2.0");
             
             JsonObject responseData = new JsonObject();
@@ -426,7 +450,7 @@ public class NukkitConnectionManager {
             response.addProperty("type", "response");
             response.addProperty("id", requestId);
             response.addProperty("op", "event.unsubscribe");
-            response.addProperty("timestamp", System.currentTimeMillis());
+            response.addProperty("timestamp", java.time.Instant.now().toString());
             response.addProperty("version", "2.0");
             
             JsonObject responseData = new JsonObject();
@@ -446,19 +470,23 @@ public class NukkitConnectionManager {
      * Send error response
      */
     private void sendErrorResponse(String requestId, String op, String errorMessage) {
-        JsonObject response = new JsonObject();
-        response.addProperty("type", "error");
-        response.addProperty("id", requestId);
-        response.addProperty("op", op);
-        response.addProperty("timestamp", System.currentTimeMillis());
-        response.addProperty("version", "2.0");
-        
-        JsonObject error = new JsonObject();
-        error.addProperty("code", "OPERATION_FAILED");
-        error.addProperty("message", errorMessage);
-        response.add("error", error);
-        
-        sendMessage(response.toString());
+        try {
+            JsonObject response = new JsonObject();
+            response.addProperty("type", "error");
+            response.addProperty("id", requestId);
+            response.addProperty("op", op);
+            response.addProperty("timestamp", java.time.Instant.now().toString());
+            response.addProperty("version", "2.0");
+            
+            JsonObject error = new JsonObject();
+            error.addProperty("code", "OPERATION_FAILED");
+            error.addProperty("message", errorMessage);
+            response.add("error", error);
+            
+            sendMessage(response.toString());
+        } catch (Exception e) {
+            logger.error("Failed to send error response", e);
+        }
     }
     
     /**
@@ -472,16 +500,26 @@ public class NukkitConnectionManager {
         heartbeatTask = plugin.getServer().getScheduler().scheduleRepeatingTask(plugin, new Runnable() {
             @Override
             public void run() {
-                if (connected.get()) {
-                    JsonObject ping = new JsonObject();
-                    ping.addProperty("type", "system");
-                    ping.addProperty("id", generateId());
-                    ping.addProperty("op", "ping");
-                    ping.addProperty("timestamp", System.currentTimeMillis());
-                    ping.addProperty("version", "2.0");
-                    ping.addProperty("systemOp", "ping");
-                    
-                    sendMessage(ping.toString());
+                try {
+                    if (connected.get() && wsClient != null && wsClient.isOpen()) {
+                        JsonObject ping = new JsonObject();
+                        ping.addProperty("type", "system");
+                        ping.addProperty("id", generateId());
+                        ping.addProperty("op", "ping");
+                        ping.addProperty("timestamp", java.time.Instant.now().toString());
+                        ping.addProperty("version", "2.0");
+                        ping.addProperty("systemOp", "ping");
+                        
+                        sendMessage(ping.toString());
+                        logger.debug("Heartbeat sent");
+                    }
+                } catch (Exception e) {
+                    logger.error("Failed to send heartbeat", e);
+                    // If WebSocket error, mark as disconnected
+                    if (wsClient == null || !wsClient.isOpen()) {
+                        connected.set(false);
+                        logger.warning("WebSocket closed, will attempt to reconnect");
+                    }
                 }
             }
         }, 20 * 30);

@@ -360,7 +360,7 @@ public class NukkitMessageHandler {
             JsonObject statusData = new JsonObject();
             statusData.addProperty("status", "online");
             // Note: getStartTime() not available
-            statusData.addProperty("timestamp", System.currentTimeMillis());
+            statusData.addProperty("timestamp", java.time.Instant.now().toString());
             
             JsonObject playersData = new JsonObject();
             playersData.addProperty("online", server.getOnlinePlayers().size());

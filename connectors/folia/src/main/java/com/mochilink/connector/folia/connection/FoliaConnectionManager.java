@@ -197,13 +197,16 @@ public class FoliaConnectionManager {
             serverConfig.addProperty("port", plugin.getServer().getPort());
             serverConfig.addProperty("motd", plugin.getServer().getMotd());
             
-            // Get difficulty from first world (Folia may have multiple worlds)
+            // Get difficulty and PVP from first world (Folia may have multiple worlds)
             if (!plugin.getServer().getWorlds().isEmpty()) {
                 org.bukkit.World firstWorld = plugin.getServer().getWorlds().get(0);
                 serverConfig.addProperty("difficulty", firstWorld.getDifficulty().name());
+                serverConfig.addProperty("pvpEnabled", firstWorld.getPVP());
+            } else {
+                serverConfig.addProperty("difficulty", "NORMAL");
+                serverConfig.addProperty("pvpEnabled", true);
             }
             
-            serverConfig.addProperty("pvpEnabled", plugin.getServer().isPVPEnabled());
             serverInfo.add("config", serverConfig);
             
             data.add("serverInfo", serverInfo);

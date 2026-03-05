@@ -5,6 +5,8 @@ package com.mochilink.connector.forge.config;
  */
 public class ForgeModConfig {
     
+    private String serverId = "forge-server";
+    private String serverName = "Forge Server";
     private String serverHost = "localhost";
     private int serverPort = 8080;
     private String serverToken = "";
@@ -20,6 +22,8 @@ public class ForgeModConfig {
         // TODO: Load from config file
     }
     
+    public String getServerId() { return serverId; }
+    public String getServerName() { return serverName; }
     public String getServerHost() { return serverHost; }
     public int getServerPort() { return serverPort; }
     public String getServerToken() { return serverToken; }

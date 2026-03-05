@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "datadog": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://mcp.datadoghq.com/api/unstable/mcp-server/mcp"
+      ],
+      "env": {
+        "DD_API_KEY": "your-api-key-here",
+        "DD_APP_KEY": "your-app-key-here",
+        "DD_SITE": "datadoghq.com"
+      },
+      "disabled": true
+    }
+  }
+}

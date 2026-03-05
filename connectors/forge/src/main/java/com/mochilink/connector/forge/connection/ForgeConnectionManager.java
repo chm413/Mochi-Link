@@ -150,31 +150,44 @@ public class ForgeConnectionManager {
     
     private void sendHandshake() {
         if (wsClient == null || !wsClient.isOpen()) {
+            logger.warn("Cannot send handshake: WebSocket client not ready");
             return;
         }
         
-        JsonObject handshake = new JsonObject();
-        handshake.addProperty("type", "request");
-        handshake.addProperty("id", generateId());
-        handshake.addProperty("op", "system.handshake");
-        handshake.addProperty("timestamp", System.currentTimeMillis());
-        handshake.addProperty("version", "2.0");
-        
-        JsonObject data = new JsonObject();
-        data.addProperty("protocolVersion", "2.0");
-        data.addProperty("serverType", "connector");
-        
-        JsonObject serverInfo = new JsonObject();
-        serverInfo.addProperty("name", "Forge Server");
-        serverInfo.addProperty("version", MochiLinkForgeMod.VERSION);
-        serverInfo.addProperty("coreType", "Java");
-        serverInfo.addProperty("coreName", "Forge");
-        data.add("serverInfo", serverInfo);
-        
-        handshake.add("data", data);
-        
-        wsClient.send(handshake.toString());
-        logger.info("Handshake sent");
+        try {
+            JsonObject handshake = new JsonObject();
+            handshake.addProperty("type", "system");
+            handshake.addProperty("id", generateId());
+            handshake.addProperty("op", "handshake");
+            handshake.addProperty("timestamp", java.time.Instant.now().toString());
+            handshake.addProperty("version", "2.0");
+            handshake.addProperty("systemOp", "handshake");
+            
+            JsonObject data = new JsonObject();
+            data.addProperty("protocolVersion", "2.0");
+            data.addProperty("serverType", "connector");
+            data.addProperty("serverId", config.getServerId());
+            
+            // Add authentication information
+            JsonObject authentication = new JsonObject();
+            authentication.addProperty("token", config.getServerToken());
+            authentication.addProperty("method", "token");
+            data.add("authentication", authentication);
+            
+            JsonObject serverInfo = new JsonObject();
+            serverInfo.addProperty("name", config.getServerName());
+            serverInfo.addProperty("version", MochiLinkForgeMod.VERSION);
+            serverInfo.addProperty("coreType", "Java");
+            serverInfo.addProperty("coreName", "Forge");
+            data.add("serverInfo", serverInfo);
+            
+            handshake.add("data", data);
+            
+            wsClient.send(handshake.toString());
+            logger.info("Handshake sent");
+        } catch (Exception e) {
+            logger.error("Failed to send handshake", e);
+        }
     }
     
     public void disconnect() {
@@ -211,7 +224,7 @@ public class ForgeConnectionManager {
         disconnect.addProperty("type", "request");
         disconnect.addProperty("id", generateId());
         disconnect.addProperty("op", "system.disconnect");
-        disconnect.addProperty("timestamp", System.currentTimeMillis());
+        disconnect.addProperty("timestamp", java.time.Instant.now().toString());
         disconnect.addProperty("version", "2.0");
         
         JsonObject data = new JsonObject();
@@ -227,21 +240,25 @@ public class ForgeConnectionManager {
     }
     
     public void sendEvent(String eventOp, JsonObject eventData) {
-        if (!connected.get() || wsClient == null) {
+        if (!connected.get() || wsClient == null || !wsClient.isOpen()) {
             logger.warn("Cannot send event: not connected");
             return;
         }
         
-        JsonObject event = new JsonObject();
-        event.addProperty("type", "event");
-        event.addProperty("id", generateId());
-        event.addProperty("op", eventOp);
-        event.addProperty("timestamp", System.currentTimeMillis());
-        event.addProperty("version", "2.0");
-        event.add("data", eventData);
-        
-        wsClient.send(event.toString());
-        logger.debug("Sending event: {}", eventOp);
+        try {
+            JsonObject event = new JsonObject();
+            event.addProperty("type", "event");
+            event.addProperty("id", generateId());
+            event.addProperty("op", eventOp);
+            event.addProperty("timestamp", java.time.Instant.now().toString());
+            event.addProperty("version", "2.0");
+            event.add("data", eventData);
+            
+            wsClient.send(event.toString());
+            logger.debug("Sending event: {}", eventOp);
+        } catch (Exception e) {
+            logger.error("Failed to send event: {}", eventOp, e);
+        }
     }
     
     private void handleMessage(String message) {
@@ -283,7 +300,8 @@ public class ForgeConnectionManager {
             case "player.list":
                 response = messageHandler.handlePlayerList(requestId);
                 break;
-            case "player.info":
+            case "player.getInfo":  // Koishi 命名
+            case "player.info":     // 兼容旧命名
                 String playerId = data.has("playerId") ? data.get("playerId").getAsString() : null;
                 response = messageHandler.handlePlayerInfo(requestId, playerId);
                 break;
@@ -297,7 +315,8 @@ public class ForgeConnectionManager {
                 String message = data.has("message") ? data.get("message").getAsString() : null;
                 response = messageHandler.handlePlayerMessage(requestId, msgPlayerId, message);
                 break;
-            case "whitelist.list":
+            case "whitelist.get":   // Koishi 命名
+            case "whitelist.list":  // 兼容旧命名
                 response = messageHandler.handleWhitelistList(requestId);
                 break;
             case "whitelist.add":
@@ -314,17 +333,20 @@ public class ForgeConnectionManager {
                 String command = data.has("command") ? data.get("command").getAsString() : null;
                 response = messageHandler.handleCommandExecute(requestId, command);
                 break;
-            case "server.info":
+            case "server.getInfo":  // Koishi 命名
+            case "server.info":     // 兼容旧命名
                 response = messageHandler.handleServerInfo(requestId);
                 break;
-            case "server.status":
+            case "server.getStatus":  // Koishi 命名
+            case "server.status":     // 兼容旧命名
                 response = messageHandler.handleServerStatus(requestId);
                 break;
             case "server.restart":
                 int restartDelay = data.has("delay") ? data.get("delay").getAsInt() : 10;
                 response = messageHandler.handleServerRestart(requestId, restartDelay);
                 break;
-            case "server.stop":
+            case "server.shutdown":  // Koishi 命名
+            case "server.stop":      // 兼容旧命名
                 int stopDelay = data.has("delay") ? data.get("delay").getAsInt() : 10;
                 response = messageHandler.handleServerStop(requestId, stopDelay);
                 break;
@@ -390,7 +412,7 @@ public class ForgeConnectionManager {
             response.addProperty("type", "response");
             response.addProperty("id", requestId);
             response.addProperty("op", "event.subscribe");
-            response.addProperty("timestamp", System.currentTimeMillis());
+            response.addProperty("timestamp", java.time.Instant.now().toString());
             response.addProperty("version", "2.0");
             
             JsonObject responseData = new JsonObject();
@@ -425,7 +447,7 @@ public class ForgeConnectionManager {
             response.addProperty("type", "response");
             response.addProperty("id", requestId);
             response.addProperty("op", "event.unsubscribe");
-            response.addProperty("timestamp", System.currentTimeMillis());
+            response.addProperty("timestamp", java.time.Instant.now().toString());
             response.addProperty("version", "2.0");
             
             JsonObject responseData = new JsonObject();
@@ -451,7 +473,7 @@ public class ForgeConnectionManager {
         response.addProperty("type", "error");
         response.addProperty("id", requestId);
         response.addProperty("op", op);
-        response.addProperty("timestamp", System.currentTimeMillis());
+        response.addProperty("timestamp", java.time.Instant.now().toString());
         response.addProperty("version", "2.0");
         
         JsonObject error = new JsonObject();
@@ -460,7 +482,11 @@ public class ForgeConnectionManager {
         response.add("error", error);
         
         if (wsClient != null && wsClient.isOpen()) {
-            wsClient.send(response.toString());
+            try {
+                wsClient.send(response.toString());
+            } catch (Exception e) {
+                logger.error("Failed to send error response", e);
+            }
         }
     }
     
@@ -470,18 +496,28 @@ public class ForgeConnectionManager {
         }
         
         heartbeatTask = scheduler.scheduleAtFixedRate(() -> {
-            if (connected.get() && wsClient != null) {
-                JsonObject ping = new JsonObject();
-                ping.addProperty("type", "request");
-                ping.addProperty("id", generateId());
-                ping.addProperty("op", "system.ping");
-                ping.addProperty("timestamp", System.currentTimeMillis());
-                ping.addProperty("version", "2.0");
-                
-                JsonObject data = new JsonObject();
-                ping.add("data", data);
-                
-                wsClient.send(ping.toString());
+            try {
+                if (connected.get() && wsClient != null && wsClient.isOpen()) {
+                    JsonObject ping = new JsonObject();
+                    ping.addProperty("type", "request");
+                    ping.addProperty("id", generateId());
+                    ping.addProperty("op", "system.ping");
+                    ping.addProperty("timestamp", java.time.Instant.now().toString());
+                    ping.addProperty("version", "2.0");
+                    
+                    JsonObject data = new JsonObject();
+                    ping.add("data", data);
+                    
+                    wsClient.send(ping.toString());
+                    logger.debug("Heartbeat sent");
+                }
+            } catch (Exception e) {
+                logger.error("Failed to send heartbeat", e);
+                // If WebSocket error, trigger reconnection
+                if (!wsClient.isOpen()) {
+                    connected.set(false);
+                    logger.warn("WebSocket closed, will attempt to reconnect");
+                }
             }
         }, 30, 30, TimeUnit.SECONDS);
     }

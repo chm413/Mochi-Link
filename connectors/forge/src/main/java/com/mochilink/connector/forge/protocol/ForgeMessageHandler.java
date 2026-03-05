@@ -533,7 +533,7 @@ public class ForgeMessageHandler {
         response.addProperty("type", "response");
         response.addProperty("id", requestId);
         response.addProperty("op", op);
-        response.addProperty("timestamp", System.currentTimeMillis());
+        response.addProperty("timestamp", java.time.Instant.now().toString());
         response.addProperty("version", "2.0");
         response.add("data", data);
         return response;
@@ -547,7 +547,7 @@ public class ForgeMessageHandler {
         response.addProperty("type", "response");
         response.addProperty("id", requestId);
         response.addProperty("op", op);
-        response.addProperty("timestamp", System.currentTimeMillis());
+        response.addProperty("timestamp", java.time.Instant.now().toString());
         response.addProperty("version", "2.0");
         
         JsonObject data = new JsonObject();
