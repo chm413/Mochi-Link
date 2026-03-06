@@ -1,0 +1,147 @@
+# Implementation Plan
+
+- [x] 1. Write bug condition exploration test
+  - **Property 1: Fault Condition** - Forge API 编译错误验证
+  - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior - it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate the bug exists
+  - **Scoped PBT Approach**: For deterministic bugs, scope the property to the concrete failing case(s) to ensure reproducibility
+  - Run Gradle compilation on unfixed Forge connector code: `./gradlew :connectors:forge:compileJava`
+  - Verify compilation fails with "cannot find symbol" errors for:
+    - `player.getStringUUID()` in ForgeMessageHandler
+    - `player.getName().getString()` in ForgeMessageHandler
+    - `player.level()` in ForgeMessageHandler
+    - `player.latency` in ForgeMessageHandler
+    - `server.getServerVersion()` in ForgeMessageHandler
+    - `server.getAverageTickTime()` in ForgeMessageHandler
+    - `server.getServerStartTimeMillis()` in ForgeMessageHandler
+    - `config.getMochiLinkHost()` in ForgeModConfig usage
+    - `config.getMochiLinkPort()` in ForgeModConfig usage
+  - Document all 97 compilation errors with file locations and error messages
+  - Analyze error patterns to confirm root cause hypothesis (API version mismatch, incorrect method names, field access errors)
+  - **EXPECTED OUTCOME**: Compilation FAILS with 97 errors (this is correct - it proves the bug exists)
+  - Mark task complete when compilation is run, failures are documented, and error patterns are analyzed
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17, 1.18, 1.19, 1.20, 1.21, 1.22, 1.23, 1.24, 1.25, 1.26, 1.27, 1.28, 1.29, 1.30, 1.31, 1.32, 1.33, 1.34, 1.35, 1.36_
+
+- [x] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - 功能行为保持不变
+  - **IMPORTANT**: Follow observation-first methodology
+  - Observe behavior on UNFIXED code for non-buggy inputs (code that doesn't use incompatible APIs)
+  - Write property-based tests capturing observed behavior patterns from Preservation Requirements:
+    - Test WebSocket message handling logic produces correct JSON structure
+    - Test event handling logic correctly captures and forwards events
+    - Test command functionality produces expected responses
+    - Test configuration reading logic retrieves correct values
+    - Test JSON serialization produces consistent output format
+    - Test communication protocol maintains correct message structure
+  - Property-based testing generates many test cases for stronger guarantees
+  - Run tests on code sections that don't depend on the buggy API calls
+  - **EXPECTED OUTCOME**: Tests PASS (this confirms baseline behavior to preserve)
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 3.10_
+
+- [x] 3. Fix Forge API compatibility issues
+
+  - [x] 3.1 Fix ServerPlayer API calls in ForgeMessageHandler
+    - Replace `player.getStringUUID()` with `player.getUUID().toString()` (all occurrences)
+    - Fix `player.getName()` usage - remove `.getString()` if getName() returns String directly
+    - Replace `player.getDisplayName()` with correct method that returns Component
+    - Replace `player.level()` with `player.level` field access or `player.serverLevel()`
+    - Replace `player.latency` with `player.connection.latency()`
+    - Verify `player.getGameProfile()` exists or use alternative
+    - Verify `player.getHealth()`, `player.getMaxHealth()` exist
+    - Verify `player.getFoodData()` exists
+    - Fix `player.experienceLevel` and `player.experienceProgress` access
+    - Fix `player.gameMode.getGameModeForPlayer()` or use `player.gameMode.getGameType()`
+    - Verify `player.getAbilities()` exists
+    - Verify `player.isCrouching()` and `player.isSprinting()` exist
+    - Replace `player.getIpAddress()` with `player.connection.getRemoteAddress()`
+    - _Bug_Condition: isBugCondition(codeStatement) where codeStatement calls non-existent ServerPlayer methods_
+    - _Expected_Behavior: All ServerPlayer API calls use methods that exist in Forge 1.20.1 API_
+    - _Preservation: WebSocket message handling logic and JSON structure remain unchanged_
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11, 2.12, 2.13, 2.14_
+
+  - [x] 3.2 Fix MinecraftServer API calls in ForgeMessageHandler
+    - Verify `server.execute()` exists (likely correct)
+    - Verify `server.getCommands()` exists
+    - Verify `server.createCommandSourceStack()` exists
+    - Verify `server.getMotd()` exists
+    - Replace `server.getServerVersion()` with `SharedConstants.getCurrentVersion().getName()`
+    - Add import: `net.minecraft.SharedConstants`
+    - Verify `server.getMaxPlayers()` exists
+    - Verify `server.getPlayerCount()` exists
+    - Verify `server.getPort()` exists
+    - Verify `server.usesAuthentication()` exists
+    - Implement custom server start time tracking to replace `server.getServerStartTimeMillis()`
+    - Implement manual TPS calculation to replace `server.getAverageTickTime()`
+    - Verify `server.halt(false)` exists or use `server.stopServer()`
+    - _Bug_Condition: isBugCondition(codeStatement) where codeStatement calls non-existent MinecraftServer methods_
+    - _Expected_Behavior: All MinecraftServer API calls use methods that exist in Forge 1.20.1 API_
+    - _Preservation: Server info, status, and control logic remain functionally identical_
+    - _Requirements: 2.15, 2.16, 2.17, 2.18, 2.19, 2.20, 2.21, 2.22, 2.23, 2.24, 2.25, 2.26_
+
+  - [x] 3.3 Fix PlayerList and ServerLevel API calls
+    - Fix Entity to ServerPlayer type conversion using safe instanceof pattern
+    - Replace `server.getPlayerList().getWhiteListNames()` with correct method
+    - Verify `server.getPlayerList().isUsingWhitelist()` exists
+    - Verify `server.getPlayerList().broadcastSystemMessage()` exists
+    - Verify `level.dimension()` exists
+    - Verify `level.getDifficulty()` exists
+    - Verify `level.players()` exists
+    - _Bug_Condition: isBugCondition(codeStatement) where codeStatement calls non-existent PlayerList or ServerLevel methods_
+    - _Expected_Behavior: All PlayerList and ServerLevel API calls use methods that exist in Forge 1.20.1 API_
+    - _Preservation: Whitelist management and level info logic remain unchanged_
+    - _Requirements: 2.27, 2.28, 2.29, 2.30, 2.31, 2.32, 2.33_
+
+  - [x] 3.4 Fix command registration in MochiLinkForgeCommand
+    - Verify `source.getServer()` exists in CommandSourceStack
+    - Verify `builder.requires()` exists in LiteralArgumentBuilder
+    - Ensure all command logic remains functionally identical
+    - _Bug_Condition: isBugCondition(codeStatement) where codeStatement calls non-existent command API methods_
+    - _Expected_Behavior: All command API calls use methods that exist in Forge 1.20.1 API_
+    - _Preservation: Command functionality and permissions remain unchanged_
+    - _Requirements: 2.34, 2.35_
+
+  - [x] 3.5 Fix configuration getter methods in ForgeModConfig
+    - Option A: Add `getMochiLinkHost()` method returning `serverHost` field
+    - Option A: Add `getMochiLinkPort()` method returning `serverPort` field
+    - Option B: Replace all `getMochiLinkHost()` calls with `getServerHost()`
+    - Option B: Replace all `getMochiLinkPort()` calls with `getServerPort()`
+    - Choose the option that maintains consistency with existing code style
+    - _Bug_Condition: isBugCondition(codeStatement) where codeStatement calls non-existent config getter methods_
+    - _Expected_Behavior: All config access uses existing getter methods_
+    - _Preservation: Configuration reading logic and values remain unchanged_
+    - _Requirements: 2.36_
+
+  - [x] 3.6 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** - Forge API 编译成功
+    - **IMPORTANT**: Re-run the SAME test from task 1 - do NOT write a new test
+    - The test from task 1 encodes the expected behavior
+    - When this test passes, it confirms the expected behavior is satisfied
+    - Run Gradle compilation: `./gradlew :connectors:forge:compileJava`
+    - **EXPECTED OUTCOME**: Compilation SUCCEEDS with 0 errors (confirms bug is fixed)
+    - Verify all 97 previous errors are resolved
+    - Verify no new compilation errors were introduced
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11, 2.12, 2.13, 2.14, 2.15, 2.16, 2.17, 2.18, 2.19, 2.20, 2.21, 2.22, 2.23, 2.24, 2.25, 2.26, 2.27, 2.28, 2.29, 2.30, 2.31, 2.32, 2.33, 2.34, 2.35, 2.36_
+
+  - [x] 3.7 Verify preservation tests still pass
+    - **Property 2: Preservation** - 功能行为保持不变
+    - **IMPORTANT**: Re-run the SAME tests from task 2 - do NOT write new tests
+    - Run preservation property tests from step 2
+    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions)
+    - Verify WebSocket message handling produces identical JSON structure
+    - Verify event handling logic behaves identically
+    - Verify command functionality produces identical responses
+    - Verify configuration reading retrieves identical values
+    - Verify JSON serialization produces identical output
+    - Verify communication protocol maintains identical message structure
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 3.10_
+
+- [x] 4. Checkpoint - Ensure all tests pass
+  - Run full Gradle build: `./gradlew :connectors:forge:build`
+  - Verify compilation succeeds with 0 errors
+  - Verify all unit tests pass (if any exist)
+  - Verify all preservation tests pass
+  - Review changes to ensure no business logic was altered
+  - Ask the user if questions arise about API usage or behavior preservation

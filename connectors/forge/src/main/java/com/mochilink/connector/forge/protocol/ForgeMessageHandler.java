@@ -9,6 +9,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.network.chat.Component;
 import net.minecraft.ChatFormatting;
+import net.minecraft.SharedConstants;
 import org.slf4j.Logger;
 
 import java.util.UUID;
@@ -22,11 +23,13 @@ public class ForgeMessageHandler {
     private final MochiLinkForgeMod mod;
     private final ForgeConnectionManager connectionManager;
     private final Logger logger;
+    private final long serverStartTime;
     
     public ForgeMessageHandler(MochiLinkForgeMod mod, ForgeConnectionManager connectionManager) {
         this.mod = mod;
         this.connectionManager = connectionManager;
         this.logger = MochiLinkForgeMod.getLogger();
+        this.serverStartTime = System.currentTimeMillis();
     }
     
     /**
@@ -43,10 +46,10 @@ public class ForgeMessageHandler {
             
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                 JsonObject playerObj = new JsonObject();
-                playerObj.addProperty("id", player.getStringUUID());
+                playerObj.addProperty("id", player.getUUID().toString());
                 playerObj.addProperty("name", player.getName().getString());
                 playerObj.addProperty("displayName", player.getDisplayName().getString());
-                playerObj.addProperty("world", player.level().dimension().location().toString());
+                playerObj.addProperty("world", player.level.dimension().location().toString());
                 
                 JsonObject position = new JsonObject();
                 position.addProperty("x", player.getX());
@@ -54,7 +57,7 @@ public class ForgeMessageHandler {
                 position.addProperty("z", player.getZ());
                 playerObj.add("position", position);
                 
-                playerObj.addProperty("ping", player.latency);
+                playerObj.addProperty("ping", player.connection.latency());
                 playerObj.addProperty("isOp", server.getPlayerList().isOp(player.getGameProfile()));
                 playerObj.addProperty("health", player.getHealth());
                 playerObj.addProperty("foodLevel", player.getFoodData().getFoodLevel());
@@ -93,10 +96,10 @@ public class ForgeMessageHandler {
             }
             
             JsonObject playerInfo = new JsonObject();
-            playerInfo.addProperty("id", player.getStringUUID());
+            playerInfo.addProperty("id", player.getUUID().toString());
             playerInfo.addProperty("name", player.getName().getString());
             playerInfo.addProperty("displayName", player.getDisplayName().getString());
-            playerInfo.addProperty("world", player.level().dimension().location().toString());
+            playerInfo.addProperty("world", player.level.dimension().location().toString());
             
             JsonObject position = new JsonObject();
             position.addProperty("x", player.getX());
@@ -104,7 +107,7 @@ public class ForgeMessageHandler {
             position.addProperty("z", player.getZ());
             playerInfo.add("position", position);
             
-            playerInfo.addProperty("ping", player.latency);
+            playerInfo.addProperty("ping", player.connection.latency());
             playerInfo.addProperty("isOp", server.getPlayerList().isOp(player.getGameProfile()));
             playerInfo.addProperty("health", player.getHealth());
             playerInfo.addProperty("maxHealth", player.getMaxHealth());
@@ -115,7 +118,7 @@ public class ForgeMessageHandler {
             playerInfo.addProperty("isFlying", player.getAbilities().flying);
             playerInfo.addProperty("isSneaking", player.isCrouching());
             playerInfo.addProperty("isSprinting", player.isSprinting());
-            playerInfo.addProperty("address", player.getIpAddress());
+            playerInfo.addProperty("address", player.connection.getRemoteAddress().toString());
             
             JsonObject responseData = new JsonObject();
             responseData.add("player", playerInfo);
@@ -220,7 +223,9 @@ public class ForgeMessageHandler {
             
             JsonArray whitelistArray = new JsonArray();
             
-            for (String playerName : server.getPlayerList().getWhiteListNames()) {
+            // Get whitelist entries
+            String[] whitelistedPlayers = server.getPlayerList().getWhiteListNames();
+            for (String playerName : whitelistedPlayers) {
                 JsonObject playerObj = new JsonObject();
                 playerObj.addProperty("name", playerName);
                 whitelistArray.add(playerObj);
@@ -368,7 +373,7 @@ public class ForgeMessageHandler {
             
             JsonObject serverInfo = new JsonObject();
             serverInfo.addProperty("name", server.getMotd());
-            serverInfo.addProperty("version", server.getServerVersion());
+            serverInfo.addProperty("version", SharedConstants.getCurrentVersion().getName());
             serverInfo.addProperty("coreType", "Java");
             serverInfo.addProperty("coreName", "Forge");
             serverInfo.addProperty("maxPlayers", server.getMaxPlayers());
@@ -412,7 +417,7 @@ public class ForgeMessageHandler {
             
             JsonObject statusData = new JsonObject();
             statusData.addProperty("status", "online");
-            statusData.addProperty("uptime", System.currentTimeMillis() - server.getServerStartTimeMillis());
+            statusData.addProperty("uptime", System.currentTimeMillis() - serverStartTime);
             
             JsonObject playersData = new JsonObject();
             playersData.addProperty("online", server.getPlayerCount());
@@ -420,7 +425,10 @@ public class ForgeMessageHandler {
             statusData.add("players", playersData);
             
             JsonObject performanceData = new JsonObject();
-            performanceData.addProperty("tps", server.getAverageTickTime());
+            // Calculate TPS from average tick time (in nanoseconds)
+            double averageTickTimeMs = server.getAverageTickTime();
+            double tps = Math.min(20.0, 1000.0 / averageTickTimeMs);
+            performanceData.addProperty("tps", tps);
             
             Runtime runtime = Runtime.getRuntime();
             long usedMemory = (runtime.totalMemory() - runtime.freeMemory()) / 1024 / 1024;
@@ -469,7 +477,7 @@ public class ForgeMessageHandler {
             new Thread(() -> {
                 try {
                     Thread.sleep(delay * 1000L);
-                    server.execute(() -> server.halt(false));
+                    server.execute(() -> server.stopServer());
                 } catch (InterruptedException e) {
                     logger.error("Restart interrupted", e);
                 }
@@ -511,7 +519,7 @@ public class ForgeMessageHandler {
             new Thread(() -> {
                 try {
                     Thread.sleep(delay * 1000L);
-                    server.execute(() -> server.halt(false));
+                    server.execute(() -> server.stopServer());
                 } catch (InterruptedException e) {
                     logger.error("Stop interrupted", e);
                 }

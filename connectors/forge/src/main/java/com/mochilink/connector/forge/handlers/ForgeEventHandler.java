@@ -41,13 +41,17 @@ public class ForgeEventHandler {
             return;
         }
         
+        // Safe type check and cast
+        if (!(event.getEntity() instanceof ServerPlayer)) {
+            return;
+        }
         ServerPlayer player = (ServerPlayer) event.getEntity();
         
         JsonObject data = new JsonObject();
         
         // Player info
         JsonObject playerInfo = new JsonObject();
-        playerInfo.addProperty("id", player.getStringUUID());
+        playerInfo.addProperty("id", player.getUUID().toString());
         playerInfo.addProperty("name", player.getName().getString());
         playerInfo.addProperty("displayName", player.getDisplayName().getString());
         data.add("player", playerInfo);
@@ -76,10 +80,14 @@ public class ForgeEventHandler {
             return;
         }
         
+        // Safe type check and cast
+        if (!(event.getEntity() instanceof ServerPlayer)) {
+            return;
+        }
         ServerPlayer player = (ServerPlayer) event.getEntity();
         
         JsonObject data = new JsonObject();
-        data.addProperty("playerId", player.getStringUUID());
+        data.addProperty("playerId", player.getUUID().toString());
         data.addProperty("playerName", player.getName().getString());
         data.addProperty("reason", "disconnect");
         
@@ -108,7 +116,7 @@ public class ForgeEventHandler {
         String message = event.getMessage().getString();
         
         JsonObject data = new JsonObject();
-        data.addProperty("playerId", player.getStringUUID());
+        data.addProperty("playerId", player.getUUID().toString());
         data.addProperty("playerName", player.getName().getString());
         data.addProperty("message", message);
         

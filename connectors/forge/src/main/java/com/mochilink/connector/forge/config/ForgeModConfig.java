@@ -33,6 +33,10 @@ public class ForgeModConfig {
     public boolean isMonitoringEnabled() { return monitoringEnabled; }
     public int getReportInterval() { return reportInterval; }
     
+    // Alias methods for compatibility
+    public String getMochiLinkHost() { return serverHost; }
+    public int getMochiLinkPort() { return serverPort; }
+    
     public String getWebSocketUrl() {
         String protocol = useSsl ? "wss" : "ws";
         return String.format("%s://%s:%d/ws", protocol, serverHost, serverPort);

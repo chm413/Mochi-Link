@@ -149,8 +149,11 @@ public class MochiLinkForgeCommand {
         sendMessage(ctx, "§6=== Server Statistics ===");
         sendMessage(ctx, "§ePlayers: §f" + 
             server.getPlayerCount() + "/" + server.getMaxPlayers());
-        sendMessage(ctx, "§eTPS: §f" + 
-            String.format("%.2f", server.getAverageTickTime()));
+        
+        // Calculate TPS from average tick time
+        double averageTickTimeMs = server.getAverageTickTime();
+        double tps = Math.min(20.0, 1000.0 / averageTickTimeMs);
+        sendMessage(ctx, "§eTPS: §f" + String.format("%.2f", tps));
         
         Runtime runtime = Runtime.getRuntime();
         long usedMemory = (runtime.totalMemory() - runtime.freeMemory()) / 1024 / 1024;
