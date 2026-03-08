@@ -193,10 +193,11 @@ export class AdvancedRateLimitManager {
   private ipLimits = new Map<string, RateLimitEntry>();
   private concurrentConnections = new Map<string, number>();
   private emergencyMode = false;
+  private cleanupInterval?: NodeJS.Timeout;
   
   constructor(private config: SecurityConfig['rateLimiting']) {
     // Clean up expired entries every minute
-    setInterval(() => {
+    this.cleanupInterval = setInterval(() => {
       this.cleanupExpiredEntries();
     }, 60000);
   }
@@ -465,6 +466,22 @@ export class AdvancedRateLimitManager {
       emergencyMode: this.emergencyMode
     };
   }
+
+  /**
+   * Cleanup resources
+   */
+  cleanup(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = undefined;
+    }
+    
+    this.globalLimits.clear();
+    this.endpointLimits.clear();
+    this.userLimits.clear();
+    this.ipLimits.clear();
+    this.concurrentConnections.clear();
+  }
 }
 
 // ============================================================================
@@ -476,17 +493,19 @@ export class DDoSProtectionManager extends EventEmitter {
   private blockedIPs = new Map<string, number>(); // IP -> block until timestamp
   private emergencyMode = false;
   private emergencyModeUntil = 0;
+  private cleanupInterval?: NodeJS.Timeout;
+  private emergencyCheckInterval?: NodeJS.Timeout;
   
   constructor(private config: SecurityConfig['ddosProtection']) {
     super();
     
     // Clean up old request counts every 10 seconds
-    setInterval(() => {
+    this.cleanupInterval = setInterval(() => {
       this.cleanupOldRequests();
     }, 10000);
     
     // Check for emergency mode triggers every 30 seconds
-    setInterval(() => {
+    this.emergencyCheckInterval = setInterval(() => {
       this.checkEmergencyMode();
     }, 30000);
   }
@@ -709,6 +728,25 @@ export class DDoSProtectionManager extends EventEmitter {
       topRequesters
     };
   }
+
+  /**
+   * Cleanup resources
+   */
+  cleanup(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = undefined;
+    }
+    
+    if (this.emergencyCheckInterval) {
+      clearInterval(this.emergencyCheckInterval);
+      this.emergencyCheckInterval = undefined;
+    }
+    
+    this.requestCounts.clear();
+    this.blockedIPs.clear();
+    this.removeAllListeners();
+  }
 }
 
 // ============================================================================
@@ -720,6 +758,9 @@ export class SecurityControlService extends EventEmitter {
   private rateLimitManager: AdvancedRateLimitManager;
   private ddosProtectionManager: DDoSProtectionManager;
   private suspiciousActivityProfiles = new Map<string, SuspiciousActivityProfile>();
+  private securityReportInterval?: NodeJS.Timeout;
+  private profileCleanupInterval?: NodeJS.Timeout;
+  private keyRotationInterval?: NodeJS.Timeout;
   private securityThreats = new Map<string, SecurityThreat>();
   private encryptionKeys = new Map<string, EncryptionConfig>();
   private auditService: AuditService;
@@ -1498,19 +1539,19 @@ export class SecurityControlService extends EventEmitter {
    * Start security monitoring
    */
   private startSecurityMonitoring(): void {
-    setInterval(() => {
+    this.securityReportInterval = setInterval(() => {
       this.generateSecurityReport();
     }, this.config.monitoring.reportingInterval * 1000);
     
     // Clean up old activity profiles every hour
-    setInterval(() => {
+    this.profileCleanupInterval = setInterval(() => {
       this.cleanupOldProfiles();
     }, 3600000);
     
     // Rotate encryption keys if enabled
     if (this.config.encryption.keyRotation.enabled) {
       const intervalMs = Math.min(this.config.encryption.keyRotation.intervalDays * 24 * 3600000, 2147483647);
-      setInterval(() => {
+      this.keyRotationInterval = setInterval(() => {
         this.rotateAllEncryptionKeys();
       }, intervalMs);
     }
@@ -1656,8 +1697,30 @@ export class SecurityControlService extends EventEmitter {
    * Shutdown security service
    */
   shutdown(): void {
+    // Clear intervals
+    if (this.securityReportInterval) {
+      clearInterval(this.securityReportInterval);
+      this.securityReportInterval = undefined;
+    }
+    
+    if (this.profileCleanupInterval) {
+      clearInterval(this.profileCleanupInterval);
+      this.profileCleanupInterval = undefined;
+    }
+    
+    if (this.keyRotationInterval) {
+      clearInterval(this.keyRotationInterval);
+      this.keyRotationInterval = undefined;
+    }
+    
+    // Cleanup managers
+    this.rateLimitManager.cleanup();
+    this.ddosProtectionManager.cleanup();
+    
+    // Clear event listeners
     this.removeAllListeners();
-    this.ddosProtectionManager.removeAllListeners();
+    
+    // Clear data structures
     this.securityThreats.clear();
     this.suspiciousActivityProfiles.clear();
     this.encryptionKeys.clear();

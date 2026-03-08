@@ -104,6 +104,8 @@ export class WhitelistManager {
   
   private syncInterval = 30 * 1000; // 30 seconds
   private maxRetries = 3;
+  private periodicSyncInterval?: NodeJS.Timeout;
+  private expiredBanInterval?: NodeJS.Timeout;
 
   constructor(ctx: Context, getBridge: (serverId: string) => any) {
     this.ctx = ctx;
@@ -1115,12 +1117,12 @@ export class WhitelistManager {
     logger.info('Whitelist Manager initialized');
     
     // Set up periodic sync for online servers
-    setInterval(() => {
+    this.periodicSyncInterval = setInterval(() => {
       this.performPeriodicSync();
     }, this.syncInterval);
     
     // Set up expired ban processing (every 5 minutes)
-    setInterval(() => {
+    this.expiredBanInterval = setInterval(() => {
       this.processExpiredBans();
     }, 5 * 60 * 1000);
     
@@ -1760,5 +1762,27 @@ export class WhitelistManager {
       ban.reason.toLowerCase().includes(lowerQuery) ||
       ban.bannedBy.toLowerCase().includes(lowerQuery)
     );
+  }
+
+  /**
+   * Cleanup resources
+   */
+  cleanup(): void {
+    if (this.periodicSyncInterval) {
+      clearInterval(this.periodicSyncInterval);
+      this.periodicSyncInterval = undefined;
+    }
+    
+    if (this.expiredBanInterval) {
+      clearInterval(this.expiredBanInterval);
+      this.expiredBanInterval = undefined;
+    }
+    
+    this.whitelistCache.clear();
+    this.pendingOperations.clear();
+    this.syncStatus.clear();
+    this.banCache.clear();
+    this.pendingBanOperations.clear();
+    this.banSyncStatus.clear();
   }
 }

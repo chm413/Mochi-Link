@@ -8,9 +8,11 @@ import { EventEmitter } from 'events';
 import { BaseConnectorBridge } from '../bridge/base';
 import { PluginType, PlaceholderAPIIntegration, PlanIntegration, LuckPermsIntegration, VaultIntegration } from '../plugins';
 export declare class PluginIntegrationService extends EventEmitter {
+    private ctx;
     private pluginManagers;
     private initialized;
-    constructor();
+    private logger;
+    constructor(ctx: any);
     /**
      * Initialize the plugin integration service
      */
@@ -70,8 +72,7 @@ export declare class PluginIntegrationService extends EventEmitter {
     private registerPluginFactories;
     /**
      * Set up event forwarding from plugin manager
-     * NOTE: Not implemented in basic mode
+     * 修复 TODO: 实现事件转发机制
      */
     private setupEventForwarding;
 }
-export declare const pluginIntegrationService: PluginIntegrationService;

@@ -105,6 +105,7 @@ export class ConnectionPool extends EventEmitter {
   private statistics: PoolStatistics;
   private healthCheckTimer?: NodeJS.Timeout;
   private metricsTimer?: NodeJS.Timeout;
+  private resourceMonitoringInterval?: NodeJS.Timeout;
   private logger: any;
 
   constructor(
@@ -623,9 +624,15 @@ export class ConnectionPool extends EventEmitter {
     // Clear timers
     if (this.healthCheckTimer) {
       clearInterval(this.healthCheckTimer);
+      this.healthCheckTimer = undefined;
     }
     if (this.metricsTimer) {
       clearInterval(this.metricsTimer);
+      this.metricsTimer = undefined;
+    }
+    if (this.resourceMonitoringInterval) {
+      clearInterval(this.resourceMonitoringInterval);
+      this.resourceMonitoringInterval = undefined;
     }
 
     // Clear request queue
@@ -679,6 +686,7 @@ export class ResourceManager {
   private memoryUsage = new Map<string, number>();
   private cpuUsage = new Map<string, number>();
   private logger: any;
+  private resourceMonitoringInterval?: NodeJS.Timeout;
 
   constructor(private ctx: Context) {
     this.logger = ctx.logger('mochi-link:resource-manager');
@@ -689,7 +697,7 @@ export class ResourceManager {
    * Start resource monitoring
    */
   private startResourceMonitoring(): void {
-    setInterval(() => {
+    this.resourceMonitoringInterval = setInterval(() => {
       this.collectResourceMetrics();
     }, 30000); // Every 30 seconds
   }

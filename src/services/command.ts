@@ -159,8 +159,11 @@ export class CommandExecutionService {
         };
       }
 
+      // 修复问题 #5: 设置默认超时时间
+      const timeout = options.timeout ?? 30000; // 默认 30 秒
+
       // Execute command
-      const result = await bridge.executeCommand(command, options.timeout);
+      const result = await bridge.executeCommand(command, timeout);
       
       // Audit logging
       if (options.auditLog !== false) {
@@ -171,7 +174,8 @@ export class CommandExecutionService {
               command,
               success: result.success,
               executionTime: result.executionTime,
-              outputLines: result.output.length
+              outputLines: result.output.length,
+              timeout
             },
             { userId: executor }
           );
@@ -182,7 +186,8 @@ export class CommandExecutionService {
               command,
               success: result.success,
               executionTime: result.executionTime,
-              outputLines: result.output.length
+              outputLines: result.output.length,
+              timeout
             },
             result.error || 'Command execution failed',
             { userId: executor }

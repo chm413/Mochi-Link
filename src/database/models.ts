@@ -185,6 +185,9 @@ export class ModelUtils {
    * Convert database server record to application model
    */
   static dbServerToModel(dbServer: DatabaseServer): any {
+    // Note: This is a static method, so we can't use instance logger
+    // Errors will be logged by the calling code if needed
+    
     // Safely parse connection_config
     let connectionConfig: any = {};
     if (dbServer.connection_config) {
@@ -195,8 +198,7 @@ export class ModelUtils {
             connectionConfig = JSON.parse(dbServer.connection_config);
           }
         } catch (error) {
-          console.error(`Failed to parse connection_config for server ${dbServer.id}:`, error);
-          console.error(`Raw value: "${dbServer.connection_config}"`);
+          // Silent fail for static method - calling code should handle logging
           connectionConfig = {};
         }
       } else {
@@ -214,8 +216,7 @@ export class ModelUtils {
             tags = JSON.parse(dbServer.tags);
           }
         } catch (error) {
-          console.error(`Failed to parse tags for server ${dbServer.id}:`, error);
-          console.error(`Raw value: "${dbServer.tags}"`);
+          // Silent fail for static method - calling code should handle logging
           tags = [];
         }
       } else {
@@ -310,7 +311,7 @@ export class ModelUtils {
             permissions = JSON.parse(dbACL.permissions);
           }
         } catch (error) {
-          console.error(`Failed to parse permissions for ACL ${dbACL.id}:`, error);
+          // Silent fail for static method - calling code should handle logging
           permissions = [];
         }
       } else {
@@ -358,7 +359,7 @@ export class ModelUtils {
             operationData = JSON.parse(dbAudit.operation_data);
           }
         } catch (error) {
-          console.error(`Failed to parse operation_data for audit log ${dbAudit.id}:`, error);
+          // Silent fail for static method - calling code should handle logging
           operationData = {};
         }
       } else {

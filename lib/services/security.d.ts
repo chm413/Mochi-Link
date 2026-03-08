@@ -164,6 +164,7 @@ export declare class AdvancedRateLimitManager {
     private ipLimits;
     private concurrentConnections;
     private emergencyMode;
+    private cleanupInterval?;
     constructor(config: SecurityConfig['rateLimiting']);
     /**
      * Check if request should be allowed
@@ -203,6 +204,10 @@ export declare class AdvancedRateLimitManager {
         concurrentConnections: number;
         emergencyMode: boolean;
     };
+    /**
+     * Cleanup resources
+     */
+    cleanup(): void;
 }
 export declare class DDoSProtectionManager extends EventEmitter {
     private config;
@@ -210,6 +215,8 @@ export declare class DDoSProtectionManager extends EventEmitter {
     private blockedIPs;
     private emergencyMode;
     private emergencyModeUntil;
+    private cleanupInterval?;
+    private emergencyCheckInterval?;
     constructor(config: SecurityConfig['ddosProtection']);
     /**
      * Check if request should be allowed (DDoS protection)
@@ -251,6 +258,10 @@ export declare class DDoSProtectionManager extends EventEmitter {
             requests: number;
         }>;
     };
+    /**
+     * Cleanup resources
+     */
+    cleanup(): void;
 }
 export declare class SecurityControlService extends EventEmitter {
     private ctx;
@@ -258,6 +269,9 @@ export declare class SecurityControlService extends EventEmitter {
     private rateLimitManager;
     private ddosProtectionManager;
     private suspiciousActivityProfiles;
+    private securityReportInterval?;
+    private profileCleanupInterval?;
+    private keyRotationInterval?;
     private securityThreats;
     private encryptionKeys;
     private auditService;

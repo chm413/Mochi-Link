@@ -25,6 +25,21 @@ export interface AuthenticationResult {
     token?: APIToken;
     error?: string;
     capabilities?: string[];
+    serverInfo?: {
+        name?: string;
+        version?: string;
+        coreType?: string;
+        coreName?: string;
+        config?: {
+            whitelistEnabled?: boolean;
+            onlineMode?: boolean;
+            maxPlayers?: number;
+            port?: number;
+            motd?: string;
+            difficulty?: string;
+            pvpEnabled?: boolean;
+        };
+    };
 }
 export interface TokenManager {
     validateToken(serverId: string, token: string): Promise<APIToken | null>;

@@ -5,12 +5,14 @@
  * and provides a unified interface for accessing plugin functionality.
  */
 import { EventEmitter } from 'events';
+import { Context } from 'koishi';
 import { PluginType, PluginIntegration, PluginManager as IPluginManager, PluginConfig } from './types';
 export declare class PluginManager extends EventEmitter implements IPluginManager {
     private integrations;
     private config;
     private initialized;
-    constructor(config: PluginConfig);
+    private logger?;
+    constructor(config: PluginConfig, ctx?: Context);
     /**
      * Initialize all plugin integrations
      */

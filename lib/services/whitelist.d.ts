@@ -74,6 +74,8 @@ export declare class WhitelistManager {
     private banSyncStatus;
     private syncInterval;
     private maxRetries;
+    private periodicSyncInterval?;
+    private expiredBanInterval?;
     constructor(ctx: Context, getBridge: (serverId: string) => any);
     /**
      * Get whitelist for a specific server
@@ -286,4 +288,8 @@ export declare class WhitelistManager {
      * Search bans by target or reason
      */
     searchBans(query: string, serverId?: string): BanEntry[];
+    /**
+     * Cleanup resources
+     */
+    cleanup(): void;
 }

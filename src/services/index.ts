@@ -159,7 +159,7 @@ export type {
 } from './message-router';
 
 // Plugin Integration Services
-export { PluginIntegrationService, pluginIntegrationService } from './plugin-integration';
+export { PluginIntegrationService } from './plugin-integration';
 
 // Performance Optimization Services
 export { PerformanceOptimizationService } from './performance';
@@ -234,7 +234,7 @@ export class ServiceManager {
     this.audit = new AuditService(ctx);
     this.permission = new PermissionManager(ctx);
     this.token = new TokenManager(ctx);
-    this.pluginIntegration = new PluginIntegrationService();
+    this.pluginIntegration = new PluginIntegrationService(ctx);
     this.server = new ServerManager(ctx, this.db, this.audit, this.permission, this.token, this.pluginIntegration);
     
     // Pass getBridge function to services that need bridge access

@@ -44,6 +44,7 @@ export declare class ConnectionPool extends EventEmitter {
     private statistics;
     private healthCheckTimer?;
     private metricsTimer?;
+    private resourceMonitoringInterval?;
     private logger;
     constructor(ctx: Context, config?: Partial<ConnectionPoolConfig>);
     /**
@@ -159,6 +160,7 @@ export declare class ResourceManager {
     private memoryUsage;
     private cpuUsage;
     private logger;
+    private resourceMonitoringInterval?;
     constructor(ctx: Context);
     /**
      * Start resource monitoring

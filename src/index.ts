@@ -22,7 +22,11 @@ import type { HTTPServer } from './http/server';
 
 export const Config: Schema<PluginConfig> = Schema.object({
     websocket: Schema.object({
-        port: Schema.number().default(8080).description('WebSocket server port'),
+        port: Schema.number()
+            .default(8080)
+            .min(1)
+            .max(65535)
+            .description('WebSocket server port (1-65535)'),
         host: Schema.string().default('0.0.0.0').description('WebSocket server host'),
         ssl: Schema.object({
             cert: Schema.string().description('SSL certificate path'),
@@ -31,32 +35,67 @@ export const Config: Schema<PluginConfig> = Schema.object({
     }).description('WebSocket server configuration'),
     
     http: Schema.object({
-        port: Schema.number().default(8081).description('HTTP API server port'),
+        port: Schema.number()
+            .default(8081)
+            .min(1)
+            .max(65535)
+            .description('HTTP API server port (1-65535)'),
         host: Schema.string().default('0.0.0.0').description('HTTP API server host'),
         cors: Schema.boolean().default(true).description('Enable CORS')
     }).description('HTTP API configuration (optional)'),
     
     database: Schema.object({
-        prefix: Schema.string().default('mochi_').description('Database table prefix')
+        prefix: Schema.string()
+            .default('mochi_')
+            .pattern(/^[a-zA-Z_][a-zA-Z0-9_]*$/)
+            .description('Database table prefix (alphanumeric and underscore only)')
     }).description('Database configuration'),
     
     security: Schema.object({
-        tokenExpiry: Schema.number().default(86400).description('Token expiry time in seconds'),
-        maxConnections: Schema.number().default(100).description('Maximum concurrent connections'),
+        tokenExpiry: Schema.number()
+            .default(86400)
+            .min(60)
+            .max(31536000)
+            .description('Token expiry time in seconds (60s - 1 year)'),
+        maxConnections: Schema.number()
+            .default(100)
+            .min(1)
+            .max(10000)
+            .description('Maximum concurrent connections (1-10000)'),
         rateLimiting: Schema.object({
-            windowMs: Schema.number().default(60000).description('Rate limiting window in milliseconds'),
-            maxRequests: Schema.number().default(100).description('Maximum requests per window')
+            windowMs: Schema.number()
+                .default(60000)
+                .min(1000)
+                .max(3600000)
+                .description('Rate limiting window in milliseconds (1s - 1h)'),
+            maxRequests: Schema.number()
+                .default(100)
+                .min(1)
+                .max(10000)
+                .description('Maximum requests per window (1-10000)')
         }).description('Rate limiting configuration')
     }).description('Security configuration'),
     
     monitoring: Schema.object({
-        reportInterval: Schema.number().default(30).description('Status report interval in seconds'),
-        historyRetention: Schema.number().default(30).description('History retention in days')
+        reportInterval: Schema.number()
+            .default(30)
+            .min(5)
+            .max(3600)
+            .description('Status report interval in seconds (5s - 1h)'),
+        historyRetention: Schema.number()
+            .default(30)
+            .min(1)
+            .max(365)
+            .description('History retention in days (1-365)')
     }).description('Monitoring configuration'),
     
     logging: Schema.object({
         level: Schema.union(['debug', 'info', 'warn', 'error']).default('info').description('Log level'),
-        auditRetention: Schema.number().default(90).description('Audit log retention in days')
+        auditRetention: Schema.number()
+            .default(90)
+            .min(1)
+            .max(3650)
+            .description('Audit log retention in days (1-10 years)')
     }).description('Logging configuration')
 });
 
@@ -131,6 +170,31 @@ export function apply(ctx: Context, config: PluginConfig) {
     let wsManager: MochiWebSocketServer | null = null;
     let httpServer: HTTPServer | null = null;
     let isInitialized = false;
+    
+    /**
+     * 修复问题 #6: 安全的权限检查辅助函数
+     * 确保未认证用户被明确拒绝
+     */
+    function checkAuthority(session: any, requiredLevel: number): { allowed: boolean; message?: string } {
+        const authority = session?.user?.authority;
+        
+        // 明确检查 undefined 和 null
+        if (authority === undefined || authority === null) {
+            return {
+                allowed: false,
+                message: `权限不足：需要认证用户（等级 ${requiredLevel}）`
+            };
+        }
+        
+        if (authority < requiredLevel) {
+            return {
+                allowed: false,
+                message: `权限不足：需要等级 ${requiredLevel}（当前等级 ${authority}）`
+            };
+        }
+        
+        return { allowed: true };
+    }
     
     /**
      * Get server ID from parameter or group binding
@@ -256,7 +320,7 @@ export function apply(ctx: Context, config: PluginConfig) {
                                 
                                 // Update database if we have any updates
                                 if (Object.keys(updates).length > 0) {
-                                    await serviceManager.server.updateServer(connection.serverId, updates);
+                                    await serviceManager.server.updateServer(connection.serverId, updates, 'system');
                                     logger.info(`Updated server info for ${connection.serverId}:`, updates);
                                 }
                             }
@@ -329,10 +393,12 @@ export function apply(ctx: Context, config: PluginConfig) {
                     } catch (error) {
                         logger.error(`Error handling message from ${connection.serverId}:`, error);
                         
-                        // Send error response if it was a request
-                        if (message.type === 'request') {
-                            try {
-                                const { MessageFactory } = await import('./protocol/messages');
+                        // 修复问题 #4: 为所有消息类型提供错误处理
+                        try {
+                            const { MessageFactory } = await import('./protocol/messages');
+                            
+                            if (message.type === 'request') {
+                                // Send error response for requests
                                 const errorResponse = MessageFactory.createError(
                                     message.id,
                                     message.op,
@@ -340,9 +406,23 @@ export function apply(ctx: Context, config: PluginConfig) {
                                     'INTERNAL_ERROR'
                                 );
                                 await connection.send(errorResponse);
-                            } catch (sendError) {
-                                logger.error('Failed to send error response:', sendError);
+                            } else if (message.type === 'event') {
+                                // Log event processing errors
+                                logger.error(`Failed to process event ${message.op || message.eventType}:`, {
+                                    serverId: connection.serverId,
+                                    eventType: message.op || message.eventType,
+                                    error: error instanceof Error ? error.message : String(error)
+                                });
+                            } else if (message.type === 'system') {
+                                // Log system message errors
+                                logger.error(`Failed to process system message ${message.systemOp || message.op}:`, {
+                                    serverId: connection.serverId,
+                                    operation: message.systemOp || message.op,
+                                    error: error instanceof Error ? error.message : String(error)
+                                });
                             }
+                        } catch (sendError) {
+                            logger.error('Failed to handle error response:', sendError);
                         }
                     }
                 });
@@ -352,10 +432,10 @@ export function apply(ctx: Context, config: PluginConfig) {
                     switch (message.systemOp || message.op) {
                         case 'handshake':
                             // Handle handshake message (authentication)
-                            if (wsManager && wsManager.authManager) {
-                                const authResult = await wsManager.authManager.handleAuthenticationMessage(
+                            if (wsManager) {
+                                const authResult = await (wsManager as any).authManager?.handleAuthenticationMessage(
                                     message,
-                                    connection.ws?.['_socket']?.remoteAddress
+                                    (connection as any).ws?.['_socket']?.remoteAddress
                                 );
                                 
                                 if (authResult) {
@@ -545,8 +625,9 @@ export function apply(ctx: Context, config: PluginConfig) {
       .option('type', '-t <type:string> 服务器类型 (java/bedrock)', { fallback: 'java' })
       .option('core', '-c <core:string> 核心类型 (paper/fabric/forge/folia/nukkit/pmmp/llbds)', { fallback: 'paper' })
       .before(({ session }) => {
-        if ((session?.user?.authority ?? 0) < 3) {
-          return '权限不足：需要管理员权限（等级 3）';
+        const authCheck = checkAuthority(session, 3);
+        if (!authCheck.allowed) {
+          return authCheck.message;
         }
       })
       .action(async ({ session, options }, id, name) => {
@@ -571,8 +652,17 @@ export function apply(ctx: Context, config: PluginConfig) {
             return `服务器 ${id} 已存在`;
           }
           
-          // Create server
-          await dbManager.createServer({
+          // Generate API token for the server
+          const crypto = await import('crypto');
+          const token = crypto.randomBytes(32).toString('hex');
+          const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+          
+          // 修复问题 #14: 添加令牌过期时间（默认 1 年）
+          const expiresAt = new Date();
+          expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+          
+          // 创建服务器记录
+          await ctx.database.create(`${config.database?.prefix || 'mochi'}_servers` as any, {
             id,
             name,
             core_type: (options.type || 'java') as 'java' | 'bedrock',
@@ -580,14 +670,19 @@ export function apply(ctx: Context, config: PluginConfig) {
             connection_mode: 'reverse',
             connection_config: JSON.stringify({}),
             status: 'offline',
-            owner_id: session?.userId
+            owner_id: session?.userId,
+            created_at: new Date(),
+            updated_at: new Date()
           });
           
-          // Generate API token for the server
-          const crypto = await import('crypto');
-          const token = crypto.randomBytes(32).toString('hex');
-          const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-          await dbManager.createAPIToken(id, token, tokenHash);
+          // 创建API令牌
+          await ctx.database.create(`${config.database?.prefix || 'mochi'}_api_tokens` as any, {
+            server_id: id,
+            token: token,
+            token_hash: tokenHash,
+            created_at: new Date(),
+            expires_at: expiresAt
+          });
           
           // Create audit log using service
           if (serviceManager?.audit) {
@@ -608,14 +703,19 @@ export function apply(ctx: Context, config: PluginConfig) {
                  `  🎮 类型: ${options.type}\n` +
                  `  ⚙️ 核心: ${options.core}\n\n` +
                  `🔐 连接令牌:\n` +
-                 `  ${token}\n\n` +
+                 `  ${token}\n` +
+                 `  过期时间: ${expiresAt.toLocaleString()}\n\n` +
+                 `⚠️ 重要提示:\n` +
+                 `  • 这是令牌唯一一次完整显示\n` +
+                 `  • 请立即复制并保存到安全位置\n` +
+                 `  • 不要将令牌分享给他人或提交到代码仓库\n\n` +
                  `📝 下一步:\n` +
                  `  1. 在连接器配置中使用此令牌\n` +
-                 `  2. 使用 mochi.server.token ${id} 可随时查看令牌\n` +
+                 `  2. 使用 mochi.server.token ${id} 可查看令牌状态（内容已隐藏）\n` +
                  `  3. 使用 mochi.server.token ${id} -r 可重新生成令牌`;
         } catch (error) {
           logger.error('Failed to create server:', error);
-          return '创建服务器失败';
+          return '创建服务器失败: ' + (error instanceof Error ? error.message : String(error));
         }
       });
     
@@ -627,8 +727,9 @@ export function apply(ctx: Context, config: PluginConfig) {
       .option('type', '-t <type:string> 服务器类型 (java/bedrock)', { fallback: 'java' })
       .option('core', '-c <core:string> 核心类型 (paper/fabric/forge/folia/nukkit/pmmp/llbds)', { fallback: 'paper' })
       .before(({ session }) => {
-        if ((session?.user?.authority ?? 0) < 3) {
-          return '权限不足：需要管理员权限（等级 3）';
+        const authCheck = checkAuthority(session, 3);
+        if (!authCheck.allowed) {
+          return authCheck.message;
         }
       })
       .action(async ({ session, options }, id, name) => {
@@ -677,8 +778,17 @@ export function apply(ctx: Context, config: PluginConfig) {
           const autoType = bedrockCores.some(bc => core.toLowerCase().includes(bc)) ? 'bedrock' : 'java';
           const finalType = type || autoType;
           
-          // 创建服务器
-          await dbManager.createServer({
+          // 生成 API token
+          const crypto = await import('crypto');
+          const token = crypto.randomBytes(32).toString('hex');
+          const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+          
+          // 修复问题 #14: 添加令牌过期时间（默认 1 年）
+          const expiresAt = new Date();
+          expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+          
+          // 创建服务器记录
+          await ctx.database.create(`${config.database?.prefix || 'mochi'}_servers` as any, {
             id,
             name,
             core_type: finalType as 'java' | 'bedrock',
@@ -689,14 +799,19 @@ export function apply(ctx: Context, config: PluginConfig) {
               port: port
             }),
             status: 'offline',
-            owner_id: session?.userId
+            owner_id: session?.userId,
+            created_at: new Date(),
+            updated_at: new Date()
           });
           
-          // 生成 API token
-          const crypto = await import('crypto');
-          const token = crypto.randomBytes(32).toString('hex');
-          const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-          await dbManager.createAPIToken(id, token, tokenHash);
+          // 创建API令牌
+          await ctx.database.create(`${config.database?.prefix || 'mochi'}_api_tokens` as any, {
+            server_id: id,
+            token: token,
+            token_hash: tokenHash,
+            created_at: new Date(),
+            expires_at: expiresAt
+          });
           
           // 创建审计日志使用服务
           if (serviceManager?.audit) {
@@ -807,9 +922,11 @@ export function apply(ctx: Context, config: PluginConfig) {
     ctx.command('mochi.server.token <id>', '查看服务器连接令牌')
       .userFields(['authority'])
       .option('regenerate', '-r 重新生成令牌', { fallback: false })
+      .option('show', '-s 显示完整令牌（不安全）', { fallback: false })
       .before(({ session }) => {
-        if ((session?.user?.authority ?? 0) < 3) {
-          return '权限不足：需要管理员权限（等级 3）';
+        const authCheck = checkAuthority(session, 3);
+        if (!authCheck.allowed) {
+          return authCheck.message;
         }
       })
       .action(async ({ session, options }, id) => {
@@ -818,8 +935,11 @@ export function apply(ctx: Context, config: PluginConfig) {
         }
         
         if (!id) {
-          return '用法: mochi.server.token <id> [-r]\n' +
-                 '示例: mochi.server.token survival';
+          return '用法: mochi.server.token <id> [-r] [-s]\n' +
+                 '选项:\n' +
+                 '  -r  重新生成令牌\n' +
+                 '  -s  显示完整令牌（不安全，仅在必要时使用）\n' +
+                 '示例: mochi.server.token survival -r';
         }
         
         if (!options) {
@@ -834,24 +954,32 @@ export function apply(ctx: Context, config: PluginConfig) {
           
           const crypto = await import('crypto');
           
-          // 检查是否需要重新生成令牌
+          // 修复问题 #14: 检查是否需要重新生成令牌
           if (options.regenerate) {
             // 删除旧令牌
             await dbManager.deleteServerAPITokens(id);
             
-            // 生成新的令牌
+            // 生成新的令牌，添加过期时间（默认 1 年）
             const newToken = crypto.randomBytes(32).toString('hex');
             const tokenHash = crypto.createHash('sha256').update(newToken).digest('hex');
+            const expiresAt = new Date();
+            expiresAt.setFullYear(expiresAt.getFullYear() + 1); // 1 年后过期
             
             // 创建新令牌
-            await dbManager.createAPIToken(id, newToken, tokenHash);
+            await ctx.database.create(`${config.database?.prefix || 'mochi'}_api_tokens` as any, {
+              server_id: id,
+              token: newToken,
+              token_hash: tokenHash,
+              created_at: new Date(),
+              expires_at: expiresAt
+            });
             
             // 记录审计日志使用服务
             if (serviceManager?.audit) {
               await serviceManager.audit.logger.logServerOperation(
                 id,
                 'token.regenerate',
-                { server_name: server.name },
+                { server_name: server.name, expires_at: expiresAt },
                 'success',
                 undefined,
                 { userId: session?.userId }
@@ -861,63 +989,90 @@ export function apply(ctx: Context, config: PluginConfig) {
             return `✅ 令牌已重新生成\n\n` +
                    `🔐 服务器连接令牌:\n` +
                    `  服务器: ${server.name} (${id})\n` +
-                   `  令牌: ${newToken}\n\n` +
-                   `⚠️ 警告:\n` +
+                   `  令牌: ${newToken}\n` +
+                   `  过期时间: ${expiresAt.toLocaleString()}\n\n` +
+                   `⚠️ 重要提示:\n` +
+                   `  • 这是令牌唯一一次完整显示\n` +
+                   `  • 请立即复制并保存到安全位置\n` +
                    `  • 旧令牌已失效，请立即更新连接器配置\n` +
-                   `  • 请妥善保管令牌，不要泄露给他人\n` +
-                   `  • 令牌用于服务器连接认证\n\n` +
+                   `  • 不要将令牌分享给他人或提交到代码仓库\n\n` +
                    `📝 连接配置:\n` +
-                   `  URL: ws://your-host:${config.websocket?.port || 8080}/ws?serverId=${id}&token=${newToken}`;
+                   `  URL: ws://your-host:${config.websocket?.port || 8080}/ws?serverId=${id}&token=${newToken}\n\n` +
+                   `💡 提示: 下次查看时将只显示令牌的部分内容`;
           }
           
-          // 查看现有令牌
+          // 修复问题 #14: 查看现有令牌（默认隐藏完整内容）
           const tokens = await dbManager.getAPITokens(id);
           
           if (tokens.length === 0) {
             // 如果没有令牌，自动生成一个
             const newToken = crypto.randomBytes(32).toString('hex');
             const tokenHash = crypto.createHash('sha256').update(newToken).digest('hex');
+            const expiresAt = new Date();
+            expiresAt.setFullYear(expiresAt.getFullYear() + 1); // 1 年后过期
             
-            await dbManager.createAPIToken(id, newToken, tokenHash);
+            await ctx.database.create(`${config.database?.prefix || 'mochi'}_api_tokens` as any, {
+              server_id: id,
+              token: newToken,
+              token_hash: tokenHash,
+              created_at: new Date(),
+              expires_at: expiresAt
+            });
             
             return `✅ 令牌已生成\n\n` +
                    `🔐 服务器连接令牌:\n` +
                    `  服务器: ${server.name} (${id})\n` +
-                   `  令牌: ${newToken}\n\n` +
-                   `📝 使用说明:\n` +
-                   `  1. 在连接器配置文件中设置此令牌\n` +
-                   `  2. 令牌用于服务器连接认证\n` +
-                   `  3. 请妥善保管，不要泄露\n\n` +
+                   `  令牌: ${newToken}\n` +
+                   `  过期时间: ${expiresAt.toLocaleString()}\n\n` +
+                   `⚠️ 重要提示:\n` +
+                   `  • 这是令牌唯一一次完整显示\n` +
+                   `  • 请立即复制并保存到安全位置\n` +
+                   `  • 不要将令牌分享给他人或提交到代码仓库\n\n` +
                    `📝 连接配置:\n` +
                    `  URL: ws://your-host:${config.websocket?.port || 8080}/ws?serverId=${id}&token=${newToken}\n\n` +
-                   `💡 提示: 使用 -r 选项可以重新生成令牌`;
+                   `💡 提示: 下次查看时将只显示令牌的部分内容`;
           }
           
-          // 显示所有令牌
+          // 修复问题 #14: 显示令牌信息（默认隐藏完整令牌）
           const tokenList = tokens.map((t: any, i: number) => {
+            // 检查令牌是否过期
+            const isExpired = t.expiresAt && new Date(t.expiresAt) < new Date();
+            const statusIcon = isExpired ? '❌' : '✅';
+            const statusText = isExpired ? '已过期' : '有效';
+            
+            // 隐藏令牌内容，只显示前8位和后4位
+            const maskedToken = options.show 
+              ? t.token 
+              : `${t.token.substring(0, 8)}${'*'.repeat(48)}${t.token.substring(60)}`;
+            
             const expiryInfo = t.expiresAt 
-              ? `\n  过期时间: ${new Date(t.expiresAt).toLocaleString()}`
-              : '';
+              ? `\n  过期时间: ${new Date(t.expiresAt).toLocaleString()} ${statusIcon} ${statusText}`
+              : '\n  过期时间: 永不过期';
             const lastUsedInfo = t.lastUsed
               ? `\n  最后使用: ${new Date(t.lastUsed).toLocaleString()}`
-              : '';
+              : '\n  最后使用: 从未使用';
             const ipWhitelistInfo = t.ipWhitelist && t.ipWhitelist.length > 0
               ? `\n  IP 白名单: ${t.ipWhitelist.join(', ')}`
               : '';
             
             return `令牌 #${i + 1}:\n` +
                    `  ID: ${t.id}\n` +
-                   `  令牌: ${t.token}\n` +
+                   `  令牌: ${maskedToken}\n` +
                    `  创建时间: ${new Date(t.createdAt).toLocaleString()}` +
                    expiryInfo + lastUsedInfo + ipWhitelistInfo;
           }).join('\n\n');
           
+          const showWarning = options.show 
+            ? '\n\n⚠️ 警告: 完整令牌已显示，请注意保密！' 
+            : '\n\n🔒 安全提示: 令牌内容已隐藏，使用 -s 选项可显示完整令牌';
+          
           return `🔐 服务器连接令牌:\n` +
                  `  服务器: ${server.name} (${id})\n\n` +
-                 tokenList + '\n\n' +
-                 `📝 连接配置:\n` +
-                 `  URL: ws://your-host:${config.websocket?.port || 8080}/ws?serverId=${id}&token=${tokens[0].token}\n\n` +
-                 `💡 提示: 使用 -r 选项可以重新生成令牌`;
+                 tokenList + showWarning + '\n\n' +
+                 `💡 提示:\n` +
+                 `  • 使用 -r 选项可以重新生成令牌\n` +
+                 `  • 使用 -s 选项可以显示完整令牌（不安全）\n` +
+                 `  • 令牌过期后需要重新生成`;
         } catch (error) {
           logger.error('Failed to get server token:', error);
           return '获取服务器令牌失败: ' + (error instanceof Error ? error.message : String(error));
@@ -928,8 +1083,9 @@ export function apply(ctx: Context, config: PluginConfig) {
     ctx.command('mochi.server.remove <id>', '删除服务器')
       .userFields(['authority'])
       .before(({ session }) => {
-        if ((session?.user?.authority ?? 0) < 4) {
-          return '权限不足：需要超级管理员权限（等级 4）';
+        const authCheck = checkAuthority(session, 4);
+        if (!authCheck.allowed) {
+          return authCheck.message;
         }
       })
       .action(async ({ session }, id) => {
@@ -947,24 +1103,41 @@ export function apply(ctx: Context, config: PluginConfig) {
             return `服务器 ${id} 不存在`;
           }
           
-          await dbManager.deleteServer(id);
+          // 删除服务器及其所有关联数据
+          const prefix = config.database?.prefix || 'mochi';
+          
+          // 删除令牌
+          await ctx.database.remove(`${prefix}_api_tokens` as any, { server_id: id });
+          
+          // 删除ACL
+          await ctx.database.remove(`${prefix}_server_acl` as any, { server_id: id });
+          
+          // 删除绑定
+          await ctx.database.remove(`${prefix}_group_bindings` as any, { server_id: id });
+          
+          // 删除服务器
+          await ctx.database.remove(`${prefix}_servers` as any, { id });
           
           // Create audit log using service
           if (serviceManager?.audit) {
             await serviceManager.audit.logger.logServerOperation(
               id,
               'delete',
-              { name: server.name },
+              { 
+                name: server.name
+              },
               'success',
               undefined,
               { userId: session?.userId }
             );
           }
           
-          return `服务器 ${server.name} (${id}) 已删除`;
+          return `✅ 服务器已删除\n\n` +
+                 `📋 删除详情:\n` +
+                 `  🆔 服务器: ${server.name} (${id})`;
         } catch (error) {
           logger.error('Failed to delete server:', error);
-          return '删除服务器失败';
+          return '删除服务器失败: ' + (error instanceof Error ? error.message : String(error));
         }
       });
     

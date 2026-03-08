@@ -9,6 +9,7 @@ import { APIToken } from '../types';
 export declare class SimpleTokenManager implements TokenManager {
     private ctx;
     private tablePrefix;
+    private logger;
     constructor(ctx: Context, tablePrefix?: string);
     /**
      * Validate token for a server

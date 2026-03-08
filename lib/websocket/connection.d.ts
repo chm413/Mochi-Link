@@ -30,6 +30,7 @@ export declare class WebSocketConnection extends EventEmitter implements Connect
     private authToken?;
     private encryptionEnabled;
     private encryptionKey?;
+    private serverInfo?;
     constructor(ws: WebSocket, serverId: string, mode?: ConnectionMode, options?: {
         authToken?: string;
         encryptionEnabled?: boolean;
@@ -54,6 +55,14 @@ export declare class WebSocketConnection extends EventEmitter implements Connect
      * Update capabilities
      */
     updateCapabilities(capabilities: string[]): void;
+    /**
+     * Set server info from handshake
+     */
+    setServerInfo(info: any): void;
+    /**
+     * Get server info
+     */
+    getServerInfo(): any;
     /**
      * Enable/disable encryption
      */

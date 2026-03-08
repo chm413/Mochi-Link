@@ -57,6 +57,7 @@ export class PlayerInformationService {
   private identityIndex = new Map<string, Set<string>>(); // identifier -> playerIds
   private syncStatus = new Map<string, PlayerSyncStatus>();
   private cacheTimeout = 30 * 60 * 1000; // 30 minutes
+  private cacheCleanupInterval?: NodeJS.Timeout;
 
   constructor(ctx: Context, getBridge: (serverId: string) => any) {
     this.ctx = ctx;
@@ -512,7 +513,7 @@ export class PlayerInformationService {
     logger.info('Player Information Service initialized');
     
     // Set up periodic cache cleanup
-    setInterval(() => {
+    this.cacheCleanupInterval = setInterval(() => {
       this.cleanupExpiredCache();
     }, 5 * 60 * 1000); // Every 5 minutes
   }
@@ -607,5 +608,19 @@ export class PlayerInformationService {
       averageConfidence: totalPlayers > 0 ? totalConfidence / totalPlayers : 0,
       conflictCount
     };
+  }
+
+  /**
+   * Cleanup resources
+   */
+  cleanup(): void {
+    if (this.cacheCleanupInterval) {
+      clearInterval(this.cacheCleanupInterval);
+      this.cacheCleanupInterval = undefined;
+    }
+    
+    this.playerCache.clear();
+    this.identityIndex.clear();
+    this.syncStatus.clear();
   }
 }

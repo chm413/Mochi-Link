@@ -4,6 +4,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.mochilink.connector.folia.MochiLinkFoliaPlugin;
 import com.mochilink.connector.folia.connection.FoliaConnectionManager;
+import com.mochilink.connector.folia.utils.InputValidator;
+import com.mochilink.connector.folia.utils.InputValidator.ValidationResult;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.bukkit.entity.Player;
 
@@ -73,8 +75,14 @@ public class FoliaMessageHandler {
      * Handle player info operation
      */
     public JsonObject handlePlayerInfo(String requestId, String playerId) {
+        // 验证 playerId
+        ValidationResult<String> playerIdResult = InputValidator.validatePlayerId(playerId);
+        if (!playerIdResult.isValid()) {
+            return createErrorResponse(requestId, "player.info", playerIdResult.getError());
+        }
+        
         try {
-            Player player = plugin.getServer().getPlayer(UUID.fromString(playerId));
+            Player player = plugin.getServer().getPlayer(UUID.fromString(playerIdResult.getValue()));
             
             if (player == null) {
                 return createErrorResponse(requestId, "player.info", "Player not found");
@@ -120,19 +128,25 @@ public class FoliaMessageHandler {
      * Handle player kick operation
      */
     public JsonObject handlePlayerKick(String requestId, String playerId, String reason) {
-        if (reason == null || reason.isEmpty()) {
-            reason = "Kicked by administrator";
+        // 验证 playerId
+        ValidationResult<String> playerIdResult = InputValidator.validatePlayerId(playerId);
+        if (!playerIdResult.isValid()) {
+            return createErrorResponse(requestId, "player.kick", playerIdResult.getError());
         }
         
+        // 验证并清理 reason
+        ValidationResult<String> reasonResult = InputValidator.validateReason(reason);
+        String sanitizedReason = reasonResult.getValue();
+        
         try {
-            Player player = plugin.getServer().getPlayer(UUID.fromString(playerId));
+            Player player = plugin.getServer().getPlayer(UUID.fromString(playerIdResult.getValue()));
             
             if (player == null) {
                 return createErrorResponse(requestId, "player.kick", "Player not found");
             }
             
             String playerName = player.getName();
-            final String kickReason = reason;
+            final String kickReason = sanitizedReason;
             
             // Kick on player's region thread
             player.getScheduler().run(plugin, (ScheduledTask task) -> {
@@ -156,12 +170,18 @@ public class FoliaMessageHandler {
      * Handle player message operation
      */
     public JsonObject handlePlayerMessage(String requestId, String playerId, String message) {
-        if (message == null || message.isEmpty()) {
-            return createErrorResponse(requestId, "player.message", "Missing message parameter");
+        // 验证 playerId
+        ValidationResult<String> playerIdResult = InputValidator.validatePlayerId(playerId);
+        if (!playerIdResult.isValid()) {
+            return createErrorResponse(requestId, "player.message", playerIdResult.getError());
         }
         
+        // 验证并清理 message
+        ValidationResult<String> messageResult = InputValidator.validateMessage(message);
+        String sanitizedMessage = messageResult.getValue();
+        
         try {
-            Player player = plugin.getServer().getPlayer(UUID.fromString(playerId));
+            Player player = plugin.getServer().getPlayer(UUID.fromString(playerIdResult.getValue()));
             
             if (player == null) {
                 return createErrorResponse(requestId, "player.message", "Player not found");
@@ -171,7 +191,7 @@ public class FoliaMessageHandler {
             
             // Send message on player's region thread
             player.getScheduler().run(plugin, (ScheduledTask task) -> {
-                player.sendMessage(message);
+                player.sendMessage(sanitizedMessage);
             }, null);
             
             JsonObject responseData = new JsonObject();
@@ -217,6 +237,24 @@ public class FoliaMessageHandler {
      * Handle whitelist add operation
      */
     public JsonObject handleWhitelistAdd(String requestId, String playerName, String playerId) {
+        // 验证 playerName（如果提供）
+        if (playerName != null && !playerName.isEmpty()) {
+            ValidationResult<String> nameResult = InputValidator.validatePlayerName(playerName);
+            if (!nameResult.isValid()) {
+                return createErrorResponse(requestId, "whitelist.add", nameResult.getError());
+            }
+            playerName = nameResult.getValue();
+        }
+        
+        // 验证 playerId（如果提供）
+        if (playerId != null && !playerId.isEmpty()) {
+            ValidationResult<String> idResult = InputValidator.validatePlayerId(playerId);
+            if (!idResult.isValid()) {
+                return createErrorResponse(requestId, "whitelist.add", idResult.getError());
+            }
+            playerId = idResult.getValue();
+        }
+        
         try {
             org.bukkit.OfflinePlayer player;
             
@@ -247,6 +285,24 @@ public class FoliaMessageHandler {
      * Handle whitelist remove operation
      */
     public JsonObject handleWhitelistRemove(String requestId, String playerName, String playerId) {
+        // 验证 playerName（如果提供）
+        if (playerName != null && !playerName.isEmpty()) {
+            ValidationResult<String> nameResult = InputValidator.validatePlayerName(playerName);
+            if (!nameResult.isValid()) {
+                return createErrorResponse(requestId, "whitelist.remove", nameResult.getError());
+            }
+            playerName = nameResult.getValue();
+        }
+        
+        // 验证 playerId（如果提供）
+        if (playerId != null && !playerId.isEmpty()) {
+            ValidationResult<String> idResult = InputValidator.validatePlayerId(playerId);
+            if (!idResult.isValid()) {
+                return createErrorResponse(requestId, "whitelist.remove", idResult.getError());
+            }
+            playerId = idResult.getValue();
+        }
+        
         try {
             org.bukkit.OfflinePlayer player;
             
@@ -418,35 +474,353 @@ public class FoliaMessageHandler {
      * Handle command execute operation
      */
     public JsonObject handleCommandExecute(String requestId, String command) {
-        if (command == null || command.isEmpty()) {
-            return createErrorResponse(requestId, "command.execute", "Missing command parameter");
+        // 验证 command
+        ValidationResult<String> commandResult = InputValidator.validateCommand(command);
+        if (!commandResult.isValid()) {
+            return createErrorResponse(requestId, "command.execute", commandResult.getError());
         }
         
+        String validCommand = commandResult.getValue();
+        
         try {
-            logger.info("Executing command: " + command);
+            logger.info("Executing command: " + validCommand);
+            
+            long startTime = System.currentTimeMillis();
             
             // Execute command on global region scheduler
             plugin.getServer().getGlobalRegionScheduler().run(plugin, (ScheduledTask task) -> {
                 try {
                     plugin.getServer().dispatchCommand(
                         plugin.getServer().getConsoleSender(),
-                        command
+                        validCommand
                     );
                 } catch (Exception e) {
                     logger.log(Level.WARNING, "Failed to execute command", e);
                 }
             });
             
+            long executionTime = System.currentTimeMillis() - startTime;
+            
             JsonObject responseData = new JsonObject();
             responseData.addProperty("success", true);
-            responseData.addProperty("command", command);
-            responseData.addProperty("message", "Command executed successfully");
+            responseData.addProperty("command", validCommand);
+            responseData.addProperty("executionTime", executionTime);
+            
+            JsonArray output = new JsonArray();
+            output.add("Command executed successfully");
+            responseData.add("output", output);
             
             return createSuccessResponse(requestId, "command.execute", responseData);
             
         } catch (Exception e) {
             logger.log(Level.WARNING, "Failed to execute command", e);
             return createErrorResponse(requestId, "command.execute", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle player ban operation
+     */
+    public JsonObject handlePlayerBan(String requestId, String playerId, String playerName, String reason, Integer duration) {
+        // 验证 playerId（如果提供）
+        if (playerId != null && !playerId.isEmpty()) {
+            ValidationResult<String> idResult = InputValidator.validatePlayerId(playerId);
+            if (!idResult.isValid()) {
+                return createErrorResponse(requestId, "player.ban", idResult.getError());
+            }
+            playerId = idResult.getValue();
+        }
+        
+        // 验证 playerName（如果提供）
+        if (playerName != null && !playerName.isEmpty()) {
+            ValidationResult<String> nameResult = InputValidator.validatePlayerName(playerName);
+            if (!nameResult.isValid()) {
+                return createErrorResponse(requestId, "player.ban", nameResult.getError());
+            }
+            playerName = nameResult.getValue();
+        }
+        
+        // 验证并清理 reason
+        ValidationResult<String> reasonResult = InputValidator.validateReason(reason);
+        String sanitizedReason = reasonResult.getValue();
+        
+        // 验证 duration（如果提供）
+        if (duration != null) {
+            if (duration < 0 || duration > 365 * 24 * 60) {
+                return createErrorResponse(requestId, "player.ban", 
+                    "Invalid duration: must be between 0 and " + (365 * 24 * 60));
+            }
+        }
+        
+        try {
+            // Get player name if only ID provided
+            String targetName = playerName;
+            if (targetName == null || targetName.isEmpty()) {
+                if (playerId != null && !playerId.isEmpty()) {
+                    try {
+                        UUID uuid = UUID.fromString(playerId);
+                        Player player = plugin.getServer().getPlayer(uuid);
+                        if (player != null) {
+                            targetName = player.getName();
+                        } else {
+                            // Try to get offline player name
+                            targetName = plugin.getServer().getOfflinePlayer(uuid).getName();
+                        }
+                    } catch (IllegalArgumentException e) {
+                        return createErrorResponse(requestId, "player.ban", "Invalid player ID format");
+                    }
+                }
+            }
+            
+            if (targetName == null || targetName.isEmpty()) {
+                return createErrorResponse(requestId, "player.ban", "Missing player name or ID");
+            }
+            
+            final String finalName = targetName;
+            final String banReason = sanitizedReason;
+            
+            // Execute ban command on global region scheduler
+            plugin.getServer().getGlobalRegionScheduler().run(plugin, (ScheduledTask task) -> {
+                try {
+                    String banCommand;
+                    if (duration != null && duration > 0) {
+                        // Temporary ban (if supported by server)
+                        banCommand = "ban " + finalName + " " + banReason;
+                    } else {
+                        // Permanent ban
+                        banCommand = "ban " + finalName + " " + banReason;
+                    }
+                    
+                    plugin.getServer().dispatchCommand(
+                        plugin.getServer().getConsoleSender(),
+                        banCommand
+                    );
+                } catch (Exception e) {
+                    logger.log(Level.WARNING, "Failed to ban player", e);
+                }
+            });
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            responseData.addProperty("playerName", finalName);
+            responseData.addProperty("reason", banReason);
+            if (duration != null && duration > 0) {
+                responseData.addProperty("duration", duration);
+            }
+            
+            return createSuccessResponse(requestId, "player.ban", responseData);
+            
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Failed to ban player", e);
+            return createErrorResponse(requestId, "player.ban", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle player unban operation
+     */
+    public JsonObject handlePlayerUnban(String requestId, String playerId, String playerName) {
+        // 验证 playerId（如果提供）
+        if (playerId != null && !playerId.isEmpty()) {
+            ValidationResult<String> idResult = InputValidator.validatePlayerId(playerId);
+            if (!idResult.isValid()) {
+                return createErrorResponse(requestId, "player.unban", idResult.getError());
+            }
+            playerId = idResult.getValue();
+        }
+        
+        // 验证 playerName（如果提供）
+        if (playerName != null && !playerName.isEmpty()) {
+            ValidationResult<String> nameResult = InputValidator.validatePlayerName(playerName);
+            if (!nameResult.isValid()) {
+                return createErrorResponse(requestId, "player.unban", nameResult.getError());
+            }
+            playerName = nameResult.getValue();
+        }
+        
+        try {
+            // Get player name if only ID provided
+            String targetName = playerName;
+            if (targetName == null || targetName.isEmpty()) {
+                if (playerId != null && !playerId.isEmpty()) {
+                    try {
+                        UUID uuid = UUID.fromString(playerId);
+                        targetName = plugin.getServer().getOfflinePlayer(uuid).getName();
+                    } catch (IllegalArgumentException e) {
+                        return createErrorResponse(requestId, "player.unban", "Invalid player ID format");
+                    }
+                }
+            }
+            
+            if (targetName == null || targetName.isEmpty()) {
+                return createErrorResponse(requestId, "player.unban", "Missing player name or ID");
+            }
+            
+            final String finalName = targetName;
+            
+            // Execute unban command on global region scheduler
+            plugin.getServer().getGlobalRegionScheduler().run(plugin, (ScheduledTask task) -> {
+                try {
+                    plugin.getServer().dispatchCommand(
+                        plugin.getServer().getConsoleSender(),
+                        "pardon " + finalName
+                    );
+                } catch (Exception e) {
+                    logger.log(Level.WARNING, "Failed to unban player", e);
+                }
+            });
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            responseData.addProperty("playerName", finalName);
+            
+            return createSuccessResponse(requestId, "player.unban", responseData);
+            
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Failed to unban player", e);
+            return createErrorResponse(requestId, "player.unban", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle player banlist operation
+     */
+    public JsonObject handlePlayerBanlist(String requestId, String banType) {
+        try {
+            JsonArray banlistArray = new JsonArray();
+            
+            // Get ban list from server
+            // Note: Bukkit API doesn't provide direct access to ban list
+            // We need to use the banlist command output or BanList API
+            org.bukkit.BanList banList;
+            if ("ip".equalsIgnoreCase(banType)) {
+                banList = plugin.getServer().getBanList(org.bukkit.BanList.Type.IP);
+            } else {
+                banList = plugin.getServer().getBanList(org.bukkit.BanList.Type.NAME);
+            }
+            
+            for (org.bukkit.BanEntry entry : banList.getBanEntries()) {
+                JsonObject banObj = new JsonObject();
+                banObj.addProperty("target", entry.getTarget());
+                banObj.addProperty("reason", entry.getReason());
+                banObj.addProperty("source", entry.getSource());
+                banObj.addProperty("created", entry.getCreated().toString());
+                if (entry.getExpiration() != null) {
+                    banObj.addProperty("expires", entry.getExpiration().toString());
+                }
+                banlistArray.add(banObj);
+            }
+            
+            JsonObject responseData = new JsonObject();
+            responseData.add("banlist", banlistArray);
+            responseData.addProperty("type", banType != null ? banType : "name");
+            responseData.addProperty("count", banlistArray.size());
+            
+            return createSuccessResponse(requestId, "player.banlist", responseData);
+            
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Failed to get banlist", e);
+            return createErrorResponse(requestId, "player.banlist", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle whitelist enable operation
+     */
+    public JsonObject handleWhitelistEnable(String requestId) {
+        try {
+            // Execute whitelist on command
+            plugin.getServer().getGlobalRegionScheduler().run(plugin, (ScheduledTask task) -> {
+                try {
+                    plugin.getServer().dispatchCommand(
+                        plugin.getServer().getConsoleSender(),
+                        "whitelist on"
+                    );
+                } catch (Exception e) {
+                    logger.log(Level.WARNING, "Failed to enable whitelist", e);
+                }
+            });
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            responseData.addProperty("enabled", true);
+            
+            return createSuccessResponse(requestId, "whitelist.enable", responseData);
+            
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Failed to enable whitelist", e);
+            return createErrorResponse(requestId, "whitelist.enable", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle whitelist disable operation
+     */
+    public JsonObject handleWhitelistDisable(String requestId) {
+        try {
+            // Execute whitelist off command
+            plugin.getServer().getGlobalRegionScheduler().run(plugin, (ScheduledTask task) -> {
+                try {
+                    plugin.getServer().dispatchCommand(
+                        plugin.getServer().getConsoleSender(),
+                        "whitelist off"
+                    );
+                } catch (Exception e) {
+                    logger.log(Level.WARNING, "Failed to disable whitelist", e);
+                }
+            });
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            responseData.addProperty("enabled", false);
+            
+            return createSuccessResponse(requestId, "whitelist.disable", responseData);
+            
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Failed to disable whitelist", e);
+            return createErrorResponse(requestId, "whitelist.disable", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle server save operation
+     */
+    public JsonObject handleServerSave(String requestId, String worldName) {
+        try {
+            // Execute save command
+            plugin.getServer().getGlobalRegionScheduler().run(plugin, (ScheduledTask task) -> {
+                try {
+                    if (worldName != null && !worldName.isEmpty()) {
+                        // Save specific world
+                        plugin.getServer().dispatchCommand(
+                            plugin.getServer().getConsoleSender(),
+                            "save-all " + worldName
+                        );
+                    } else {
+                        // Save all worlds
+                        plugin.getServer().dispatchCommand(
+                            plugin.getServer().getConsoleSender(),
+                            "save-all"
+                        );
+                    }
+                } catch (Exception e) {
+                    logger.log(Level.WARNING, "Failed to save world", e);
+                }
+            });
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            if (worldName != null && !worldName.isEmpty()) {
+                responseData.addProperty("world", worldName);
+            } else {
+                responseData.addProperty("world", "all");
+            }
+            
+            return createSuccessResponse(requestId, "server.save", responseData);
+            
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Failed to save world", e);
+            return createErrorResponse(requestId, "server.save", e.getMessage());
         }
     }
     

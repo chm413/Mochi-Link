@@ -4,6 +4,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.mochilink.connector.fabric.MochiLinkFabricMod;
 import com.mochilink.connector.fabric.connection.FabricConnectionManager;
+import com.mochilink.connector.fabric.utils.InputValidator;
+import com.mochilink.connector.fabric.utils.InputValidator.ValidationResult;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -80,133 +82,154 @@ public class FabricMessageHandler {
      * Handle player info operation
      */
     public JsonObject handlePlayerInfo(String requestId, String playerId) {
-        try {
-            MinecraftServer server = mod.getServer();
-            if (server == null) {
-                return createErrorResponse(requestId, "player.info", "Server not available");
+            // 验证 playerId
+            ValidationResult<String> playerIdResult = InputValidator.validatePlayerId(playerId);
+            if (!playerIdResult.isValid()) {
+                return createErrorResponse(requestId, "player.info", playerIdResult.getError());
             }
-            
-            ServerPlayerEntity player = server.getPlayerManager().getPlayer(UUID.fromString(playerId));
-            
-            if (player == null) {
-                return createErrorResponse(requestId, "player.info", "Player not found");
+
+            try {
+                MinecraftServer server = mod.getServer();
+                if (server == null) {
+                    return createErrorResponse(requestId, "player.info", "Server not available");
+                }
+
+                ServerPlayerEntity player = server.getPlayerManager().getPlayer(UUID.fromString(playerIdResult.getValue()));
+
+                if (player == null) {
+                    return createErrorResponse(requestId, "player.info", "Player not found");
+                }
+
+                JsonObject playerInfo = new JsonObject();
+                playerInfo.addProperty("id", player.getUuidAsString());
+                playerInfo.addProperty("name", player.getName().getString());
+                playerInfo.addProperty("displayName", player.getDisplayName().getString());
+                playerInfo.addProperty("world", player.getWorld().getRegistryKey().getValue().toString());
+
+                JsonObject position = new JsonObject();
+                position.addProperty("x", player.getX());
+                position.addProperty("y", player.getY());
+                position.addProperty("z", player.getZ());
+                playerInfo.add("position", position);
+
+                playerInfo.addProperty("ping", player.networkHandler.getLatency());
+                playerInfo.addProperty("isOp", server.getPlayerManager().isOperator(player.getGameProfile()));
+                playerInfo.addProperty("health", player.getHealth());
+                playerInfo.addProperty("maxHealth", player.getMaxHealth());
+                playerInfo.addProperty("foodLevel", player.getHungerManager().getFoodLevel());
+                playerInfo.addProperty("level", player.experienceLevel);
+                playerInfo.addProperty("exp", player.experienceProgress);
+                playerInfo.addProperty("gameMode", player.interactionManager.getGameMode().getName());
+                playerInfo.addProperty("isFlying", player.getAbilities().flying);
+                playerInfo.addProperty("isSneaking", player.isSneaking());
+                playerInfo.addProperty("isSprinting", player.isSprinting());
+                playerInfo.addProperty("address", player.getIp());
+
+                JsonObject responseData = new JsonObject();
+                responseData.add("player", playerInfo);
+
+                return createSuccessResponse(requestId, "player.info", responseData);
+
+            } catch (Exception e) {
+                logger.error("Failed to get player info", e);
+                return createErrorResponse(requestId, "player.info", e.getMessage());
             }
-            
-            JsonObject playerInfo = new JsonObject();
-            playerInfo.addProperty("id", player.getUuidAsString());
-            playerInfo.addProperty("name", player.getName().getString());
-            playerInfo.addProperty("displayName", player.getDisplayName().getString());
-            playerInfo.addProperty("world", player.getWorld().getRegistryKey().getValue().toString());
-            
-            JsonObject position = new JsonObject();
-            position.addProperty("x", player.getX());
-            position.addProperty("y", player.getY());
-            position.addProperty("z", player.getZ());
-            playerInfo.add("position", position);
-            
-            playerInfo.addProperty("ping", player.networkHandler.getLatency());
-            playerInfo.addProperty("isOp", server.getPlayerManager().isOperator(player.getGameProfile()));
-            playerInfo.addProperty("health", player.getHealth());
-            playerInfo.addProperty("maxHealth", player.getMaxHealth());
-            playerInfo.addProperty("foodLevel", player.getHungerManager().getFoodLevel());
-            playerInfo.addProperty("level", player.experienceLevel);
-            playerInfo.addProperty("exp", player.experienceProgress);
-            playerInfo.addProperty("gameMode", player.interactionManager.getGameMode().getName());
-            playerInfo.addProperty("isFlying", player.getAbilities().flying);
-            playerInfo.addProperty("isSneaking", player.isSneaking());
-            playerInfo.addProperty("isSprinting", player.isSprinting());
-            playerInfo.addProperty("address", player.getIp());
-            
-            JsonObject responseData = new JsonObject();
-            responseData.add("player", playerInfo);
-            
-            return createSuccessResponse(requestId, "player.info", responseData);
-            
-        } catch (Exception e) {
-            logger.error("Failed to get player info", e);
-            return createErrorResponse(requestId, "player.info", e.getMessage());
         }
-    }
+
     
     /**
      * Handle player kick operation
      */
     public JsonObject handlePlayerKick(String requestId, String playerId, String reason) {
-        if (reason == null || reason.isEmpty()) {
-            reason = "Kicked by administrator";
-        }
-        
-        try {
-            MinecraftServer server = mod.getServer();
-            if (server == null) {
-                return createErrorResponse(requestId, "player.kick", "Server not available");
+            // 验证 playerId
+            ValidationResult<String> playerIdResult = InputValidator.validatePlayerId(playerId);
+            if (!playerIdResult.isValid()) {
+                return createErrorResponse(requestId, "player.kick", playerIdResult.getError());
             }
-            
-            ServerPlayerEntity player = server.getPlayerManager().getPlayer(UUID.fromString(playerId));
-            
-            if (player == null) {
-                return createErrorResponse(requestId, "player.kick", "Player not found");
+
+            // 验证并清理 reason
+            ValidationResult<String> reasonResult = InputValidator.validateReason(reason);
+            String sanitizedReason = reasonResult.getValue();
+
+            try {
+                MinecraftServer server = mod.getServer();
+                if (server == null) {
+                    return createErrorResponse(requestId, "player.kick", "Server not available");
+                }
+
+                ServerPlayerEntity player = server.getPlayerManager().getPlayer(UUID.fromString(playerIdResult.getValue()));
+
+                if (player == null) {
+                    return createErrorResponse(requestId, "player.kick", "Player not found");
+                }
+
+                String playerName = player.getName().getString();
+                final String kickReason = sanitizedReason;
+
+                // Kick player on server thread
+                server.execute(() -> {
+                    player.networkHandler.disconnect(Text.literal(kickReason));
+                });
+
+                JsonObject responseData = new JsonObject();
+                responseData.addProperty("success", true);
+                responseData.addProperty("playerName", playerName);
+                responseData.addProperty("reason", kickReason);
+
+                return createSuccessResponse(requestId, "player.kick", responseData);
+
+            } catch (Exception e) {
+                logger.error("Failed to kick player", e);
+                return createErrorResponse(requestId, "player.kick", e.getMessage());
             }
-            
-            String playerName = player.getName().getString();
-            final String kickReason = reason;
-            
-            // Kick player on server thread
-            server.execute(() -> {
-                player.networkHandler.disconnect(Text.literal(kickReason));
-            });
-            
-            JsonObject responseData = new JsonObject();
-            responseData.addProperty("success", true);
-            responseData.addProperty("playerName", playerName);
-            responseData.addProperty("reason", kickReason);
-            
-            return createSuccessResponse(requestId, "player.kick", responseData);
-            
-        } catch (Exception e) {
-            logger.error("Failed to kick player", e);
-            return createErrorResponse(requestId, "player.kick", e.getMessage());
         }
-    }
+
     
     /**
      * Handle player message operation
      */
     public JsonObject handlePlayerMessage(String requestId, String playerId, String message) {
-        if (message == null || message.isEmpty()) {
-            return createErrorResponse(requestId, "player.message", "Missing message parameter");
-        }
-        
-        try {
-            MinecraftServer server = mod.getServer();
-            if (server == null) {
-                return createErrorResponse(requestId, "player.message", "Server not available");
+            // 验证 playerId
+            ValidationResult<String> playerIdResult = InputValidator.validatePlayerId(playerId);
+            if (!playerIdResult.isValid()) {
+                return createErrorResponse(requestId, "player.message", playerIdResult.getError());
             }
-            
-            ServerPlayerEntity player = server.getPlayerManager().getPlayer(UUID.fromString(playerId));
-            
-            if (player == null) {
-                return createErrorResponse(requestId, "player.message", "Player not found");
+
+            // 验证并清理 message
+            ValidationResult<String> messageResult = InputValidator.validateMessage(message);
+            String sanitizedMessage = messageResult.getValue();
+
+            try {
+                MinecraftServer server = mod.getServer();
+                if (server == null) {
+                    return createErrorResponse(requestId, "player.message", "Server not available");
+                }
+
+                ServerPlayerEntity player = server.getPlayerManager().getPlayer(UUID.fromString(playerIdResult.getValue()));
+
+                if (player == null) {
+                    return createErrorResponse(requestId, "player.message", "Player not found");
+                }
+
+                String playerName = player.getName().getString();
+
+                // Send message on server thread
+                server.execute(() -> {
+                    player.sendMessage(Text.literal(sanitizedMessage), false);
+                });
+
+                JsonObject responseData = new JsonObject();
+                responseData.addProperty("success", true);
+                responseData.addProperty("playerName", playerName);
+
+                return createSuccessResponse(requestId, "player.message", responseData);
+
+            } catch (Exception e) {
+                logger.error("Failed to send message to player", e);
+                return createErrorResponse(requestId, "player.message", e.getMessage());
             }
-            
-            String playerName = player.getName().getString();
-            
-            // Send message on server thread
-            server.execute(() -> {
-                player.sendMessage(Text.literal(message), false);
-            });
-            
-            JsonObject responseData = new JsonObject();
-            responseData.addProperty("success", true);
-            responseData.addProperty("playerName", playerName);
-            
-            return createSuccessResponse(requestId, "player.message", responseData);
-            
-        } catch (Exception e) {
-            logger.error("Failed to send message to player", e);
-            return createErrorResponse(requestId, "player.message", e.getMessage());
         }
-    }
+
     
     /**
      * Handle whitelist list operation
@@ -243,118 +266,173 @@ public class FabricMessageHandler {
      * Handle whitelist add operation
      */
     public JsonObject handleWhitelistAdd(String requestId, String playerName, String playerId) {
-        try {
-            MinecraftServer server = mod.getServer();
-            if (server == null) {
-                return createErrorResponse(requestId, "whitelist.add", "Server not available");
-            }
-            
-            if (playerName == null || playerName.isEmpty()) {
-                return createErrorResponse(requestId, "whitelist.add", "Missing playerName parameter");
-            }
-            
-            // Add to whitelist on server thread
-            server.execute(() -> {
-                try {
-                    server.getCommandManager().executeWithPrefix(
-                        server.getCommandSource(),
-                        "whitelist add " + playerName
-                    );
-                } catch (Exception e) {
-                    logger.error("Failed to add to whitelist", e);
+            // 验证 playerName（如果提供）
+            if (playerName != null && !playerName.isEmpty()) {
+                ValidationResult<String> nameResult = InputValidator.validatePlayerName(playerName);
+                if (!nameResult.isValid()) {
+                    return createErrorResponse(requestId, "whitelist.add", nameResult.getError());
                 }
-            });
-            
-            JsonObject responseData = new JsonObject();
-            responseData.addProperty("success", true);
-            responseData.addProperty("playerName", playerName);
-            
-            return createSuccessResponse(requestId, "whitelist.add", responseData);
-            
-        } catch (Exception e) {
-            logger.error("Failed to add to whitelist", e);
-            return createErrorResponse(requestId, "whitelist.add", e.getMessage());
+                playerName = nameResult.getValue();
+            }
+
+            // 验证 playerId（如果提供）
+            if (playerId != null && !playerId.isEmpty()) {
+                ValidationResult<String> idResult = InputValidator.validatePlayerId(playerId);
+                if (!idResult.isValid()) {
+                    return createErrorResponse(requestId, "whitelist.add", idResult.getError());
+                }
+                playerId = idResult.getValue();
+            }
+
+            try {
+                MinecraftServer server = mod.getServer();
+                if (server == null) {
+                    return createErrorResponse(requestId, "whitelist.add", "Server not available");
+                }
+
+                if (playerName == null || playerName.isEmpty()) {
+                    return createErrorResponse(requestId, "whitelist.add", "Missing playerName parameter");
+                }
+
+                final String finalPlayerName = playerName;
+
+                // Add to whitelist on server thread
+                server.execute(() -> {
+                    try {
+                        server.getCommandManager().executeWithPrefix(
+                            server.getCommandSource(),
+                            "whitelist add " + finalPlayerName
+                        );
+                    } catch (Exception e) {
+                        logger.error("Failed to add to whitelist", e);
+                    }
+                });
+
+                JsonObject responseData = new JsonObject();
+                responseData.addProperty("success", true);
+                responseData.addProperty("playerName", finalPlayerName);
+
+                return createSuccessResponse(requestId, "whitelist.add", responseData);
+
+            } catch (Exception e) {
+                logger.error("Failed to add to whitelist", e);
+                return createErrorResponse(requestId, "whitelist.add", e.getMessage());
+            }
         }
-    }
+
     
     /**
      * Handle whitelist remove operation
      */
     public JsonObject handleWhitelistRemove(String requestId, String playerName, String playerId) {
-        try {
-            MinecraftServer server = mod.getServer();
-            if (server == null) {
-                return createErrorResponse(requestId, "whitelist.remove", "Server not available");
-            }
-            
-            if (playerName == null || playerName.isEmpty()) {
-                return createErrorResponse(requestId, "whitelist.remove", "Missing playerName parameter");
-            }
-            
-            // Remove from whitelist on server thread
-            server.execute(() -> {
-                try {
-                    server.getCommandManager().executeWithPrefix(
-                        server.getCommandSource(),
-                        "whitelist remove " + playerName
-                    );
-                } catch (Exception e) {
-                    logger.error("Failed to remove from whitelist", e);
+            // 验证 playerName（如果提供）
+            if (playerName != null && !playerName.isEmpty()) {
+                ValidationResult<String> nameResult = InputValidator.validatePlayerName(playerName);
+                if (!nameResult.isValid()) {
+                    return createErrorResponse(requestId, "whitelist.remove", nameResult.getError());
                 }
-            });
-            
-            JsonObject responseData = new JsonObject();
-            responseData.addProperty("success", true);
-            responseData.addProperty("playerName", playerName);
-            
-            return createSuccessResponse(requestId, "whitelist.remove", responseData);
-            
-        } catch (Exception e) {
-            logger.error("Failed to remove from whitelist", e);
-            return createErrorResponse(requestId, "whitelist.remove", e.getMessage());
+                playerName = nameResult.getValue();
+            }
+
+            // 验证 playerId（如果提供）
+            if (playerId != null && !playerId.isEmpty()) {
+                ValidationResult<String> idResult = InputValidator.validatePlayerId(playerId);
+                if (!idResult.isValid()) {
+                    return createErrorResponse(requestId, "whitelist.remove", idResult.getError());
+                }
+                playerId = idResult.getValue();
+            }
+
+            try {
+                MinecraftServer server = mod.getServer();
+                if (server == null) {
+                    return createErrorResponse(requestId, "whitelist.remove", "Server not available");
+                }
+
+                if (playerName == null || playerName.isEmpty()) {
+                    return createErrorResponse(requestId, "whitelist.remove", "Missing playerName parameter");
+                }
+
+                final String finalPlayerName = playerName;
+
+                // Remove from whitelist on server thread
+                server.execute(() -> {
+                    try {
+                        server.getCommandManager().executeWithPrefix(
+                            server.getCommandSource(),
+                            "whitelist remove " + finalPlayerName
+                        );
+                    } catch (Exception e) {
+                        logger.error("Failed to remove from whitelist", e);
+                    }
+                });
+
+                JsonObject responseData = new JsonObject();
+                responseData.addProperty("success", true);
+                responseData.addProperty("playerName", finalPlayerName);
+
+                return createSuccessResponse(requestId, "whitelist.remove", responseData);
+
+            } catch (Exception e) {
+                logger.error("Failed to remove from whitelist", e);
+                return createErrorResponse(requestId, "whitelist.remove", e.getMessage());
+            }
         }
-    }
+
     
     /**
      * Handle command execute operation
      */
     public JsonObject handleCommandExecute(String requestId, String command) {
-        if (command == null || command.isEmpty()) {
-            return createErrorResponse(requestId, "command.execute", "Missing command parameter");
-        }
-        
-        try {
-            MinecraftServer server = mod.getServer();
-            if (server == null) {
-                return createErrorResponse(requestId, "command.execute", "Server not available");
+            // 验证 command
+            ValidationResult<String> commandResult = InputValidator.validateCommand(command);
+            if (!commandResult.isValid()) {
+                return createErrorResponse(requestId, "command.execute", commandResult.getError());
             }
-            
-            logger.info("Executing command: {}", command);
-            
-            // Execute command on server thread
-            server.execute(() -> {
-                try {
-                    server.getCommandManager().executeWithPrefix(
-                        server.getCommandSource(),
-                        command
-                    );
-                } catch (Exception e) {
-                    logger.error("Failed to execute command", e);
+
+            String validCommand = commandResult.getValue();
+
+            try {
+                MinecraftServer server = mod.getServer();
+                if (server == null) {
+                    return createErrorResponse(requestId, "command.execute", "Server not available");
                 }
-            });
-            
-            JsonObject responseData = new JsonObject();
-            responseData.addProperty("success", true);
-            responseData.addProperty("command", command);
-            responseData.addProperty("message", "Command executed successfully");
-            
-            return createSuccessResponse(requestId, "command.execute", responseData);
-            
-        } catch (Exception e) {
-            logger.error("Failed to execute command", e);
-            return createErrorResponse(requestId, "command.execute", e.getMessage());
+
+                logger.info("Executing command: {}", validCommand);
+
+                long startTime = System.currentTimeMillis();
+
+                // Execute command on server thread
+                server.execute(() -> {
+                    try {
+                        server.getCommandManager().executeWithPrefix(
+                            server.getCommandSource(),
+                            validCommand
+                        );
+                    } catch (Exception e) {
+                        logger.error("Failed to execute command", e);
+                    }
+                });
+
+                long executionTime = System.currentTimeMillis() - startTime;
+
+                JsonObject responseData = new JsonObject();
+                responseData.addProperty("success", true);
+                responseData.addProperty("command", validCommand);
+                responseData.addProperty("executionTime", executionTime);
+
+                JsonArray output = new JsonArray();
+                output.add("Command executed successfully");
+                responseData.add("output", output);
+
+                return createSuccessResponse(requestId, "command.execute", responseData);
+
+            } catch (Exception e) {
+                logger.error("Failed to execute command", e);
+                return createErrorResponse(requestId, "command.execute", e.getMessage());
+            }
         }
-    }
+
     
     /**
      * Handle server info operation
@@ -372,7 +450,7 @@ public class FabricMessageHandler {
             serverInfo.addProperty("coreType", "Java");
             serverInfo.addProperty("coreName", "Fabric");
             serverInfo.addProperty("maxPlayers", server.getMaxPlayerCount());
-            serverInfo.addProperty("onlinePlayers", server.getCurrentPlayerCount());
+            serverInfo.addProperty("onlinePlayers", server.getPlayerManager().getCurrentPlayerCount());
             serverInfo.addProperty("port", server.getServerPort());
             serverInfo.addProperty("motd", server.getServerMotd());
             serverInfo.addProperty("whitelistEnabled", server.getPlayerManager().isWhitelistEnabled());
@@ -415,7 +493,7 @@ public class FabricMessageHandler {
             statusData.addProperty("uptime", System.currentTimeMillis() - server.getTimeReference());
             
             JsonObject playersData = new JsonObject();
-            playersData.addProperty("online", server.getCurrentPlayerCount());
+            playersData.addProperty("online", server.getPlayerManager().getCurrentPlayerCount());
             playersData.addProperty("max", server.getMaxPlayerCount());
             statusData.add("players", playersData);
             
@@ -523,6 +601,327 @@ public class FabricMessageHandler {
         } catch (Exception e) {
             logger.error("Failed to stop server", e);
             return createErrorResponse(requestId, "server.stop", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle player ban operation
+     */
+    public JsonObject handlePlayerBan(String requestId, String playerId, String playerName, String reason, Integer duration) {
+            // 验证 playerId（如果提供）
+            if (playerId != null && !playerId.isEmpty()) {
+                ValidationResult<String> idResult = InputValidator.validatePlayerId(playerId);
+                if (!idResult.isValid()) {
+                    return createErrorResponse(requestId, "player.ban", idResult.getError());
+                }
+                playerId = idResult.getValue();
+            }
+
+            // 验证 playerName（如果提供）
+            if (playerName != null && !playerName.isEmpty()) {
+                ValidationResult<String> nameResult = InputValidator.validatePlayerName(playerName);
+                if (!nameResult.isValid()) {
+                    return createErrorResponse(requestId, "player.ban", nameResult.getError());
+                }
+                playerName = nameResult.getValue();
+            }
+
+            // 验证并清理 reason
+            ValidationResult<String> reasonResult = InputValidator.validateReason(reason);
+            String sanitizedReason = reasonResult.getValue();
+
+            // 验证 duration（如果提供）
+            if (duration != null) {
+                if (duration < 0 || duration > 365 * 24 * 60) { // 最多1年（分钟）
+                    return createErrorResponse(requestId, "player.ban", 
+                        "Invalid duration: must be between 0 and " + (365 * 24 * 60));
+                }
+            }
+
+            try {
+                MinecraftServer server = mod.getServer();
+                if (server == null) {
+                    return createErrorResponse(requestId, "player.ban", "Server not available");
+                }
+
+                // Get player name if only ID provided
+                String targetName = playerName;
+                if (targetName == null || targetName.isEmpty()) {
+                    if (playerId != null && !playerId.isEmpty()) {
+                        try {
+                            UUID uuid = UUID.fromString(playerId);
+                            ServerPlayerEntity player = server.getPlayerManager().getPlayer(uuid);
+                            if (player != null) {
+                                targetName = player.getName().getString();
+                            }
+                        } catch (IllegalArgumentException e) {
+                            return createErrorResponse(requestId, "player.ban", "Invalid player ID format");
+                        }
+                    }
+                }
+
+                if (targetName == null || targetName.isEmpty()) {
+                    return createErrorResponse(requestId, "player.ban", "Missing player name or ID");
+                }
+
+                final String finalName = targetName;
+                final String banReason = sanitizedReason;
+
+                // Execute ban command on server thread
+                server.execute(() -> {
+                    try {
+                        String banCommand = "ban " + finalName + " " + banReason;
+                        server.getCommandManager().executeWithPrefix(
+                            server.getCommandSource(),
+                            banCommand
+                        );
+                    } catch (Exception e) {
+                        logger.error("Failed to ban player", e);
+                    }
+                });
+
+                JsonObject responseData = new JsonObject();
+                responseData.addProperty("success", true);
+                responseData.addProperty("playerName", finalName);
+                responseData.addProperty("reason", banReason);
+                if (duration != null && duration > 0) {
+                    responseData.addProperty("duration", duration);
+                }
+
+                return createSuccessResponse(requestId, "player.ban", responseData);
+
+            } catch (Exception e) {
+                logger.error("Failed to ban player", e);
+                return createErrorResponse(requestId, "player.ban", e.getMessage());
+            }
+        }
+
+    
+    /**
+     * Handle player unban operation
+     */
+    public JsonObject handlePlayerUnban(String requestId, String playerId, String playerName) {
+            // 验证 playerId（如果提供）
+            if (playerId != null && !playerId.isEmpty()) {
+                ValidationResult<String> idResult = InputValidator.validatePlayerId(playerId);
+                if (!idResult.isValid()) {
+                    return createErrorResponse(requestId, "player.unban", idResult.getError());
+                }
+                playerId = idResult.getValue();
+            }
+
+            // 验证 playerName（如果提供）
+            if (playerName != null && !playerName.isEmpty()) {
+                ValidationResult<String> nameResult = InputValidator.validatePlayerName(playerName);
+                if (!nameResult.isValid()) {
+                    return createErrorResponse(requestId, "player.unban", nameResult.getError());
+                }
+                playerName = nameResult.getValue();
+            }
+
+            try {
+                MinecraftServer server = mod.getServer();
+                if (server == null) {
+                    return createErrorResponse(requestId, "player.unban", "Server not available");
+                }
+
+                // Get player name if only ID provided
+                String targetName = playerName;
+                if (targetName == null || targetName.isEmpty()) {
+                    if (playerId != null && !playerId.isEmpty()) {
+                        try {
+                            UUID.fromString(playerId);
+                            // Note: Fabric doesn't have easy way to get name from UUID for offline players
+                            return createErrorResponse(requestId, "player.unban", "Player name is required");
+                        } catch (IllegalArgumentException e) {
+                            return createErrorResponse(requestId, "player.unban", "Invalid player ID format");
+                        }
+                    }
+                }
+
+                if (targetName == null || targetName.isEmpty()) {
+                    return createErrorResponse(requestId, "player.unban", "Missing player name or ID");
+                }
+
+                final String finalName = targetName;
+
+                // Execute unban command on server thread
+                server.execute(() -> {
+                    try {
+                        server.getCommandManager().executeWithPrefix(
+                            server.getCommandSource(),
+                            "pardon " + finalName
+                        );
+                    } catch (Exception e) {
+                        logger.error("Failed to unban player", e);
+                    }
+                });
+
+                JsonObject responseData = new JsonObject();
+                responseData.addProperty("success", true);
+                responseData.addProperty("playerName", finalName);
+
+                return createSuccessResponse(requestId, "player.unban", responseData);
+
+            } catch (Exception e) {
+                logger.error("Failed to unban player", e);
+                return createErrorResponse(requestId, "player.unban", e.getMessage());
+            }
+        }
+
+    
+    /**
+     * Handle player banlist operation
+     */
+    public JsonObject handlePlayerBanlist(String requestId, String banType) {
+        try {
+            MinecraftServer server = mod.getServer();
+            if (server == null) {
+                return createErrorResponse(requestId, "player.banlist", "Server not available");
+            }
+            
+            JsonArray banlistArray = new JsonArray();
+            
+            // Get ban list from server
+            if ("ip".equalsIgnoreCase(banType)) {
+                server.getPlayerManager().getIpBanList().getNames().forEach(ip -> {
+                    JsonObject banObj = new JsonObject();
+                    banObj.addProperty("target", ip);
+                    banlistArray.add(banObj);
+                });
+            } else {
+                server.getPlayerManager().getUserBanList().getNames().forEach(name -> {
+                    JsonObject banObj = new JsonObject();
+                    banObj.addProperty("target", name);
+                    banlistArray.add(banObj);
+                });
+            }
+            
+            JsonObject responseData = new JsonObject();
+            responseData.add("banlist", banlistArray);
+            responseData.addProperty("type", banType != null ? banType : "name");
+            responseData.addProperty("count", banlistArray.size());
+            
+            return createSuccessResponse(requestId, "player.banlist", responseData);
+            
+        } catch (Exception e) {
+            logger.error("Failed to get banlist", e);
+            return createErrorResponse(requestId, "player.banlist", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle whitelist enable operation
+     */
+    public JsonObject handleWhitelistEnable(String requestId) {
+        try {
+            MinecraftServer server = mod.getServer();
+            if (server == null) {
+                return createErrorResponse(requestId, "whitelist.enable", "Server not available");
+            }
+            
+            // Execute whitelist on command
+            server.execute(() -> {
+                try {
+                    server.getCommandManager().executeWithPrefix(
+                        server.getCommandSource(),
+                        "whitelist on"
+                    );
+                } catch (Exception e) {
+                    logger.error("Failed to enable whitelist", e);
+                }
+            });
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            responseData.addProperty("enabled", true);
+            
+            return createSuccessResponse(requestId, "whitelist.enable", responseData);
+            
+        } catch (Exception e) {
+            logger.error("Failed to enable whitelist", e);
+            return createErrorResponse(requestId, "whitelist.enable", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle whitelist disable operation
+     */
+    public JsonObject handleWhitelistDisable(String requestId) {
+        try {
+            MinecraftServer server = mod.getServer();
+            if (server == null) {
+                return createErrorResponse(requestId, "whitelist.disable", "Server not available");
+            }
+            
+            // Execute whitelist off command
+            server.execute(() -> {
+                try {
+                    server.getCommandManager().executeWithPrefix(
+                        server.getCommandSource(),
+                        "whitelist off"
+                    );
+                } catch (Exception e) {
+                    logger.error("Failed to disable whitelist", e);
+                }
+            });
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            responseData.addProperty("enabled", false);
+            
+            return createSuccessResponse(requestId, "whitelist.disable", responseData);
+            
+        } catch (Exception e) {
+            logger.error("Failed to disable whitelist", e);
+            return createErrorResponse(requestId, "whitelist.disable", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle server save operation
+     */
+    public JsonObject handleServerSave(String requestId, String worldName) {
+        try {
+            MinecraftServer server = mod.getServer();
+            if (server == null) {
+                return createErrorResponse(requestId, "server.save", "Server not available");
+            }
+            
+            // Execute save command
+            server.execute(() -> {
+                try {
+                    if (worldName != null && !worldName.isEmpty()) {
+                        // Save specific world (Fabric doesn't support per-world save via command)
+                        server.getCommandManager().executeWithPrefix(
+                            server.getCommandSource(),
+                            "save-all"
+                        );
+                    } else {
+                        // Save all worlds
+                        server.getCommandManager().executeWithPrefix(
+                            server.getCommandSource(),
+                            "save-all"
+                        );
+                    }
+                } catch (Exception e) {
+                    logger.error("Failed to save world", e);
+                }
+            });
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            if (worldName != null && !worldName.isEmpty()) {
+                responseData.addProperty("world", worldName);
+            } else {
+                responseData.addProperty("world", "all");
+            }
+            
+            return createSuccessResponse(requestId, "server.save", responseData);
+            
+        } catch (Exception e) {
+            logger.error("Failed to save world", e);
+            return createErrorResponse(requestId, "server.save", e.getMessage());
         }
     }
     

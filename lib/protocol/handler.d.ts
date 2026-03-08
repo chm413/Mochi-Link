@@ -1,3 +1,15 @@
+import { Context } from 'koishi';
+/**
+ * Protocol Handler Configuration and Logger
+ */
+export declare class ProtocolHandlerLogger {
+    private logger;
+    constructor(ctx: Context);
+    warn(message: string, ...args: any[]): void;
+    error(message: string, ...args: any[]): void;
+    info(message: string, ...args: any[]): void;
+    debug(message: string, ...args: any[]): void;
+}
 /**
  * U-WBP v2 Protocol Handler
  *
@@ -26,7 +38,8 @@ export declare class ProtocolHandler {
     private pendingRequests;
     private requestQueue;
     private activeRequests;
-    constructor(router?: MessageRouter, config?: Partial<ProtocolHandlerConfig>);
+    private logger?;
+    constructor(router?: MessageRouter, config?: Partial<ProtocolHandlerConfig>, ctx?: any);
     /**
      * Handle incoming message from connection
      */

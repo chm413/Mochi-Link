@@ -90,6 +90,7 @@ export declare class MonitoringService {
     private serverConnections;
     private historicalData;
     private activeAlerts;
+    private cleanupInterval?;
     private stats;
     private logger;
     constructor(ctx: Context, auditService: AuditService, eventService: EventService, config?: Partial<MonitoringConfig>);
@@ -217,4 +218,8 @@ export declare class MonitoringService {
         status: 'healthy' | 'degraded' | 'unhealthy';
         details: any;
     }>;
+    /**
+     * Cleanup resources
+     */
+    cleanup(): void;
 }

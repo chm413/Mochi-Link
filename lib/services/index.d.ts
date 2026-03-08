@@ -32,7 +32,7 @@ export type { ErrorHandlerConfig, ErrorContext, ConnectionQuality } from './erro
 export type { BusinessErrorHandlerConfig, SyncConflict, ConflictResolution, MaintenanceStatus } from './business-error-handler';
 export { MessageRouter } from './message-router';
 export type { IncomingMessage, OutgoingMessage, ServerEvent, GroupMessage, RoutingStats } from './message-router';
-export { PluginIntegrationService, pluginIntegrationService } from './plugin-integration';
+export { PluginIntegrationService } from './plugin-integration';
 export { PerformanceOptimizationService } from './performance';
 export { CacheService } from './cache';
 export type { PerformanceConfig, PerformanceMetrics } from './performance';

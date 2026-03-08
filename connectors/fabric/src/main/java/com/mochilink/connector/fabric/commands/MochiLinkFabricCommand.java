@@ -153,7 +153,7 @@ public class MochiLinkFabricCommand {
         
         sendMessage(ctx, "§6=== Server Statistics ===");
         sendMessage(ctx, "§ePlayers: §f" + 
-            server.getCurrentPlayerCount() + "/" + server.getMaxPlayerCount());
+            server.getPlayerManager().getCurrentPlayerCount() + "/" + server.getMaxPlayerCount());
         sendMessage(ctx, "§eTPS: §f20.0"); // Fabric doesn't expose tick time directly
         
         Runtime runtime = Runtime.getRuntime();

@@ -273,7 +273,7 @@ export class BindingManager {
             currentConfig = JSON.parse(existing.config);
           }
         } catch (error) {
-          console.error(`Failed to parse config for binding ${bindingId}:`, error);
+          this.logger.error(`Failed to parse config for binding ${bindingId}:`, error);
           currentConfig = {};
         }
       } else {
@@ -691,7 +691,7 @@ export class BindingManager {
             config = JSON.parse(dbBinding.config);
           }
         } catch (error) {
-          console.error(`Failed to parse config for binding ${dbBinding.id}:`, error);
+          this.logger.error(`Failed to parse config for binding ${dbBinding.id}:`, error);
           config = {};
         }
       } else {

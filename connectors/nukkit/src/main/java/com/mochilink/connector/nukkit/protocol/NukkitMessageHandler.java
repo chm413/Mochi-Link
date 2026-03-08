@@ -7,6 +7,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.mochilink.connector.nukkit.MochiLinkNukkitPlugin;
 import com.mochilink.connector.nukkit.connection.NukkitConnectionManager;
+import com.mochilink.connector.nukkit.utils.InputValidator;
+import com.mochilink.connector.nukkit.utils.InputValidator.ValidationResult;
 
 import java.util.UUID;
 
@@ -75,8 +77,14 @@ public class NukkitMessageHandler {
      * Handle player info operation
      */
     public JsonObject handlePlayerInfo(String requestId, String playerId) {
+        // Validate playerId
+        ValidationResult<String> playerIdResult = InputValidator.validatePlayerId(playerId);
+        if (!playerIdResult.isValid()) {
+            return createErrorResponse(requestId, "player.info", playerIdResult.getError());
+        }
+        
         try {
-            java.util.Optional<Player> playerOpt = server.getPlayer(UUID.fromString(playerId));
+            java.util.Optional<Player> playerOpt = server.getPlayer(UUID.fromString(playerIdResult.getValue()));
             
             if (!playerOpt.isPresent()) {
                 return createErrorResponse(requestId, "player.info", "Player not found");
@@ -128,12 +136,18 @@ public class NukkitMessageHandler {
      * Handle player kick operation
      */
     public JsonObject handlePlayerKick(String requestId, String playerId, String reason) {
-        if (reason == null || reason.isEmpty()) {
-            reason = "Kicked by administrator";
+        // Validate playerId
+        ValidationResult<String> playerIdResult = InputValidator.validatePlayerId(playerId);
+        if (!playerIdResult.isValid()) {
+            return createErrorResponse(requestId, "player.kick", playerIdResult.getError());
         }
         
+        // Validate and sanitize reason
+        ValidationResult<String> reasonResult = InputValidator.validateReason(reason);
+        final String sanitizedReason = reasonResult.getValue();
+        
         try {
-            java.util.Optional<Player> playerOpt = server.getPlayer(UUID.fromString(playerId));
+            java.util.Optional<Player> playerOpt = server.getPlayer(UUID.fromString(playerIdResult.getValue()));
             
             if (!playerOpt.isPresent()) {
                 return createErrorResponse(requestId, "player.kick", "Player not found");
@@ -142,17 +156,16 @@ public class NukkitMessageHandler {
             Player player = playerOpt.get();
             
             String playerName = player.getName();
-            final String kickReason = reason;
             
             // Kick on main thread
             server.getScheduler().scheduleTask(plugin, () -> {
-                player.kick(kickReason);
+                player.kick(sanitizedReason);
             });
             
             JsonObject responseData = new JsonObject();
             responseData.addProperty("success", true);
             responseData.addProperty("playerName", playerName);
-            responseData.addProperty("reason", kickReason);
+            responseData.addProperty("reason", sanitizedReason);
             
             return createSuccessResponse(requestId, "player.kick", responseData);
             
@@ -166,12 +179,21 @@ public class NukkitMessageHandler {
      * Handle player message operation
      */
     public JsonObject handlePlayerMessage(String requestId, String playerId, String message) {
-        if (message == null || message.isEmpty()) {
-            return createErrorResponse(requestId, "player.message", "Missing message parameter");
+        // Validate playerId
+        ValidationResult<String> playerIdResult = InputValidator.validatePlayerId(playerId);
+        if (!playerIdResult.isValid()) {
+            return createErrorResponse(requestId, "player.message", playerIdResult.getError());
         }
         
+        // Validate and sanitize message
+        ValidationResult<String> messageResult = InputValidator.validateMessage(message);
+        if (!messageResult.isValid()) {
+            return createErrorResponse(requestId, "player.message", messageResult.getError());
+        }
+        final String sanitizedMessage = messageResult.getValue();
+        
         try {
-            java.util.Optional<Player> playerOpt = server.getPlayer(UUID.fromString(playerId));
+            java.util.Optional<Player> playerOpt = server.getPlayer(UUID.fromString(playerIdResult.getValue()));
             
             if (!playerOpt.isPresent()) {
                 return createErrorResponse(requestId, "player.message", "Player not found");
@@ -183,7 +205,7 @@ public class NukkitMessageHandler {
             
             // Send message on main thread
             server.getScheduler().scheduleTask(plugin, () -> {
-                player.sendMessage(message);
+                player.sendMessage(sanitizedMessage);
             });
             
             JsonObject responseData = new JsonObject();
@@ -228,13 +250,15 @@ public class NukkitMessageHandler {
      * Handle whitelist add operation
      */
     public JsonObject handleWhitelistAdd(String requestId, String playerName) {
-        if (playerName == null || playerName.isEmpty()) {
-            return createErrorResponse(requestId, "whitelist.add", "Missing playerName parameter");
+        // Validate playerName
+        ValidationResult<String> nameResult = InputValidator.validatePlayerName(playerName);
+        if (!nameResult.isValid()) {
+            return createErrorResponse(requestId, "whitelist.add", nameResult.getError());
         }
         
         try {
             // Nukkit whitelist API: set value in config
-            server.getWhitelist().set(playerName.toLowerCase(), true);
+            server.getWhitelist().set(nameResult.getValue().toLowerCase(), true);
             server.getWhitelist().save();
             server.getWhitelist().reload();
             
@@ -254,12 +278,14 @@ public class NukkitMessageHandler {
      * Handle whitelist remove operation
      */
     public JsonObject handleWhitelistRemove(String requestId, String playerName) {
-        if (playerName == null || playerName.isEmpty()) {
-            return createErrorResponse(requestId, "whitelist.remove", "Missing playerName parameter");
+        // Validate playerName
+        ValidationResult<String> nameResult = InputValidator.validatePlayerName(playerName);
+        if (!nameResult.isValid()) {
+            return createErrorResponse(requestId, "whitelist.remove", nameResult.getError());
         }
         
         try {
-            server.getWhitelist().remove(playerName.toLowerCase());
+            server.getWhitelist().remove(nameResult.getValue().toLowerCase());
             server.getWhitelist().save();
             server.getWhitelist().reload();
             
@@ -279,23 +305,26 @@ public class NukkitMessageHandler {
      * Handle command execute operation
      */
     public JsonObject handleCommandExecute(String requestId, String command) {
-        if (command == null || command.isEmpty()) {
-            return createErrorResponse(requestId, "command.execute", "Missing command parameter");
+        // Validate command
+        ValidationResult<String> commandResult = InputValidator.validateCommand(command);
+        if (!commandResult.isValid()) {
+            return createErrorResponse(requestId, "command.execute", commandResult.getError());
         }
+        final String validCommand = commandResult.getValue();
         
         try {
             long startTime = System.currentTimeMillis();
             
             // Execute command on main thread
             server.getScheduler().scheduleTask(plugin, () -> {
-                server.dispatchCommand(server.getConsoleSender(), command);
+                server.dispatchCommand(server.getConsoleSender(), validCommand);
             });
             
             long executionTime = System.currentTimeMillis() - startTime;
             
             JsonObject responseData = new JsonObject();
             responseData.addProperty("success", true);
-            responseData.addProperty("command", command);
+            responseData.addProperty("command", validCommand);
             responseData.addProperty("executionTime", executionTime);
             
             JsonArray output = new JsonArray();
@@ -445,6 +474,277 @@ public class NukkitMessageHandler {
         } catch (Exception e) {
             logger.warning("Failed to stop server: " + e.getMessage());
             return createErrorResponse(requestId, "server.stop", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle player ban operation
+     */
+    public JsonObject handlePlayerBan(String requestId, String playerId, String playerName, String reason, Integer duration) {
+        // 验证 playerId（如果提供）
+        if (playerId != null && !playerId.isEmpty()) {
+            ValidationResult<String> idResult = InputValidator.validatePlayerId(playerId);
+            if (!idResult.isValid()) {
+                return createErrorResponse(requestId, "player.ban", idResult.getError());
+            }
+            playerId = idResult.getValue();
+        }
+        
+        // 验证 playerName（如果提供）
+        if (playerName != null && !playerName.isEmpty()) {
+            ValidationResult<String> nameResult = InputValidator.validatePlayerName(playerName);
+            if (!nameResult.isValid()) {
+                return createErrorResponse(requestId, "player.ban", nameResult.getError());
+            }
+            playerName = nameResult.getValue();
+        }
+        
+        // 验证并清理 reason
+        ValidationResult<String> reasonResult = InputValidator.validateReason(reason);
+        String sanitizedReason = reasonResult.getValue();
+        
+        // 验证 duration（如果提供）
+        if (duration != null) {
+            if (duration < 0 || duration > 365 * 24 * 60) {
+                return createErrorResponse(requestId, "player.ban", 
+                    "Invalid duration: must be between 0 and " + (365 * 24 * 60));
+            }
+        }
+        
+        try {
+            // Get player name if only ID provided
+            String targetName = playerName;
+            if (targetName == null || targetName.isEmpty()) {
+                if (playerId != null && !playerId.isEmpty()) {
+                    try {
+                        UUID uuid = UUID.fromString(playerId);
+                        java.util.Optional<cn.nukkit.Player> player = server.getPlayer(uuid);
+                        if (player.isPresent()) {
+                            targetName = player.get().getName();
+                        }
+                    } catch (IllegalArgumentException e) {
+                        return createErrorResponse(requestId, "player.ban", "Invalid player ID format");
+                    }
+                }
+            }
+            
+            if (targetName == null || targetName.isEmpty()) {
+                return createErrorResponse(requestId, "player.ban", "Missing player name or ID");
+            }
+            
+            final String finalName = targetName;
+            final String banReason = sanitizedReason;
+            
+            // Execute ban command on main thread
+            server.getScheduler().scheduleTask(plugin, () -> {
+                try {
+                    String banCommand = "ban " + finalName + " " + banReason;
+                    server.dispatchCommand(server.getConsoleSender(), banCommand);
+                } catch (Exception e) {
+                    logger.warning("Failed to ban player: " + e.getMessage());
+                }
+            });
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            responseData.addProperty("playerName", finalName);
+            responseData.addProperty("reason", banReason);
+            if (duration != null && duration > 0) {
+                responseData.addProperty("duration", duration);
+            }
+            
+            return createSuccessResponse(requestId, "player.ban", responseData);
+            
+        } catch (Exception e) {
+            logger.warning("Failed to ban player: " + e.getMessage());
+            return createErrorResponse(requestId, "player.ban", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle player unban operation
+     */
+    public JsonObject handlePlayerUnban(String requestId, String playerId, String playerName) {
+        // 验证 playerId（如果提供）
+        if (playerId != null && !playerId.isEmpty()) {
+            ValidationResult<String> idResult = InputValidator.validatePlayerId(playerId);
+            if (!idResult.isValid()) {
+                return createErrorResponse(requestId, "player.unban", idResult.getError());
+            }
+            playerId = idResult.getValue();
+        }
+        
+        // 验证 playerName（如果提供）
+        if (playerName != null && !playerName.isEmpty()) {
+            ValidationResult<String> nameResult = InputValidator.validatePlayerName(playerName);
+            if (!nameResult.isValid()) {
+                return createErrorResponse(requestId, "player.unban", nameResult.getError());
+            }
+            playerName = nameResult.getValue();
+        }
+        
+        try {
+            // Get player name if only ID provided
+            String targetName = playerName;
+            if (targetName == null || targetName.isEmpty()) {
+                if (playerId != null && !playerId.isEmpty()) {
+                    try {
+                        UUID.fromString(playerId);
+                        // Note: Nukkit doesn't have easy way to get name from UUID for offline players
+                        return createErrorResponse(requestId, "player.unban", "Player name is required");
+                    } catch (IllegalArgumentException e) {
+                        return createErrorResponse(requestId, "player.unban", "Invalid player ID format");
+                    }
+                }
+            }
+            
+            if (targetName == null || targetName.isEmpty()) {
+                return createErrorResponse(requestId, "player.unban", "Missing player name or ID");
+            }
+            
+            final String finalName = targetName;
+            
+            // Execute unban command on main thread
+            server.getScheduler().scheduleTask(plugin, () -> {
+                try {
+                    server.dispatchCommand(server.getConsoleSender(), "pardon " + finalName);
+                } catch (Exception e) {
+                    logger.warning("Failed to unban player: " + e.getMessage());
+                }
+            });
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            responseData.addProperty("playerName", finalName);
+            
+            return createSuccessResponse(requestId, "player.unban", responseData);
+            
+        } catch (Exception e) {
+            logger.warning("Failed to unban player: " + e.getMessage());
+            return createErrorResponse(requestId, "player.unban", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle player banlist operation
+     */
+    public JsonObject handlePlayerBanlist(String requestId, String banType) {
+        try {
+            JsonArray banlistArray = new JsonArray();
+            
+            // Get ban list from server
+            if ("ip".equalsIgnoreCase(banType)) {
+                server.getIPBans().getEntries().keySet().forEach(ip -> {
+                    JsonObject banObj = new JsonObject();
+                    banObj.addProperty("target", ip);
+                    banlistArray.add(banObj);
+                });
+            } else {
+                server.getNameBans().getEntries().keySet().forEach(name -> {
+                    JsonObject banObj = new JsonObject();
+                    banObj.addProperty("target", name);
+                    banlistArray.add(banObj);
+                });
+            }
+            
+            JsonObject responseData = new JsonObject();
+            responseData.add("banlist", banlistArray);
+            responseData.addProperty("type", banType != null ? banType : "name");
+            responseData.addProperty("count", banlistArray.size());
+            
+            return createSuccessResponse(requestId, "player.banlist", responseData);
+            
+        } catch (Exception e) {
+            logger.warning("Failed to get banlist: " + e.getMessage());
+            return createErrorResponse(requestId, "player.banlist", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle whitelist enable operation
+     */
+    public JsonObject handleWhitelistEnable(String requestId) {
+        try {
+            // Execute whitelist on command
+            server.getScheduler().scheduleTask(plugin, () -> {
+                try {
+                    server.dispatchCommand(server.getConsoleSender(), "whitelist on");
+                } catch (Exception e) {
+                    logger.warning("Failed to enable whitelist: " + e.getMessage());
+                }
+            });
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            responseData.addProperty("enabled", true);
+            
+            return createSuccessResponse(requestId, "whitelist.enable", responseData);
+            
+        } catch (Exception e) {
+            logger.warning("Failed to enable whitelist: " + e.getMessage());
+            return createErrorResponse(requestId, "whitelist.enable", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle whitelist disable operation
+     */
+    public JsonObject handleWhitelistDisable(String requestId) {
+        try {
+            // Execute whitelist off command
+            server.getScheduler().scheduleTask(plugin, () -> {
+                try {
+                    server.dispatchCommand(server.getConsoleSender(), "whitelist off");
+                } catch (Exception e) {
+                    logger.warning("Failed to disable whitelist: " + e.getMessage());
+                }
+            });
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            responseData.addProperty("enabled", false);
+            
+            return createSuccessResponse(requestId, "whitelist.disable", responseData);
+            
+        } catch (Exception e) {
+            logger.warning("Failed to disable whitelist: " + e.getMessage());
+            return createErrorResponse(requestId, "whitelist.disable", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle server save operation
+     */
+    public JsonObject handleServerSave(String requestId, String worldName) {
+        try {
+            // Execute save command
+            server.getScheduler().scheduleTask(plugin, () -> {
+                try {
+                    if (worldName != null && !worldName.isEmpty()) {
+                        // Save specific world (Nukkit doesn't support per-world save via command)
+                        server.dispatchCommand(server.getConsoleSender(), "save-all");
+                    } else {
+                        // Save all worlds
+                        server.dispatchCommand(server.getConsoleSender(), "save-all");
+                    }
+                } catch (Exception e) {
+                    logger.warning("Failed to save world: " + e.getMessage());
+                }
+            });
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            if (worldName != null && !worldName.isEmpty()) {
+                responseData.addProperty("world", worldName);
+            } else {
+                responseData.addProperty("world", "all");
+            }
+            
+            return createSuccessResponse(requestId, "server.save", responseData);
+            
+        } catch (Exception e) {
+            logger.warning("Failed to save world: " + e.getMessage());
+            return createErrorResponse(requestId, "server.save", e.getMessage());
         }
     }
     

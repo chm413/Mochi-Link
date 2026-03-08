@@ -5,6 +5,7 @@ import com.mochilink.connector.config.PluginConfig;
 import com.mochilink.connector.protocol.MessageHandler;
 import com.mochilink.connector.protocol.UWBPv2Protocol;
 import com.mochilink.connector.websocket.MochiWebSocketClient;
+import com.mochilink.connector.utils.RateLimiter;
 
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
@@ -35,6 +36,9 @@ public class ConnectionManager {
     
     private final AtomicBoolean connected = new AtomicBoolean(false);
     private final AtomicBoolean connecting = new AtomicBoolean(false);
+    
+    // 速率限制器
+    private final RateLimiter rateLimiter = new RateLimiter(10);
     
     private BukkitTask heartbeatTask;
     private BukkitTask reconnectTask;

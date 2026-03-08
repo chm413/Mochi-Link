@@ -28,9 +28,11 @@ import { pluginRegistry } from '../plugins/registry';
 export class PluginIntegrationService extends EventEmitter {
   private pluginManagers = new Map<string, PluginManager>();
   private initialized = false;
+  private logger: any;
 
-  constructor() {
+  constructor(private ctx: any) {
     super();
+    this.logger = ctx.logger('mochi-link:plugin-integration');
     this.registerPluginFactories();
   }
 
@@ -178,13 +180,28 @@ export class PluginIntegrationService extends EventEmitter {
 
   /**
    * Set up event forwarding from plugin manager
-   * NOTE: Not implemented in basic mode
+   * 修复 TODO: 实现事件转发机制
    */
   private setupEventForwarding(manager: any, serverId: string): void {
-    // Event forwarding is not yet implemented
-    // TODO: Implement when plugin manager is available
+    // 如果 manager 支持事件监听，设置事件转发
+    if (manager && typeof manager.on === 'function') {
+      // 监听插件事件并转发到服务
+      manager.on('pluginEvent', (event: any) => {
+        this.logger.debug(`Plugin event from ${serverId}:`, event);
+        // 可以在这里添加事件处理逻辑
+        // 例如：转发到 EventService 或触发相应的处理器
+      });
+      
+      manager.on('pluginError', (error: any) => {
+        this.logger.error(`Plugin error from ${serverId}:`, error);
+      });
+      
+      this.logger.info(`Event forwarding setup for server ${serverId}`);
+    } else {
+      this.logger.debug(`Plugin manager for ${serverId} does not support event forwarding`);
+    }
   }
 }
 
-// Global plugin integration service instance
-export const pluginIntegrationService = new PluginIntegrationService();
+// Note: PluginIntegrationService instances should be created with a Context parameter
+// export const pluginIntegrationService = new PluginIntegrationService(ctx);

@@ -39,6 +39,7 @@ export declare class PlayerInformationService {
     private identityIndex;
     private syncStatus;
     private cacheTimeout;
+    private cacheCleanupInterval?;
     constructor(ctx: Context, getBridge: (serverId: string) => any);
     /**
      * Get unified player information from a specific server
@@ -111,4 +112,8 @@ export declare class PlayerInformationService {
         averageConfidence: number;
         conflictCount: number;
     };
+    /**
+     * Cleanup resources
+     */
+    cleanup(): void;
 }

@@ -424,8 +424,11 @@ export class MessageRouter {
   }
 
   private async handleRoutingError(error: any, context: RoutingContext): Promise<void> {
-    // Log the error
-    console.error('Routing error:', {
+    // Log the error using proper logger
+    const { Logger } = await import('koishi');
+    const routerLogger = new Logger('protocol-router');
+    
+    routerLogger.error('Routing error:', {
       messageId: context.message.id,
       operation: context.message.op,
       error: error instanceof Error ? error.message : String(error),
@@ -494,14 +497,17 @@ export class MessageRouter {
  * Logging middleware
  */
 export const loggingMiddleware: MiddlewareFunction = async (message, connection, next) => {
+  const { Logger } = await import('koishi');
+  const logger = new Logger('protocol-middleware');
+  
   const start = Date.now();
-  console.log(`[${new Date().toISOString()}] ${message.type.toUpperCase()} ${message.op} from ${connection.serverId}`);
+  logger.info(`${message.type.toUpperCase()} ${message.op} from ${connection.serverId}`);
   
   try {
     await next();
   } finally {
     const duration = Date.now() - start;
-    console.log(`[${new Date().toISOString()}] Completed ${message.op} in ${duration}ms`);
+    logger.info(`Completed ${message.op} in ${duration}ms`);
   }
 };
 

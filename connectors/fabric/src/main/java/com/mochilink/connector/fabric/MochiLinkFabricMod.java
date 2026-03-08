@@ -227,10 +227,10 @@ public class MochiLinkFabricMod {
         try {
             com.google.gson.JsonObject eventData = new com.google.gson.JsonObject();
             if (server != null) {
-                eventData.addProperty("serverName", server.getMotd());
-                eventData.addProperty("serverVersion", server.getServerVersion());
-                eventData.addProperty("onlinePlayers", server.getPlayerCount());
-                eventData.addProperty("maxPlayers", server.getMaxPlayers());
+                eventData.addProperty("serverName", server.getName());
+                eventData.addProperty("serverVersion", server.getVersion());
+                eventData.addProperty("onlinePlayers", server.getPlayerManager().getCurrentPlayerCount());
+                eventData.addProperty("maxPlayers", server.getMaxPlayerCount());
             }
             eventData.addProperty("coreType", "Java");
             eventData.addProperty("coreName", "Fabric");
@@ -250,7 +250,7 @@ public class MochiLinkFabricMod {
         try {
             com.google.gson.JsonObject eventData = new com.google.gson.JsonObject();
             if (server != null) {
-                eventData.addProperty("serverName", server.getMotd());
+                eventData.addProperty("serverName", server.getName());
             }
             eventData.addProperty("reason", "Mod shutdown");
             eventData.addProperty("stopTime", java.time.Instant.now().toString());

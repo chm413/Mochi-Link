@@ -53,6 +53,7 @@ export class PlayerInfoService extends EventEmitter {
   private bridges = new Map<string, BaseConnectorBridge>();
   private playerCache = new Map<string, PlayerInfoResult>();
   private database: any; // Database interface
+  private cacheCleanupInterval?: NodeJS.Timeout;
   
   constructor(config: Partial<PlayerInfoServiceConfig> = {}, database?: any) {
     super();
@@ -70,7 +71,7 @@ export class PlayerInfoService extends EventEmitter {
     this.database = database;
     
     // Set up cache cleanup
-    setInterval(() => this.cleanupCache(), this.config.cacheTimeout);
+    this.cacheCleanupInterval = setInterval(() => this.cleanupCache(), this.config.cacheTimeout);
   }
 
   // ============================================================================
@@ -586,5 +587,19 @@ export class PlayerInfoService extends EventEmitter {
         }
       }
     }
+  }
+
+  /**
+   * Cleanup resources
+   */
+  cleanup(): void {
+    if (this.cacheCleanupInterval) {
+      clearInterval(this.cacheCleanupInterval);
+      this.cacheCleanupInterval = undefined;
+    }
+    
+    this.bridges.clear();
+    this.playerCache.clear();
+    this.removeAllListeners();
   }
 }

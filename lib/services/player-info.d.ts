@@ -33,6 +33,7 @@ export declare class PlayerInfoService extends EventEmitter {
     private bridges;
     private playerCache;
     private database;
+    private cacheCleanupInterval?;
     constructor(config?: Partial<PlayerInfoServiceConfig>, database?: any);
     /**
      * Register a bridge for player information queries
@@ -87,4 +88,8 @@ export declare class PlayerInfoService extends EventEmitter {
     private cachePlayerInfo;
     private cleanupCache;
     private handlePlayerEvent;
+    /**
+     * Cleanup resources
+     */
+    cleanup(): void;
 }

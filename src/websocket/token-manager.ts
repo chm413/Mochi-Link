@@ -10,6 +10,8 @@ import { TokenManager } from './auth';
 import { APIToken } from '../types';
 
 export class SimpleTokenManager implements TokenManager {
+  private logger = this.ctx.logger('mochi-link:token-manager');
+
   constructor(private ctx: Context, private tablePrefix: string = 'mochi') {}
 
   /**
@@ -38,7 +40,7 @@ export class SimpleTokenManager implements TokenManager {
           ipWhitelist = JSON.parse(tokenData.ip_whitelist);
         }
       } catch (error) {
-        console.error(`Failed to parse ip_whitelist for token ${tokenData.id}:`, error);
+        this.logger.error(`Failed to parse ip_whitelist for token ${tokenData.id}:`, error);
       }
     }
 
@@ -49,7 +51,7 @@ export class SimpleTokenManager implements TokenManager {
           encryptionConfig = JSON.parse(tokenData.encryption_config);
         }
       } catch (error) {
-        console.error(`Failed to parse encryption_config for token ${tokenData.id}:`, error);
+        this.logger.error(`Failed to parse encryption_config for token ${tokenData.id}:`, error);
       }
     }
     
@@ -91,7 +93,7 @@ export class SimpleTokenManager implements TokenManager {
           ipWhitelist = JSON.parse(tokenData.ip_whitelist);
         }
       } catch (error) {
-        console.error(`Failed to parse ip_whitelist for token ${tokenData.id}:`, error);
+        this.logger.error(`Failed to parse ip_whitelist for token ${tokenData.id}:`, error);
       }
     }
 
@@ -102,7 +104,7 @@ export class SimpleTokenManager implements TokenManager {
           encryptionConfig = JSON.parse(tokenData.encryption_config);
         }
       } catch (error) {
-        console.error(`Failed to parse encryption_config for token ${tokenData.id}:`, error);
+        this.logger.error(`Failed to parse encryption_config for token ${tokenData.id}:`, error);
       }
     }
     

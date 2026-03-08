@@ -84,18 +84,27 @@ export declare class MessageRouter extends EventEmitter {
      */
     private applyEventFilters;
     /**
-     * Format message for server
+     * 修复问题 #16: Format message for server with XSS protection
      */
     private formatMessage;
     /**
-     * Format event message for group
+     * 修复问题 #16: Format event message for group with XSS protection
      */
     private formatEventMessage;
     private rateLimitCache;
+    private cleanupInterval?;
     /**
      * Check rate limit for group-server pair
      */
     private checkRateLimit;
+    /**
+     * 修复问题 #8: 清理过期的速率限制缓存条目
+     */
+    private startCacheCleanup;
+    /**
+     * 停止缓存清理
+     */
+    private stopCacheCleanup;
     /**
      * Setup event listeners for incoming messages and events
      */

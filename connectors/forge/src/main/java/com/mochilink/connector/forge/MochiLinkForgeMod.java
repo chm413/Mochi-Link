@@ -228,9 +228,9 @@ public class MochiLinkForgeMod {
         try {
             com.google.gson.JsonObject eventData = new com.google.gson.JsonObject();
             if (server != null) {
-                eventData.addProperty("serverName", server.getMotd());
+                eventData.addProperty("serverName", server.getServerModName());
                 eventData.addProperty("serverVersion", server.getServerVersion());
-                eventData.addProperty("onlinePlayers", server.getPlayerCount());
+                eventData.addProperty("onlinePlayers", server.getPlayerList().getPlayerCount());
                 eventData.addProperty("maxPlayers", server.getMaxPlayers());
             }
             eventData.addProperty("coreType", "Java");
@@ -251,7 +251,7 @@ public class MochiLinkForgeMod {
         try {
             com.google.gson.JsonObject eventData = new com.google.gson.JsonObject();
             if (server != null) {
-                eventData.addProperty("serverName", server.getMotd());
+                eventData.addProperty("serverName", server.getServerModName());
             }
             eventData.addProperty("reason", "Mod shutdown");
             eventData.addProperty("stopTime", java.time.Instant.now().toString());

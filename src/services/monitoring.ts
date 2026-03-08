@@ -115,6 +115,7 @@ export class MonitoringService {
   private serverConnections = new Map<string, Connection>();
   private historicalData = new Map<string, HistoricalMetric[]>();
   private activeAlerts = new Map<string, Alert>();
+  private cleanupInterval?: NodeJS.Timeout;
   private stats: MonitoringStats = {
     totalReports: 0,
     reportsByServer: {},
@@ -747,7 +748,7 @@ export class MonitoringService {
    * Start cleanup task
    */
   private startCleanupTask(): void {
-    setInterval(() => {
+    this.cleanupInterval = setInterval(() => {
       this.cleanupOldData();
       this.cleanupOldAlerts();
     }, 60 * 60 * 1000); // Run every hour
@@ -836,5 +837,26 @@ export class MonitoringService {
         averageReportInterval: this.stats.averageReportInterval
       }
     };
+  }
+
+  /**
+   * Cleanup resources
+   */
+  cleanup(): void {
+    // Stop all monitoring intervals
+    for (const interval of this.reportIntervals.values()) {
+      clearInterval(interval);
+    }
+    this.reportIntervals.clear();
+    
+    // Stop cleanup interval
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = undefined;
+    }
+    
+    this.serverConnections.clear();
+    this.historicalData.clear();
+    this.activeAlerts.clear();
   }
 }

@@ -11,6 +11,7 @@ export declare class RateLimitMiddleware implements HTTPMiddleware {
     private config;
     private ipLimits;
     private userLimits;
+    private cleanupInterval?;
     constructor(config: RateLimitConfig);
     handle(request: HTTPRequest, response: ServerResponse): Promise<{
         continue: boolean;
@@ -19,4 +20,8 @@ export declare class RateLimitMiddleware implements HTTPMiddleware {
     private checkLimit;
     private cleanupExpiredEntries;
     private sendRateLimitExceeded;
+    /**
+     * Cleanup resources
+     */
+    cleanup(): void;
 }

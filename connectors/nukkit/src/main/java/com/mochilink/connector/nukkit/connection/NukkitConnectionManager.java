@@ -3,6 +3,7 @@ package com.mochilink.connector.nukkit.connection;
 import com.mochilink.connector.nukkit.MochiLinkNukkitPlugin;
 import com.mochilink.connector.nukkit.config.NukkitPluginConfig;
 import com.mochilink.connector.nukkit.protocol.UWBPMessage;
+import com.mochilink.connector.nukkit.utils.RateLimiter;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import org.java_websocket.client.WebSocketClient;
@@ -30,6 +31,10 @@ public class NukkitConnectionManager {
     private com.mochilink.connector.nukkit.protocol.NukkitMessageHandler messageHandler;
     private final AtomicBoolean connected = new AtomicBoolean(false);
     private final AtomicBoolean connecting = new AtomicBoolean(false);
+    
+    // 速率限制器
+    private final RateLimiter rateLimiter = new RateLimiter(10);
+    
     private TaskHandler heartbeatTask;
     
     // 重连状态
@@ -296,6 +301,14 @@ public class NukkitConnectionManager {
     private void handleRequest(JsonObject request) {
         String op = request.get("op").getAsString();
         String requestId = request.get("id").getAsString();
+        
+        // 速率限制检查
+        if (!rateLimiter.tryAcquire(op)) {
+            logger.warning("Rate limit exceeded for operation: " + op);
+            sendErrorResponse(requestId, op, "Rate limit exceeded. Please try again later.");
+            return;
+        }
+        
         JsonObject data = request.has("data") ? request.getAsJsonObject("data") : new JsonObject();
         
         // Create message handler if not exists
@@ -340,6 +353,10 @@ public class NukkitConnectionManager {
                 String command = data.has("command") ? data.get("command").getAsString() : null;
                 response = messageHandler.handleCommandExecute(requestId, command);
                 break;
+            case "server.command":  // Koishi plugin adapter 使用的操作名
+                String serverCommand = data.has("command") ? data.get("command").getAsString() : null;
+                response = messageHandler.handleCommandExecute(requestId, serverCommand);
+                break;
             case "server.getInfo":  // Koishi 命名
             case "server.info":     // 兼容旧命名
                 response = messageHandler.handleServerInfo(requestId);
@@ -356,6 +373,32 @@ public class NukkitConnectionManager {
             case "server.stop":      // 兼容旧命名
                 int stopDelay = data.has("delay") ? data.get("delay").getAsInt() : 10;
                 response = messageHandler.handleServerStop(requestId, stopDelay);
+                break;
+            case "player.ban":
+                String banPlayerId = data.has("playerId") ? data.get("playerId").getAsString() : null;
+                String banPlayerName = data.has("playerName") ? data.get("playerName").getAsString() : null;
+                String banReason = data.has("reason") ? data.get("reason").getAsString() : null;
+                Integer banDuration = data.has("duration") ? data.get("duration").getAsInt() : null;
+                response = messageHandler.handlePlayerBan(requestId, banPlayerId, banPlayerName, banReason, banDuration);
+                break;
+            case "player.unban":
+                String unbanPlayerId = data.has("playerId") ? data.get("playerId").getAsString() : null;
+                String unbanPlayerName = data.has("playerName") ? data.get("playerName").getAsString() : null;
+                response = messageHandler.handlePlayerUnban(requestId, unbanPlayerId, unbanPlayerName);
+                break;
+            case "player.banlist":
+                String banType = data.has("type") ? data.get("type").getAsString() : "name";
+                response = messageHandler.handlePlayerBanlist(requestId, banType);
+                break;
+            case "whitelist.enable":
+                response = messageHandler.handleWhitelistEnable(requestId);
+                break;
+            case "whitelist.disable":
+                response = messageHandler.handleWhitelistDisable(requestId);
+                break;
+            case "server.save":
+                String worldName = data.has("world") ? data.get("world").getAsString() : null;
+                response = messageHandler.handleServerSave(requestId, worldName);
                 break;
             case "event.subscribe":
                 handleEventSubscribe(request, requestId);

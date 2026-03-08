@@ -34,7 +34,7 @@ public class MochiLinkForgeCommand {
      */
     public void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(literal("mochilink")
-            .requires(source -> source.hasPermission(3))
+            .requires(source -> source.hasPermission(2))
             .then(literal("status")
                 .executes(this::handleStatus))
             .then(literal("reconnect")
@@ -148,11 +148,20 @@ public class MochiLinkForgeCommand {
         
         sendMessage(ctx, "§6=== Server Statistics ===");
         sendMessage(ctx, "§ePlayers: §f" + 
-            server.getPlayerCount() + "/" + server.getMaxPlayers());
+            server.getPlayerList().getPlayerCount() + "/" + server.getMaxPlayers());
         
-        // Calculate TPS from average tick time
-        double averageTickTimeMs = server.getAverageTickTime();
-        double tps = Math.min(20.0, 1000.0 / averageTickTimeMs);
+        // Calculate TPS from tick times array
+        long[] tickTimes = server.tickTimes;
+        double tps = 20.0;
+        if (tickTimes != null && tickTimes.length > 0) {
+            long sum = 0;
+            for (long time : tickTimes) {
+                sum += time;
+            }
+            double averageTickTimeNs = (double) sum / tickTimes.length;
+            double averageTickTimeMs = averageTickTimeNs / 1000000.0;
+            tps = Math.min(20.0, 1000.0 / averageTickTimeMs);
+        }
         sendMessage(ctx, "§eTPS: §f" + String.format("%.2f", tps));
         
         Runtime runtime = Runtime.getRuntime();

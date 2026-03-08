@@ -1,410 +1,751 @@
-# Forge API 兼容性修复设计文档
+# Design Document: Forge API Compatibility Fix
 
 ## Overview
 
-Forge 连接器在 CI 构建时出现 97 个编译错误，这些错误是由于代码使用了 Forge 1.20.1 API 中不存在的方法和字段。本设计文档提供了系统化的 API 替换方案，确保代码与 Forge 1.20.1 API 完全兼容，同时保持与其他连接器（Fabric、Folia、Nukkit）的行为一致性。
+This design document provides a comprehensive technical solution for resolving 91 compilation errors in the Mochi-Link Forge connector for Minecraft 1.20.1 (Forge 47.2.0). The errors stem from API incompatibilities where methods, fields, and type signatures have changed between Minecraft versions.
 
-修复策略：
-1. 将所有不兼容的 API 调用替换为 Forge 1.20.1 中存在的正确方法
-2. 为配置类添加缺失的 getter 方法
-3. 确保类型转换的安全性
-4. 保持代码的可读性和可维护性
+The Forge connector is a critical component that enables remote management of Minecraft Forge servers through WebSocket communication. It handles player management, server control, event monitoring, and command execution using the U-WBP v2.0 protocol.
 
-受影响的文件：
-- `ForgeMessageHandler.java` - 60+ 个 API 错误
-- `ForgeEventHandler.java` - 20+ 个 API 错误
-- `MochiLinkForgeCommand.java` - 10+ 个 API 错误
-- `ForgeModConfig.java` - 缺少 getter 方法
+### Problem Statement
 
-## Glossary
+The current Forge connector code references deprecated or non-existent API methods and fields from older Minecraft versions. These incompatibilities prevent successful compilation and deployment. The solution must:
 
-- **Bug_Condition (C)**: 代码调用了 Forge 1.20.1 API 中不存在的方法或访问了不存在的字段
-- **Property (P)**: 使用正确的 Forge 1.20.1 API 方法，代码能够成功编译并保持相同的功能行为
-- **Preservation**: 修复后的代码必须保持与原代码相同的功能行为，不改变任何业务逻辑
-- **ServerPlayer**: Forge 中表示服务器端玩家的类，包含玩家状态和操作方法
-- **MinecraftServer**: Forge 中表示 Minecraft 服务器实例的类
-- **API 兼容性**: 代码使用的 API 方法在目标 Forge 版本中存在且行为符合预期
+1. Map all 91 compilation errors to their correct Minecraft 1.20.1 API equivalents
+2. Preserve all existing functionality and behavior
+3. Maintain identical JSON response structures for WebSocket communication
+4. Ensure type safety and proper error handling
 
-## Bug Details
+### Solution Approach
 
-### Fault Condition
+The solution involves systematic API migration across three main files:
+- `ForgeMessageHandler.java` (primary file with ~80 errors)
+- `ForgeEventHandler.java` (~8 errors)
+- `MochiLinkForgeCommand.java` (~3 errors)
 
-该 bug 在 CI 构建过程中触发，当 Gradle 编译 Forge 连接器代码时，编译器无法找到代码中引用的方法或字段。这些方法和字段在开发时可能存在于不同版本的 API 中，或者是错误的方法名称。
+Each API change is mapped to specific requirements and validated through property-based testing to ensure correctness.
 
-**Formal Specification:**
+## Architecture
+
+### Component Overview
+
 ```
-FUNCTION isBugCondition(codeStatement)
-  INPUT: codeStatement of type JavaStatement
-  OUTPUT: boolean
-  
-  RETURN (codeStatement.callsMethod() AND NOT methodExistsInForgeAPI(codeStatement.method))
-         OR (codeStatement.accessesField() AND NOT fieldExistsInForgeAPI(codeStatement.field))
-         OR (codeStatement.performsTypeCast() AND NOT typeCastIsValid(codeStatement.cast))
-         OR (codeStatement.accessesConfigValue() AND NOT getterMethodExists(codeStatement.configField))
-END FUNCTION
+┌─────────────────────────────────────────────────────────────┐
+│                    Mochi-Link Forge Mod                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                               │
+│  ┌──────────────────┐         ┌──────────────────┐          │
+│  │ ForgeMessageHandler│◄────────┤ WebSocket Client │          │
+│  │  (API Fixes)      │         │                  │          │
+│  └────────┬─────────┘         └──────────────────┘          │
+│           │                                                   │
+│           │ Uses Minecraft 1.20.1 API                        │
+│           ▼                                                   │
+│  ┌──────────────────────────────────────────────┐           │
+│  │         Minecraft Server API                  │           │
+│  │  • ServerPlayer (player info)                 │           │
+│  │  • MinecraftServer (server operations)        │           │
+│  │  • PlayerList (player management)             │           │
+│  │  • ServerLevel (world data)                   │           │
+│  │  • CommandSourceStack (commands)              │           │
+│  └──────────────────────────────────────────────┘           │
+│           ▲                                                   │
+│           │                                                   │
+│  ┌────────┴─────────┐         ┌──────────────────┐          │
+│  │ ForgeEventHandler │         │ MochiLinkCommand │          │
+│  │  (API Fixes)      │         │  (API Fixes)     │          │
+│  └──────────────────┘         └──────────────────┘          │
+│                                                               │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Examples
+### API Migration Strategy
 
-**ServerPlayer API 错误示例：**
-- `player.getStringUUID()` - 方法不存在，应使用 `player.getUUID().toString()`
-- `player.getName().getString()` - getName() 返回 String 而非 Component，不需要 getString()
-- `player.getDisplayName()` - 方法不存在，应使用 `player.getDisplayName()` 返回 Component
-- `player.level()` - 方法不存在，应使用 `player.level` 字段或 `player.serverLevel()`
-- `player.latency` - 字段不存在，应使用 `player.connection.latency()`
+The migration follows a systematic approach:
 
-**MinecraftServer API 错误示例：**
-- `server.getServerVersion()` - 方法不存在，应使用 `SharedConstants.getCurrentVersion().getName()`
-- `server.getAverageTickTime()` - 方法不存在，需要手动计算 TPS
-- `server.getServerStartTimeMillis()` - 方法不存在，需要自定义时间跟踪
+1. **Field vs Method Resolution**: Determine whether API access should use field access or method calls
+2. **Type Conversion**: Handle changes in return types (e.g., Component vs String)
+3. **Method Renaming**: Map old method names to new equivalents
+4. **Null Safety**: Add appropriate null checks and error handling
+5. **Behavioral Preservation**: Ensure identical output for all operations
 
-**配置类错误示例：**
-- `config.getMochiLinkHost()` - getter 方法不存在，但字段名为 `serverHost`
-- `config.getMochiLinkPort()` - getter 方法不存在，但字段名为 `serverPort`
+## Components and Interfaces
 
-## Expected Behavior
+### 1. Player Information API Changes
 
-### Preservation Requirements
+#### 1.1 UUID Retrieval
+- **Old API**: `player.getUUID()` (may have returned different type)
+- **New API**: `player.getUUID().toString()`
+- **Location**: ForgeMessageHandler.java (lines 52, 91, 169, 207, 243, etc.)
+- **Impact**: All player identification operations
+- **Validation**: UUID format must match existing pattern
 
-**Unchanged Behaviors:**
-- 所有 WebSocket 消息处理逻辑必须保持不变（player.list, player.info, player.kick 等）
-- 所有事件处理逻辑必须保持不变（玩家加入、离开、聊天等）
-- 所有命令功能必须保持不变（status, reconnect, info 等）
-- 所有配置读取逻辑必须保持不变
-- 生成的 JSON 数据结构必须保持不变
-- 与管理服务器的通信协议必须保持不变
+#### 1.2 Player Name Retrieval
+- **Old API**: `player.getName()` (returned String directly)
+- **New API**: `player.getName().getString()`
+- **Location**: ForgeMessageHandler.java (lines 53, 92, 170, 208, etc.)
+- **Impact**: All player name display and logging
+- **Validation**: String output must be identical
 
-**Scope:**
-所有不涉及 Forge API 调用的代码应完全不受影响。这包括：
-- JSON 序列化和反序列化逻辑
-- WebSocket 连接管理
-- 事件订阅管理
-- 重连机制
-- 日志记录
-- 错误处理
+#### 1.3 Display Name Retrieval
+- **Old API**: `player.getDisplayName()` (returned String)
+- **New API**: `player.getDisplayName().getString()`
+- **Location**: ForgeMessageHandler.java (lines 54, 93)
+- **Impact**: Player display in UI and messages
+- **Validation**: Display name formatting preserved
 
-## Hypothesized Root Cause
+#### 1.4 World/Level Access
+- **Old API**: `player.level()` (method call)
+- **New API**: `player.level` (field access)
+- **Location**: ForgeMessageHandler.java (lines 55, 94)
+- **Impact**: World dimension retrieval
+- **Validation**: Dimension string format unchanged
 
-基于错误分析，最可能的原因是：
+#### 1.5 Position Coordinates
+- **Old API**: `player.getX()`, `player.getY()`, `player.getZ()`
+- **New API**: Same methods (no change needed)
+- **Location**: ForgeMessageHandler.java (lines 57-59, 96-98)
+- **Impact**: Player position tracking
+- **Validation**: Coordinate precision maintained
 
-1. **API 版本不匹配**: 代码可能是基于不同版本的 Forge API 编写的，或者参考了错误的 API 文档
-   - 某些方法名称在不同版本间发生了变化
-   - 某些字段变成了方法，或方法变成了字段
-   - 某些 API 在 1.20.1 版本中被移除或重命名
+#### 1.6 Network Latency
+- **Old API**: `player.latency` (field access)
+- **New API**: `player.connection.latency()` (method through connection)
+- **Location**: ForgeMessageHandler.java (lines 62, 101)
+- **Impact**: Ping display
+- **Validation**: Latency value accuracy
 
-2. **方法名称错误**: 开发者可能使用了不存在的便捷方法
-   - `getStringUUID()` 不存在，需要使用 `getUUID().toString()`
-   - `getDisplayName()` 返回类型可能与预期不同
+#### 1.7 Game Profile Access
+- **Old API**: `player.getGameProfile()`
+- **New API**: Same method (no change needed)
+- **Location**: ForgeMessageHandler.java (lines 63, 103)
+- **Impact**: OP status checking
+- **Validation**: Profile data integrity
 
-3. **字段访问方式错误**: 某些属性需要通过方法访问而非直接字段访问
-   - `player.latency` 应该是 `player.connection.latency()`
-   - `player.level()` 应该是 `player.level` 字段
+#### 1.8 Health Values
+- **Old API**: `player.getHealth()`, `player.getMaxHealth()`
+- **New API**: Same methods (no change needed)
+- **Location**: ForgeMessageHandler.java (lines 64, 104)
+- **Impact**: Health monitoring
+- **Validation**: Health value accuracy
 
-4. **配置类设计不完整**: ForgeModConfig 的字段名与 getter 方法名不一致
-   - 字段名为 `serverHost` 但代码调用 `getMochiLinkHost()`
-   - 字段名为 `serverPort` 但代码调用 `getMochiLinkPort()`
+#### 1.9 Food Data
+- **Old API**: `player.getFoodData()`
+- **New API**: Same method (no change needed)
+- **Location**: ForgeMessageHandler.java (line 65)
+- **Impact**: Hunger level tracking
+- **Validation**: Food level accuracy
+
+#### 1.10 Experience Values
+- **Old API**: `player.experienceLevel`, `player.experienceProgress`
+- **New API**: Same fields (no change needed)
+- **Location**: ForgeMessageHandler.java (lines 106-107)
+- **Impact**: XP display
+- **Validation**: Experience values preserved
+
+#### 1.11 Game Mode Access
+- **Old API**: `player.gameMode.getGameModeForPlayer()`
+- **New API**: `player.gameMode.getGameModeForPlayer()` (verify method exists)
+- **Alternative**: `player.gameMode.getGameType()` if needed
+- **Location**: ForgeMessageHandler.java (lines 66, 108)
+- **Impact**: Game mode display
+- **Validation**: Game mode string format
+
+#### 1.12 Player Abilities
+- **Old API**: `player.getAbilities()`
+- **New API**: Same method (no change needed)
+- **Location**: ForgeMessageHandler.java (line 109)
+- **Impact**: Flying status and abilities
+- **Validation**: Abilities data structure
+
+#### 1.13 Movement State
+- **Old API**: `player.isCrouching()`, `player.isSprinting()`
+- **New API**: Same methods (no change needed)
+- **Location**: ForgeMessageHandler.java (lines 110-111)
+- **Impact**: Player state tracking
+- **Validation**: Boolean state accuracy
+
+#### 1.14 IP Address Retrieval
+- **Old API**: `player.getIpAddress()` (may not exist)
+- **New API**: `player.connection.getRemoteAddress().toString()`
+- **Location**: ForgeMessageHandler.java (line 112)
+- **Impact**: IP logging and tracking
+- **Validation**: IP address format
+
+### 2. Server Information API Changes
+
+#### 2.1 Server Thread Execution
+- **Old API**: `server.execute()`
+- **New API**: Same method (no change needed)
+- **Location**: ForgeMessageHandler.java (lines 173, 211, 249, 287, 325, 363, 401, 439, 477)
+- **Impact**: Thread-safe server operations
+- **Validation**: Execution timing preserved
+
+#### 2.2 Command Manager Access
+- **Old API**: `server.getCommands()`
+- **New API**: Same method (no change needed)
+- **Location**: ForgeMessageHandler.java (lines 287, 325, 401)
+- **Impact**: Command execution
+- **Validation**: Command results identical
+
+#### 2.3 Command Source Creation
+- **Old API**: `server.createCommandSourceStack()`
+- **New API**: Same method (no change needed)
+- **Location**: ForgeMessageHandler.java (lines 288, 326, 402)
+- **Impact**: Command context creation
+- **Validation**: Command permissions preserved
+
+#### 2.4 Server MOTD
+- **Old API**: `server.getMotd()` (may return different type)
+- **New API**: `server.getMotd()` (verify return type, may need `.getString()`)
+- **Location**: ForgeMessageHandler.java (lines 419, 421)
+- **Impact**: Server description display
+- **Validation**: MOTD string format
+
+#### 2.5 Server Version
+- **Old API**: `server.getServerVersion()` (deprecated)
+- **New API**: `SharedConstants.getCurrentVersion().getName()`
+- **Location**: ForgeMessageHandler.java (line 420)
+- **Impact**: Version display
+- **Validation**: Version string format
+- **Note**: Requires import `net.minecraft.SharedConstants;`
+
+#### 2.6 Player Count Methods
+- **Old API**: `server.getMaxPlayers()`, `server.getPlayerCount()`
+- **New API**: Same methods (no change needed)
+- **Location**: ForgeMessageHandler.java (lines 68, 423, 424, 454)
+- **Impact**: Player count display
+- **Validation**: Count accuracy
+
+#### 2.7 Server Port
+- **Old API**: `server.getPort()`
+- **New API**: Same method (no change needed)
+- **Location**: ForgeMessageHandler.java (line 425)
+- **Impact**: Port display
+- **Validation**: Port number accuracy
+
+#### 2.8 Authentication Status
+- **Old API**: `server.usesAuthentication()`
+- **New API**: Same method (no change needed)
+- **Location**: ForgeMessageHandler.java (line 427)
+- **Impact**: Online mode display
+- **Validation**: Boolean value accuracy
+
+#### 2.9 Server Performance Metrics
+- **Old API**: `server.getAverageTickTime()` (may not exist)
+- **New API**: Manual calculation using `server.tickTimes` array
+- **Location**: ForgeMessageHandler.java (line 459)
+- **Impact**: TPS calculation
+- **Validation**: TPS calculation accuracy
+- **Implementation**:
+  ```java
+  long[] tickTimes = server.tickTimes;
+  if (tickTimes != null && tickTimes.length > 0) {
+      long sum = 0;
+      for (long time : tickTimes) {
+          sum += time;
+      }
+      double averageTickTimeNs = (double) sum / tickTimes.length;
+      double averageTickTimeMs = averageTickTimeNs / 1000000.0;
+      double tps = Math.min(20.0, 1000.0 / averageTickTimeMs);
+  }
+  ```
+
+#### 2.10 Server Stop Method
+- **Old API**: `server.stopServer()` (may not exist)
+- **New API**: `server.halt(false)` or verify `stopServer()` exists
+- **Location**: ForgeMessageHandler.java (lines 482, 520)
+- **Impact**: Server shutdown
+- **Validation**: Shutdown behavior identical
+
+### 3. Player List and World API Changes
+
+#### 3.1 Entity Type Casting
+- **Old API**: Direct cast `(ServerPlayer) event.getEntity()`
+- **New API**: Safe instanceof pattern matching
+- **Location**: ForgeEventHandler.java (lines 42, 72)
+- **Impact**: Event handling safety
+- **Validation**: No ClassCastException
+- **Implementation**:
+  ```java
+  if (!(event.getEntity() instanceof ServerPlayer)) {
+      return;
+  }
+  ServerPlayer player = (ServerPlayer) event.getEntity();
+  ```
+
+#### 3.2 Whitelist Access
+- **Old API**: `server.getPlayerList().getWhiteListNames()`
+- **New API**: Verify method exists and return type
+- **Alternative**: May need to iterate whitelist entries
+- **Location**: ForgeMessageHandler.java (line 233)
+- **Impact**: Whitelist display
+- **Validation**: Whitelist data structure
+
+#### 3.3 Whitelist Status
+- **Old API**: `server.getPlayerList().isUsingWhitelist()`
+- **New API**: Same method (no change needed)
+- **Location**: ForgeMessageHandler.java (lines 240, 426)
+- **Impact**: Whitelist enabled check
+- **Validation**: Boolean value accuracy
+
+#### 3.4 System Message Broadcasting
+- **Old API**: `server.getPlayerList().broadcastSystemMessage()`
+- **New API**: Same method (verify signature)
+- **Location**: ForgeMessageHandler.java (lines 475, 513)
+- **Impact**: Server-wide announcements
+- **Validation**: Message delivery
+
+#### 3.5 World Dimension Access
+- **Old API**: `level.dimension()`
+- **New API**: Same method (no change needed)
+- **Location**: ForgeMessageHandler.java (lines 431, 432)
+- **Impact**: Dimension identification
+- **Validation**: Dimension string format
+
+#### 3.6 World Difficulty
+- **Old API**: `level.getDifficulty()`
+- **New API**: Same method (no change needed)
+- **Location**: ForgeMessageHandler.java (line 433)
+- **Impact**: Difficulty display
+- **Validation**: Difficulty value accuracy
+
+#### 3.7 World Players
+- **Old API**: `level.players()`
+- **New API**: Same method (no change needed)
+- **Location**: ForgeMessageHandler.java (line 434)
+- **Impact**: Per-world player count
+- **Validation**: Player list accuracy
+
+### 4. Command System API Changes
+
+#### 4.1 Server Access from Command Source
+- **Old API**: `source.getServer()`
+- **New API**: Same method (no change needed)
+- **Location**: MochiLinkForgeCommand.java (line 149)
+- **Impact**: Command execution context
+- **Validation**: Server instance access
+
+#### 4.2 Command Permission Requirements
+- **Old API**: `builder.requires()`
+- **New API**: Same method (no change needed)
+- **Location**: MochiLinkForgeCommand.java (line 37)
+- **Impact**: Permission checking
+- **Validation**: Permission level enforcement
+
+## Data Models
+
+### Player Information Model
+
+```java
+{
+  "id": String,              // UUID.toString()
+  "name": String,            // getName().getString()
+  "displayName": String,     // getDisplayName().getString()
+  "world": String,           // level.dimension().location().toString()
+  "position": {
+    "x": double,             // getX()
+    "y": double,             // getY()
+    "z": double              // getZ()
+  },
+  "ping": int,               // connection.latency()
+  "isOp": boolean,           // PlayerList.isOp(getGameProfile())
+  "health": float,           // getHealth()
+  "maxHealth": float,        // getMaxHealth()
+  "foodLevel": int,          // getFoodData().getFoodLevel()
+  "level": int,              // experienceLevel field
+  "exp": float,              // experienceProgress field
+  "gameMode": String,        // gameMode.getGameModeForPlayer().getName()
+  "isFlying": boolean,       // getAbilities().flying
+  "isSneaking": boolean,     // isCrouching()
+  "isSprinting": boolean,    // isSprinting()
+  "address": String          // connection.getRemoteAddress().toString()
+}
+```
+
+### Server Information Model
+
+```java
+{
+  "name": String,            // getMotd() [verify type]
+  "version": String,         // SharedConstants.getCurrentVersion().getName()
+  "coreType": "Java",
+  "coreName": "Forge",
+  "maxPlayers": int,         // getMaxPlayers()
+  "onlinePlayers": int,      // getPlayerCount()
+  "port": int,               // getPort()
+  "motd": String,            // getMotd() [verify type]
+  "whitelistEnabled": boolean, // PlayerList.isUsingWhitelist()
+  "onlineMode": boolean,     // usesAuthentication()
+  "worlds": [
+    {
+      "name": String,        // dimension().location().toString()
+      "dimension": String,   // dimension().location().toString()
+      "difficulty": String,  // getDifficulty().getKey()
+      "playerCount": int     // players().size()
+    }
+  ]
+}
+```
+
+### Server Status Model
+
+```java
+{
+  "status": "online",
+  "uptime": long,            // System.currentTimeMillis() - serverStartTime
+  "players": {
+    "online": int,           // getPlayerCount()
+    "max": int               // getMaxPlayers()
+  },
+  "performance": {
+    "tps": double,           // Calculated from tickTimes array
+    "memoryUsage": long,     // Runtime memory calculation
+    "memoryMax": long,       // Runtime.maxMemory()
+    "memoryPercent": double  // Calculated percentage
+  }
+}
+```
+
 
 ## Correctness Properties
 
-Property 1: Fault Condition - API 调用编译成功
+*A property is a characteristic or behavior that should hold true across all valid executions of a system-essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
 
-_For any_ 代码语句中调用了 Forge API 方法或访问了 Forge API 字段，修复后的代码 SHALL 使用在 Forge 1.20.1 API 中实际存在的方法或字段，使得编译器能够成功解析并编译该语句。
+### Property Reflection Analysis
 
-**Validates: Requirements 2.1-2.36**
+After analyzing all acceptance criteria, several properties can be consolidated:
 
-Property 2: Preservation - 功能行为不变
+**Consolidation 1**: Properties 1.1-1.14 (individual player API methods) can be grouped into a comprehensive "Player API Access" property that verifies all player information retrieval methods work correctly.
 
-_For any_ 不涉及 API 调用替换的代码逻辑（业务逻辑、数据处理、协议实现），修复后的代码 SHALL 产生与原代码完全相同的行为，保持所有功能特性、数据格式和通信协议不变。
+**Consolidation 2**: Properties 2.1-2.9 (individual server API methods) can be grouped into a comprehensive "Server API Access" property.
 
-**Validates: Requirements 3.1-3.10**
+**Consolidation 3**: Properties 6.2 and 6.3 are subsumed by 6.1 (compilation success).
 
-## Fix Implementation
+**Consolidation 4**: Properties 7.5 and 7.6 are subsumed by 7.1 (JSON response structure preservation).
 
-### Changes Required
+**Consolidation 5**: Properties 8.1, 8.2, 8.4, and 8.5 all test round-trip serialization and can be consolidated into two comprehensive round-trip properties.
 
-假设我们的根因分析是正确的，需要进行以下修改：
+### Property 1: Player Information API Completeness
 
-**File**: `connectors/forge/src/main/java/com/mochilink/connector/forge/protocol/ForgeMessageHandler.java`
+*For any* ServerPlayer instance in Minecraft 1.20.1, all player information retrieval methods (getUUID(), getName(), getDisplayName(), level field, getX()/getY()/getZ(), connection.latency(), getGameProfile(), getHealth(), getMaxHealth(), getFoodData(), experienceLevel, experienceProgress, gameMode, getAbilities(), isCrouching(), isSprinting(), connection.getRemoteAddress()) SHALL return valid, non-null values of the correct type.
 
-**Function**: `handlePlayerList()`, `handlePlayerInfo()`, `handleServerInfo()`, `handleServerStatus()`, 等
+**Validates: Requirements 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 1.10, 1.11, 1.12, 1.13, 1.14**
 
-**Specific Changes**:
+### Property 2: Server Information API Completeness
 
-1. **ServerPlayer UUID 获取**:
-   - 将 `player.getStringUUID()` 替换为 `player.getUUID().toString()`
-   - 影响：handlePlayerList(), handlePlayerInfo(), 事件处理器
+*For any* MinecraftServer instance in Minecraft 1.20.1, all server information retrieval methods (execute(), getCommands(), createCommandSourceStack(), getMotd(), SharedConstants.getCurrentVersion().getName(), getMaxPlayers(), getPlayerCount(), getPort(), usesAuthentication()) SHALL return valid, non-null values of the correct type.
 
-2. **ServerPlayer 名称获取**:
-   - 检查 `player.getName()` 的返回类型
-   - 如果返回 String，移除 `.getString()` 调用
-   - 如果返回 Component，保留 `.getString()` 调用
-   - 影响：所有使用玩家名称的地方
+**Validates: Requirements 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9**
 
-3. **ServerPlayer 显示名称获取**:
-   - 将 `player.getDisplayName()` 替换为 `player.getDisplayName().getString()`
-   - 确保 getDisplayName() 返回 Component 类型
-   - 影响：handlePlayerList(), handlePlayerInfo()
+### Property 3: Player Count Invariant
 
-4. **ServerPlayer 世界获取**:
-   - 将 `player.level()` 替换为 `player.level` 字段访问
-   - 或使用 `player.serverLevel()` 方法（如果存在）
-   - 影响：handlePlayerList(), handlePlayerInfo()
+*For any* MinecraftServer instance, the current player count SHALL always be less than or equal to the maximum player count (getPlayerCount() <= getMaxPlayers()).
 
-5. **ServerPlayer 坐标获取**:
-   - 将 `player.getX()`, `player.getY()`, `player.getZ()` 替换为正确的方法
-   - 可能是 `player.getX()`, `player.getY()`, `player.getZ()` 本身就是正确的
-   - 或者使用 `player.position()` 获取 Vec3 对象
-   - 影响：handlePlayerList(), handlePlayerInfo()
+**Validates: Requirements 2.6, 2.7**
 
-6. **ServerPlayer 延迟获取**:
-   - 将 `player.latency` 替换为 `player.connection.latency()`
-   - 或使用 `player.latency()` 方法（如果存在）
-   - 影响：handlePlayerList(), handlePlayerInfo()
+### Property 4: Health Invariant
 
-7. **ServerPlayer GameProfile 获取**:
-   - 确认 `player.getGameProfile()` 是否存在
-   - 如果不存在，使用替代方法获取 GameProfile
-   - 影响：handlePlayerList()
+*For any* ServerPlayer instance, the current health SHALL always be less than or equal to the maximum health (getHealth() <= getMaxHealth()) and both values SHALL be non-negative.
 
-8. **ServerPlayer 生命值获取**:
-   - 确认 `player.getHealth()` 和 `player.getMaxHealth()` 是否存在
-   - 可能需要使用 `player.getHealth()` 和 `player.getMaxHealth()` 本身
-   - 影响：handlePlayerList(), handlePlayerInfo()
+**Validates: Requirements 1.8**
 
-9. **ServerPlayer 饥饿值获取**:
-   - 确认 `player.getFoodData()` 是否存在
-   - 影响：handlePlayerList(), handlePlayerInfo()
+### Property 5: TPS Bounds
 
-10. **ServerPlayer 经验获取**:
-    - 将 `player.experienceLevel` 和 `player.experienceProgress` 替换为正确的访问方式
-    - 可能是字段访问或 getter 方法
-    - 影响：handlePlayerInfo()
+*For any* calculated TPS value from server tick times, the TPS SHALL be bounded between 0.0 and 20.0 inclusive.
 
-11. **ServerPlayer 游戏模式获取**:
-    - 将 `player.gameMode.getGameModeForPlayer()` 替换为正确的方法
-    - 可能是 `player.gameMode.getGameModeForPlayer()` 或 `player.gameMode.getGameType()`
-    - 影响：handlePlayerList(), handlePlayerInfo()
+**Validates: Requirements 2.11**
 
-12. **ServerPlayer 能力获取**:
-    - 确认 `player.getAbilities()` 是否存在
-    - 影响：handlePlayerInfo()
+### Property 6: Uptime Monotonicity
 
-13. **ServerPlayer 状态检查**:
-    - 确认 `player.isCrouching()` 和 `player.isSprinting()` 是否存在
-    - 可能是 `player.isCrouching()` 和 `player.isSprinting()` 本身
-    - 影响：handlePlayerInfo()
+*For any* two sequential uptime measurements, the second measurement SHALL be greater than or equal to the first (uptime is monotonically increasing).
 
-14. **ServerPlayer IP 地址获取**:
-    - 将 `player.getIpAddress()` 替换为 `player.connection.getRemoteAddress()`
-    - 或使用其他方法获取 IP 地址
-    - 影响：handlePlayerInfo()
+**Validates: Requirements 2.10**
 
-**File**: `connectors/forge/src/main/java/com/mochilink/connector/forge/protocol/ForgeMessageHandler.java`
+### Property 7: Safe Entity Casting
 
-**Function**: `handleServerInfo()`, `handleServerStatus()`, `handleServerRestart()`, `handleServerStop()`
+*For any* Entity instance, attempting to cast to ServerPlayer SHALL only succeed when instanceof ServerPlayer returns true, preventing ClassCastException.
 
-**Specific Changes**:
+**Validates: Requirements 3.1**
 
-15. **MinecraftServer 任务执行**:
-    - 确认 `server.execute()` 是否存在
-    - 这个方法通常存在，可能不需要修改
-    - 影响：多个方法
+### Property 8: World API Completeness
 
-16. **MinecraftServer 命令管理器获取**:
-    - 确认 `server.getCommands()` 是否存在
-    - 影响：handleWhitelistAdd(), handleWhitelistRemove(), handleCommandExecute()
+*For any* ServerLevel instance in Minecraft 1.20.1, all world information retrieval methods (dimension(), getDifficulty(), players()) SHALL return valid, non-null values of the correct type.
 
-17. **MinecraftServer 命令源创建**:
-    - 确认 `server.createCommandSourceStack()` 是否存在
-    - 影响：handleWhitelistAdd(), handleWhitelistRemove(), handleCommandExecute()
+**Validates: Requirements 3.5, 3.6, 3.7**
 
-18. **MinecraftServer MOTD 获取**:
-    - 确认 `server.getMotd()` 是否存在
-    - 影响：handleServerInfo()
+### Property 9: PlayerList API Completeness
 
-19. **MinecraftServer 版本获取**:
-    - 将 `server.getServerVersion()` 替换为 `SharedConstants.getCurrentVersion().getName()`
-    - 需要导入 `net.minecraft.SharedConstants`
-    - 影响：handleServerInfo()
+*For any* PlayerList instance in Minecraft 1.20.1, all player list methods (getWhiteListNames(), isUsingWhitelist(), broadcastSystemMessage()) SHALL execute without throwing exceptions and return valid values.
 
-20. **MinecraftServer 最大玩家数获取**:
-    - 确认 `server.getMaxPlayers()` 是否存在
-    - 影响：handlePlayerList(), handleServerInfo(), handleServerStatus(), handleStats()
+**Validates: Requirements 3.2, 3.3, 3.4**
 
-21. **MinecraftServer 当前玩家数获取**:
-    - 确认 `server.getPlayerCount()` 是否存在
-    - 影响：handleServerInfo(), handleServerStatus(), handleStats()
+### Property 10: Command API Completeness
 
-22. **MinecraftServer 端口获取**:
-    - 确认 `server.getPort()` 是否存在
-    - 影响：handleServerInfo()
+*For any* CommandSourceStack instance in Minecraft 1.20.1, the getServer() method SHALL return a valid, non-null MinecraftServer instance.
 
-23. **MinecraftServer 正版验证检查**:
-    - 确认 `server.usesAuthentication()` 是否存在
-    - 影响：handleServerInfo()
+**Validates: Requirements 4.1**
 
-24. **MinecraftServer 启动时间获取**:
-    - 将 `server.getServerStartTimeMillis()` 替换为自定义时间跟踪
-    - 在服务器启动时记录时间戳，然后计算运行时间
-    - 影响：handleServerStatus()
+### Property 11: Command Permission Enforcement
 
-25. **MinecraftServer 平均 Tick 时间获取**:
-    - 将 `server.getAverageTickTime()` 替换为手动计算
-    - 使用 `server.tickTimes` 数组或其他方法计算 TPS
-    - 影响：handleServerStatus(), handleStats()
+*For any* command builder with requires() predicate, the command SHALL only execute when the predicate returns true for the command source.
 
-26. **MinecraftServer 停止方法**:
-    - 确认 `server.halt(false)` 是否存在
-    - 可能需要使用 `server.stopServer()` 或其他方法
-    - 影响：handleServerRestart(), handleServerStop()
+**Validates: Requirements 4.2**
 
-**File**: `connectors/forge/src/main/java/com/mochilink/connector/forge/protocol/ForgeMessageHandler.java`
+### Property 12: Compilation Success
 
-**Function**: `handleWhitelistList()`, `handleServerInfo()`
+*For the* Forge connector codebase, running Gradle build SHALL complete with exit code 0 and zero compilation errors.
 
-**Specific Changes**:
+**Validates: Requirements 6.1**
 
-27. **Entity 到 ServerPlayer 的类型转换**:
-    - 在 ForgeEventHandler 中，确保使用 `instanceof` 检查
-    - 使用安全的类型转换：`if (entity instanceof ServerPlayer player) { ... }`
-    - 影响：ForgeEventHandler 中的事件处理方法
+### Property 13: Player Data JSON Round-Trip
 
-28. **PlayerList 白名单获取**:
-    - 将 `server.getPlayerList().getWhiteListNames()` 替换为正确的方法
-    - 可能是 `server.getPlayerList().getWhiteList()` 返回集合
-    - 影响：handleWhitelistList()
+*For any* valid player data object, serializing to JSON, then parsing, then serializing again SHALL produce equivalent JSON output (structural equality).
 
-29. **PlayerList 白名单状态检查**:
-    - 确认 `server.getPlayerList().isUsingWhitelist()` 是否存在
-    - 影响：handleWhitelistList(), handleServerInfo()
+**Validates: Requirements 8.1, 8.4**
 
-30. **PlayerList 广播消息**:
-    - 确认 `server.getPlayerList().broadcastSystemMessage()` 是否存在
-    - 影响：handleServerRestart(), handleServerStop()
+### Property 14: Server Status JSON Round-Trip
 
-31. **ServerLevel 维度获取**:
-    - 确认 `level.dimension()` 是否存在
-    - 影响：handlePlayerList(), handlePlayerInfo(), handleServerInfo()
+*For any* valid server status object, serializing to JSON, then parsing, then serializing again SHALL produce equivalent JSON output (structural equality).
 
-32. **ServerLevel 难度获取**:
-    - 确认 `level.getDifficulty()` 是否存在
-    - 影响：handleServerInfo()
+**Validates: Requirements 8.2, 8.5**
 
-33. **ServerLevel 玩家列表获取**:
-    - 确认 `level.players()` 是否存在
-    - 影响：handleServerInfo()
+### Property 15: WebSocket Message Structure Preservation
 
-**File**: `connectors/forge/src/main/java/com/mochilink/connector/forge/commands/MochiLinkForgeCommand.java`
+*For any* valid WebSocket operation (player.list, player.info, player.kick, player.message, whitelist.list, whitelist.add, whitelist.remove, command.execute, server.info, server.status, server.restart, server.stop), the JSON response structure SHALL match the expected U-WBP v2.0 format with all required fields present.
 
-**Function**: `register()`
+**Validates: Requirements 7.1**
 
-**Specific Changes**:
+### Property 16: Event Data Structure Preservation
 
-34. **CommandSourceStack 服务器获取**:
-    - 确认 `source.getServer()` 是否存在
-    - 影响：handleStats()
+*For any* player event (join, leave, chat), the forwarded event data SHALL contain all required fields in the expected JSON structure matching U-WBP v2.0 format.
 
-35. **LiteralArgumentBuilder 权限要求**:
-    - 确认 `builder.requires()` 是否存在
-    - 影响：register()
+**Validates: Requirements 7.2**
 
-**File**: `connectors/forge/src/main/java/com/mochilink/connector/forge/config/ForgeModConfig.java`
+### Property 17: Command Execution Preservation
 
-**Specific Changes**:
+*For any* valid Minecraft command string, executing the command through the Forge connector SHALL produce the same server-side effects as executing it directly through the server console.
 
-36. **添加缺失的 getter 方法**:
-    - 添加 `getMochiLinkHost()` 方法，返回 `serverHost` 字段
-    - 添加 `getMochiLinkPort()` 方法，返回 `serverPort` 字段
-    - 或者将所有调用 `getMochiLinkHost()` 的地方改为 `getServerHost()`
-    - 或者将所有调用 `getMochiLinkPort()` 的地方改为 `getServerPort()`
-    - 影响：所有使用配置的地方
+**Validates: Requirements 7.3**
+
+### Property 18: Configuration Value Preservation
+
+*For any* configuration key in the Forge connector config file, the retrieved value SHALL match the value stored in the file (no data corruption during read).
+
+**Validates: Requirements 7.4**
+
+### Property 19: Error Handling Consistency
+
+*For any* error condition (null server, player not found, invalid parameters), the error response SHALL contain a "success": false field and an "error" message field in the JSON response.
+
+**Validates: Requirements 7.7**
+
+### Property 20: WebSocket Message Parsing Correctness
+
+*For any* valid U-WBP v2.0 WebSocket message, parsing SHALL correctly extract the message type, operation, request ID, and all parameters without data loss.
+
+**Validates: Requirements 8.3**
+
+## Error Handling
+
+### Compilation Error Resolution Strategy
+
+Each of the 91 compilation errors follows a systematic resolution pattern:
+
+1. **Identify the error**: Determine if it's a method name change, field vs method access, or type conversion issue
+2. **Locate the correct API**: Reference Minecraft 1.20.1 / Forge 47.2.0 documentation
+3. **Apply the fix**: Update the code with the correct API call
+4. **Verify type safety**: Ensure all type conversions are safe and explicit
+5. **Test the fix**: Verify the fix compiles and produces correct output
+
+### Runtime Error Handling
+
+All API access points include appropriate error handling:
+
+```java
+try {
+    MinecraftServer server = mod.getServer();
+    if (server == null) {
+        return createErrorResponse(requestId, operation, "Server not available");
+    }
+    
+    // API operations here
+    
+} catch (Exception e) {
+    logger.error("Operation failed", e);
+    return createErrorResponse(requestId, operation, e.getMessage());
+}
+```
+
+### Null Safety
+
+All API calls that may return null are checked:
+
+```java
+ServerPlayer player = server.getPlayerList().getPlayer(UUID.fromString(playerId));
+if (player == null) {
+    return createErrorResponse(requestId, operation, "Player not found");
+}
+```
+
+### Type Safety
+
+All type conversions use safe patterns:
+
+```java
+// Safe instanceof check before casting
+if (!(event.getEntity() instanceof ServerPlayer)) {
+    return;
+}
+ServerPlayer player = (ServerPlayer) event.getEntity();
+```
+
+### Thread Safety
+
+All server operations execute on the server thread:
+
+```java
+server.execute(() -> {
+    // Server operations here
+});
+```
 
 ## Testing Strategy
 
-### Validation Approach
+### Dual Testing Approach
 
-测试策略采用两阶段方法：首先在未修复的代码上运行编译以确认错误存在，然后在修复后的代码上运行编译和功能测试以验证修复的正确性和行为保持不变。
+The testing strategy employs both unit testing and property-based testing to ensure comprehensive coverage:
 
-### Exploratory Fault Condition Checking
+- **Unit tests**: Verify specific examples, edge cases, and error conditions
+- **Property tests**: Verify universal properties across all inputs
 
-**Goal**: 在实施修复之前，确认编译错误的存在并理解根本原因。如果我们的根因分析被反驳，需要重新假设。
+Both approaches are complementary and necessary. Unit tests catch concrete bugs in specific scenarios, while property tests verify general correctness across a wide range of inputs.
 
-**Test Plan**: 在未修复的代码上运行 Gradle 编译，收集所有编译错误信息，分析错误类型和模式。
+### Unit Testing
 
-**Test Cases**:
-1. **编译 ForgeMessageHandler**: 运行编译并记录所有 API 错误（预期失败）
-2. **编译 ForgeEventHandler**: 运行编译并记录所有 API 错误（预期失败）
-3. **编译 MochiLinkForgeCommand**: 运行编译并记录所有 API 错误（预期失败）
-4. **编译 ForgeModConfig**: 运行编译并记录缺失的 getter 方法错误（预期失败）
+Unit tests focus on:
 
-**Expected Counterexamples**:
-- 编译器报告 "cannot find symbol" 错误，指向不存在的方法或字段
-- 可能的原因：API 版本不匹配、方法名称错误、字段访问方式错误
+1. **Specific API Examples**: Test each API change with concrete examples
+   - Example: Test that `player.getName().getString()` returns "Steve" for a test player named Steve
+   - Example: Test that `SharedConstants.getCurrentVersion().getName()` returns a version string like "1.20.1"
 
-### Fix Checking
+2. **Edge Cases**: Test boundary conditions and special cases
+   - Empty player lists
+   - Null server instances
+   - Invalid UUIDs
+   - Maximum player count reached
+   - Zero health players
 
-**Goal**: 验证对于所有触发 bug 条件的代码语句，修复后的代码能够成功编译。
+3. **Error Conditions**: Test error handling paths
+   - Player not found
+   - Server not available
+   - Invalid command syntax
+   - Permission denied
 
-**Pseudocode:**
+4. **Integration Points**: Test component interactions
+   - WebSocket message handling
+   - Event forwarding
+   - Command execution
+   - Configuration loading
+
+### Property-Based Testing
+
+Property-based testing uses **fast-check** (JavaScript/TypeScript) or **jqwik** (Java) to generate random test inputs and verify properties hold across all inputs.
+
+**Configuration**:
+- Minimum 100 iterations per property test
+- Each test tagged with: `@Property("Feature: forge-api-compatibility-fix, Property {number}: {property_text}")`
+
+**Property Test Examples**:
+
+```java
+@Property
+@Label("Feature: forge-api-compatibility-fix, Property 3: Player Count Invariant")
+void playerCountNeverExceedsMaximum(@ForAll ServerPlayer player) {
+    MinecraftServer server = player.getServer();
+    assertThat(server.getPlayerCount()).isLessThanOrEqualTo(server.getMaxPlayers());
+}
+
+@Property
+@Label("Feature: forge-api-compatibility-fix, Property 4: Health Invariant")
+void playerHealthNeverExceedsMaxHealth(@ForAll ServerPlayer player) {
+    assertThat(player.getHealth()).isLessThanOrEqualTo(player.getMaxHealth());
+    assertThat(player.getHealth()).isGreaterThanOrEqualTo(0.0f);
+}
+
+@Property
+@Label("Feature: forge-api-compatibility-fix, Property 5: TPS Bounds")
+void tpsBoundedBetweenZeroAndTwenty(@ForAll("tickTimesArray") long[] tickTimes) {
+    double tps = calculateTPS(tickTimes);
+    assertThat(tps).isBetween(0.0, 20.0);
+}
+
+@Property
+@Label("Feature: forge-api-compatibility-fix, Property 13: Player Data JSON Round-Trip")
+void playerDataRoundTrip(@ForAll ServerPlayer player) {
+    JsonObject json1 = serializePlayerData(player);
+    PlayerData parsed = parsePlayerData(json1);
+    JsonObject json2 = serializePlayerData(parsed);
+    assertThat(json1).isEqualTo(json2);
+}
+
+@Property
+@Label("Feature: forge-api-compatibility-fix, Property 15: WebSocket Message Structure Preservation")
+void webSocketResponseStructure(@ForAll("validOperations") String operation, @ForAll String requestId) {
+    JsonObject response = handleOperation(operation, requestId);
+    assertThat(response.has("type")).isTrue();
+    assertThat(response.has("id")).isTrue();
+    assertThat(response.has("op")).isTrue();
+    assertThat(response.has("timestamp")).isTrue();
+    assertThat(response.has("version")).isTrue();
+    assertThat(response.has("data")).isTrue();
+}
 ```
-FOR ALL codeStatement WHERE isBugCondition(codeStatement) DO
-  fixedStatement := applyAPIFix(codeStatement)
-  ASSERT compilerCanResolve(fixedStatement)
-  ASSERT fixedStatement.usesCorrectForgeAPI()
-END FOR
+
+### Testing Library Selection
+
+For Java/Forge connector:
+- **Primary**: jqwik (https://jqwik.net/) - Property-based testing for Java
+- **Alternative**: JUnit-Quickcheck
+- **Unit Testing**: JUnit 5
+
+### Test Coverage Goals
+
+- **API Method Coverage**: 100% of all changed API methods must have tests
+- **Property Coverage**: All 20 correctness properties must have property-based tests
+- **Error Path Coverage**: All error handling paths must have unit tests
+- **Integration Coverage**: All WebSocket operations must have integration tests
+
+### Compilation Verification
+
+The primary validation is successful compilation:
+
+```bash
+cd connectors/forge
+./gradlew clean build
+
+# Expected output:
+# BUILD SUCCESSFUL
+# 0 compilation errors
 ```
 
-**Test Plan**: 
-1. 应用所有 API 修复
-2. 运行完整的 Gradle 编译
-3. 确认没有编译错误
-4. 验证所有 API 调用都使用了 Forge 1.20.1 中存在的方法
+### Behavioral Verification
 
-**Test Cases**:
-1. **编译成功测试**: 修复后的代码应该能够成功编译，没有任何错误
-2. **API 验证测试**: 所有 API 调用都应该指向 Forge 1.20.1 API 中实际存在的方法
-3. **类型安全测试**: 所有类型转换都应该是安全的，没有类型不匹配错误
+After compilation success, verify behavioral preservation:
 
-### Preservation Checking
+1. **Start Test Server**: Launch Minecraft server with Forge connector
+2. **Connect WebSocket Client**: Establish connection to management server
+3. **Execute Test Operations**: Run all WebSocket operations
+4. **Verify Responses**: Compare JSON responses to expected structures
+5. **Monitor Events**: Verify events are forwarded correctly
+6. **Test Commands**: Execute commands and verify results
 
-**Goal**: 验证对于所有不涉及 API 调用替换的代码逻辑，修复后的代码产生与原代码相同的行为。
+### Regression Testing
 
-**Pseudocode:**
-```
-FOR ALL functionality WHERE NOT affectedByAPIFix(functionality) DO
-  ASSERT behaviorAfterFix(functionality) = behaviorBeforeFix(functionality)
-END FOR
-```
+Maintain a test suite of:
+- 50+ unit tests covering all API changes
+- 20 property-based tests (one per correctness property)
+- 12 integration tests (one per WebSocket operation)
+- 5 event tests (join, leave, chat, start, stop)
 
-**Testing Approach**: 由于这是 API 替换而非逻辑修改，保持性测试主要关注功能行为是否保持不变。推荐使用集成测试和手动测试来验证。
+All tests must pass before deployment.
 
-**Test Plan**: 在修复后的代码上运行功能测试，观察所有功能是否按预期工作。
-
-**Test Cases**:
-1. **WebSocket 消息处理保持性**: 验证所有消息类型（player.list, player.info 等）的处理逻辑和响应格式保持不变
-2. **事件处理保持性**: 验证玩家加入、离开、聊天等事件的处理和转发逻辑保持不变
-3. **命令功能保持性**: 验证所有命令（status, reconnect, info 等）的功能保持不变
-4. **配置读取保持性**: 验证配置文件的读取和使用保持不变
-5. **JSON 格式保持性**: 验证生成的 JSON 数据结构与修复前完全一致
-6. **通信协议保持性**: 验证与管理服务器的通信协议保持不变
-
-### Unit Tests
-
-- 测试每个修复的 API 调用是否返回预期的数据类型
-- 测试配置类的新 getter 方法是否返回正确的值
-- 测试类型转换的安全性（Entity 到 ServerPlayer）
-- 测试边界情况（null 值、空列表等）
-
-### Property-Based Tests
-
-- 生成随机的玩家数据，验证所有 API 调用都能正确处理
-- 生成随机的服务器状态，验证状态查询 API 的正确性
-- 测试在各种服务器配置下，配置读取逻辑的正确性
-
-### Integration Tests
-
-- 测试完整的 WebSocket 消息处理流程（从接收消息到发送响应）
-- 测试完整的事件处理流程（从事件触发到事件转发）
-- 测试完整的命令执行流程（从命令输入到命令响应）
-- 测试与真实 Forge 1.20.1 服务器的集成
-- 测试与管理服务器的完整通信流程

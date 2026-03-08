@@ -1224,25 +1224,59 @@ export class ServerManager {
         }
 
         try {
+          const requestTimeout = timeout || 30000;
+          const requestId = `cmd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          
           // Send command via connection
           const message = {
             type: 'request' as const,
-            id: `cmd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            id: requestId,
             op: 'command.execute',
-            data: { command, timeout },
+            data: { command, timeout: requestTimeout },
             serverId,
             timestamp: new Date().toISOString()
           };
 
+          // 修复虚假实现：使用 pendingRequests 等待实际响应
+          const responsePromise = new Promise<CommandResult>((resolve, reject) => {
+            const timeoutHandle = setTimeout(() => {
+              (connection as any).pendingRequests?.delete(requestId);
+              reject(new Error(`Command execution timeout after ${requestTimeout}ms`));
+            }, requestTimeout);
+            
+            (connection as any).pendingRequests?.set(requestId, {
+              resolve: (response: any) => {
+                clearTimeout(timeoutHandle);
+                // 解析响应数据
+                if (response.data?.success === false || response.data?.error) {
+                  resolve({
+                    success: false,
+                    output: response.data?.output || [],
+                    executionTime: response.data?.executionTime || 0,
+                    error: response.data?.error || 'Command execution failed'
+                  });
+                } else {
+                  resolve({
+                    success: true,
+                    output: response.data?.output || [`Command executed: ${command}`],
+                    executionTime: response.data?.executionTime || 0
+                  });
+                }
+              },
+              reject: (error: any) => {
+                clearTimeout(timeoutHandle);
+                reject(error);
+              },
+              timeout: timeoutHandle
+            });
+          });
+
+          // 发送请求
           await connection.send(message);
           
-          // For now, return a mock result
-          // In a real implementation, this would wait for the response
-          return {
-            success: true,
-            output: [`Command executed: ${command}`],
-            executionTime: 100
-          };
+          // 等待响应
+          return await responsePromise;
+          
         } catch (error) {
           return {
             success: false,

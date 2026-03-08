@@ -17,10 +17,11 @@ interface RateLimitEntry {
 export class RateLimitMiddleware implements HTTPMiddleware {
   private ipLimits = new Map<string, RateLimitEntry>();
   private userLimits = new Map<string, RateLimitEntry>();
+  private cleanupInterval?: NodeJS.Timeout;
 
   constructor(private config: RateLimitConfig) {
     // Clean up expired entries every minute
-    setInterval(() => {
+    this.cleanupInterval = setInterval(() => {
       this.cleanupExpiredEntries();
     }, 60000);
   }
@@ -105,5 +106,18 @@ export class RateLimitMiddleware implements HTTPMiddleware {
       message,
       timestamp: Date.now()
     }));
+  }
+
+  /**
+   * Cleanup resources
+   */
+  cleanup(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = undefined;
+    }
+    
+    this.ipLimits.clear();
+    this.userLimits.clear();
   }
 }

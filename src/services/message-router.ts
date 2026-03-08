@@ -10,6 +10,7 @@ import { BindingManager, MessageFilter } from './binding';
 import { EventService } from './event';
 import { AuditService } from './audit';
 import { EventEmitter } from 'events';
+import { escapeHtml, sanitizeUserInput, validateMessageFormat } from '../utils/security';
 
 // ============================================================================
 // Types and Interfaces
@@ -86,6 +87,8 @@ export class MessageRouter extends EventEmitter {
   ) {
     super();
     this.setupEventListeners();
+    // 修复问题 #8: 启动缓存清理
+    this.startCacheCleanup();
   }
 
   // ============================================================================
@@ -138,21 +141,29 @@ export class MessageRouter extends EventEmitter {
     this.logger.debug(`Routing event from server ${event.serverId}: ${event.eventType}`);
 
     try {
+      // 修复问题 #3: 统一时间戳格式为 ISO 8601 字符串
+      const normalizedEvent: ServerEvent = {
+        ...event,
+        timestamp: typeof event.timestamp === 'number' 
+          ? new Date(event.timestamp).toISOString() 
+          : event.timestamp
+      };
+
       // Get event bindings for this server
-      const groupIds = await this.bindingManager.getServerGroups(event.serverId, 'event');
+      const groupIds = await this.bindingManager.getServerGroups(normalizedEvent.serverId, 'event');
       
       if (groupIds.length === 0) {
-        this.logger.debug(`No event bindings found for server ${event.serverId}`);
+        this.logger.debug(`No event bindings found for server ${normalizedEvent.serverId}`);
         return;
       }
 
       // Process event for each bound group
       for (const groupId of groupIds) {
         try {
-          await this.processServerToGroupEvent(event, groupId);
+          await this.processServerToGroupEvent(normalizedEvent, groupId);
           this.routingStats.eventsRouted24h++;
-          this.routingStats.messagesByServer[event.serverId] = 
-            (this.routingStats.messagesByServer[event.serverId] || 0) + 1;
+          this.routingStats.messagesByServer[normalizedEvent.serverId] = 
+            (this.routingStats.messagesByServer[normalizedEvent.serverId] || 0) + 1;
         } catch (error) {
           this.logger.error(`Failed to route event to group ${groupId}:`, error);
           this.routingStats.routingErrors24h++;
@@ -161,7 +172,7 @@ export class MessageRouter extends EventEmitter {
 
       // Update binding activity
       for (const groupId of groupIds) {
-        await this.bindingManager.updateBindingActivity(groupId, event.serverId, 'event');
+        await this.bindingManager.updateBindingActivity(groupId, normalizedEvent.serverId, 'event');
       }
 
     } catch (error) {
@@ -370,37 +381,68 @@ export class MessageRouter extends EventEmitter {
   }
 
   /**
-   * Format message for server
+   * 修复问题 #16: Format message for server with XSS protection
    */
   private formatMessage(content: string, message: IncomingMessage, format?: string): string {
+    // 清理用户输入，防止 XSS
+    const safeContent = sanitizeUserInput(content, { maxLength: 2000, allowNewlines: true });
+    const safeUsername = sanitizeUserInput(message.userName, { maxLength: 32 });
+    const safeGroupId = sanitizeUserInput(message.groupId, { maxLength: 64 });
+
     if (!format) {
-      return `[${message.userName}] ${content}`;
+      return `[${safeUsername}] ${safeContent}`;
     }
 
-    return format
-      .replace('{username}', message.userName)
-      .replace('{content}', content)
-      .replace('{group}', message.groupId)
+    // 验证消息格式模板
+    const validation = validateMessageFormat(format);
+    if (!validation.valid) {
+      this.logger.warn(`Invalid message format: ${validation.error}`);
+      // 使用默认格式
+      return `[${safeUsername}] ${safeContent}`;
+    }
+
+    // 使用清理后的格式
+    const safeFormat = validation.sanitized || format;
+
+    return safeFormat
+      .replace('{username}', safeUsername)
+      .replace('{content}', safeContent)
+      .replace('{group}', safeGroupId)
       .replace('{time}', new Date(message.timestamp).toLocaleTimeString());
   }
 
   /**
-   * Format event message for group
+   * 修复问题 #16: Format event message for group with XSS protection
    */
   private formatEventMessage(event: ServerEvent, format?: string): string {
+    // 清理服务器 ID
+    const safeServerId = sanitizeUserInput(event.serverId, { maxLength: 64 });
+    const safeEventType = sanitizeUserInput(event.eventType, { maxLength: 64 });
+
     if (!format) {
-      return `[${event.serverId}] ${event.eventType}: ${JSON.stringify(event.data)}`;
+      return `[${safeServerId}] ${safeEventType}: ${JSON.stringify(event.data)}`;
     }
 
-    let formatted = format
-      .replace('{server}', event.serverId)
-      .replace('{event}', event.eventType)
+    // 验证消息格式模板
+    const validation = validateMessageFormat(format);
+    if (!validation.valid) {
+      this.logger.warn(`Invalid event format: ${validation.error}`);
+      // 使用默认格式
+      return `[${safeServerId}] ${safeEventType}: ${JSON.stringify(event.data)}`;
+    }
+
+    // 使用清理后的格式
+    let formatted = (validation.sanitized || format)
+      .replace('{server}', safeServerId)
+      .replace('{event}', safeEventType)
       .replace('{time}', new Date(event.timestamp).toLocaleTimeString());
 
-    // Replace data fields
+    // Replace data fields with sanitized values
     if (event.data && typeof event.data === 'object') {
       Object.keys(event.data).forEach(key => {
-        formatted = formatted.replace(`{${key}}`, String(event.data[key]));
+        const value = String(event.data[key]);
+        const safeValue = sanitizeUserInput(value, { maxLength: 200 });
+        formatted = formatted.replace(`{${key}}`, safeValue);
       });
     }
 
@@ -412,6 +454,7 @@ export class MessageRouter extends EventEmitter {
   // ============================================================================
 
   private rateLimitCache = new Map<string, { count: number; resetTime: number }>();
+  private cleanupInterval?: NodeJS.Timeout;
 
   /**
    * Check rate limit for group-server pair
@@ -441,6 +484,38 @@ export class MessageRouter extends EventEmitter {
 
     current.count++;
     return true;
+  }
+
+  /**
+   * 修复问题 #8: 清理过期的速率限制缓存条目
+   */
+  private startCacheCleanup(): void {
+    // 每分钟清理一次过期条目
+    this.cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      let cleanedCount = 0;
+      
+      for (const [key, value] of this.rateLimitCache.entries()) {
+        if (now > value.resetTime) {
+          this.rateLimitCache.delete(key);
+          cleanedCount++;
+        }
+      }
+      
+      if (cleanedCount > 0) {
+        this.logger.debug(`Cleaned up ${cleanedCount} expired rate limit entries`);
+      }
+    }, 60000); // 每分钟执行一次
+  }
+
+  /**
+   * 停止缓存清理
+   */
+  private stopCacheCleanup(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = undefined;
+    }
   }
 
   // ============================================================================
@@ -477,7 +552,14 @@ export class MessageRouter extends EventEmitter {
    * Handle incoming server event (called by event service)
    */
   async handleServerEvent(event: ServerEvent): Promise<void> {
-    await this.routeServerEvent(event);
+    // 修复问题 #3: 确保时间戳格式正确
+    const normalizedEvent: ServerEvent = {
+      ...event,
+      timestamp: typeof event.timestamp === 'number' 
+        ? new Date(event.timestamp).toISOString() 
+        : event.timestamp
+    };
+    await this.routeServerEvent(normalizedEvent);
   }
 
   // ============================================================================
@@ -553,6 +635,8 @@ export class MessageRouter extends EventEmitter {
    */
   async cleanup(): Promise<void> {
     this.logger.info('Cleaning up message router...');
+    // 修复问题 #8: 停止缓存清理定时器
+    this.stopCacheCleanup();
     this.rateLimitCache.clear();
   }
 }

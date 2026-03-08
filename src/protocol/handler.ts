@@ -1,3 +1,33 @@
+import { Context } from 'koishi';
+import { Logger } from 'koishi';
+
+/**
+ * Protocol Handler Configuration and Logger
+ */
+export class ProtocolHandlerLogger {
+  private logger: Logger;
+
+  constructor(ctx: Context) {
+    this.logger = ctx.logger('mochi-link:protocol');
+  }
+
+  warn(message: string, ...args: any[]): void {
+    this.logger.warn(message, ...args);
+  }
+
+  error(message: string, ...args: any[]): void {
+    this.logger.error(message, ...args);
+  }
+
+  info(message: string, ...args: any[]): void {
+    this.logger.info(message, ...args);
+  }
+
+  debug(message: string, ...args: any[]): void {
+    this.logger.debug(message, ...args);
+  }
+}
+
 /**
  * U-WBP v2 Protocol Handler
  * 
@@ -71,10 +101,12 @@ export class ProtocolHandler {
   private pendingRequests = new Map<string, PendingRequest>();
   private requestQueue: UWBPRequest[] = [];
   private activeRequests = 0;
+  private logger?: ProtocolHandlerLogger;
 
   constructor(
     router?: MessageRouter,
-    config?: Partial<ProtocolHandlerConfig>
+    config?: Partial<ProtocolHandlerConfig>,
+    ctx?: any
   ) {
     this.router = router || new MessageRouter();
     this.config = {
@@ -91,6 +123,11 @@ export class ProtocolHandler {
       requestQueueSize: 1000,
       ...config
     };
+
+    // 修复问题 #9: 使用 Koishi logger 而不是 console
+    if (ctx) {
+      this.logger = new ProtocolHandlerLogger(ctx);
+    }
 
     this.setupDefaultHandlers();
   }
@@ -121,7 +158,10 @@ export class ProtocolHandler {
 
       // Log warnings if any
       if (deserializeResult.warnings && deserializeResult.warnings.length > 0) {
-        console.warn('Message validation warnings:', deserializeResult.warnings);
+        // 修复问题 #9: 使用 logger 而不是 console
+        if (this.logger) {
+          this.logger.warn('Message validation warnings:', deserializeResult.warnings);
+        }
       }
 
       // Route message
@@ -248,7 +288,10 @@ export class ProtocolHandler {
     const pendingRequest = this.pendingRequests.get(response.requestId);
     if (!pendingRequest) {
       // Response for unknown request - might be late or duplicate
-      console.warn(`Received response for unknown request: ${response.requestId}`);
+      // 修复问题 #9: 使用 logger 而不是 console
+      if (this.logger) {
+        this.logger.warn(`Received response for unknown request: ${response.requestId}`);
+      }
       return;
     }
 
@@ -306,7 +349,10 @@ export class ProtocolHandler {
     // Send to all connections in parallel
     const promises = connections.map(connection => 
       this.sendMessage(connection, event).catch(error => {
-        console.error(`Failed to send event to ${connection.serverId}:`, error);
+        // 修复问题 #9: 使用 logger 而不是 console
+        if (this.logger) {
+          this.logger.error(`Failed to send event to ${connection.serverId}:`, error);
+        }
       })
     );
 
@@ -389,13 +435,16 @@ export class ProtocolHandler {
     connection: Connection,
     originalMessage?: UWBPMessage
   ): Promise<void> {
+    // 修复问题 #9: 使用 logger 而不是 console
     if (this.config.logErrors) {
-      console.error('Protocol handler error:', {
-        error: error instanceof Error ? error.message : String(error),
-        serverId: connection.serverId,
-        messageId: originalMessage?.id,
-        operation: originalMessage?.op
-      });
+      if (this.logger) {
+        this.logger.error('Protocol handler error:', {
+          error: error instanceof Error ? error.message : String(error),
+          serverId: connection.serverId,
+          messageId: originalMessage?.id,
+          operation: originalMessage?.op
+        });
+      }
     }
 
     // Send error response for requests
@@ -410,7 +459,10 @@ export class ProtocolHandler {
       try {
         await this.sendMessage(connection, errorResponse);
       } catch (sendError) {
-        console.error('Failed to send error response:', sendError);
+        // 修复问题 #9: 使用 logger 而不是 console
+        if (this.logger) {
+          this.logger.error('Failed to send error response:', sendError);
+        }
       }
     }
   }

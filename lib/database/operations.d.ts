@@ -176,6 +176,39 @@ export declare class DatabaseManager {
     pendingOps: PendingOperationsManager;
     constructor(ctx: Context);
     /**
+     * 修复问题 #7: 创建服务器并生成令牌（事务包装）
+     * 确保服务器创建和令牌生成是原子操作
+     */
+    createServerWithToken(serverConfig: Omit<ServerConfig, 'createdAt' | 'updatedAt'>, token: string, tokenHash: string, ipWhitelist?: string[], encryptionConfig?: any, expiresAt?: Date): Promise<{
+        server: ServerConfig;
+        token: APIToken;
+    }>;
+    /**
+     * 修复问题 #7: 授予权限并记录审计日志（事务包装）
+     * 确保权限授予和审计日志记录是原子操作
+     */
+    grantPermissionWithAudit(userId: string, serverId: string, role: ServerRole, permissions: string[], grantedBy: string, auditContext?: {
+        ipAddress?: string;
+        userAgent?: string;
+    }, expiresAt?: Date): Promise<ServerACL>;
+    /**
+     * 修复问题 #7: 撤销权限并记录审计日志（事务包装）
+     */
+    revokePermissionWithAudit(userId: string, serverId: string, revokedBy: string, auditContext?: {
+        ipAddress?: string;
+        userAgent?: string;
+    }): Promise<boolean>;
+    /**
+     * 修复问题 #7: 删除服务器及其所有关联数据（事务包装）
+     * 确保服务器、令牌、ACL、绑定等都被正确删除
+     */
+    deleteServerWithRelations(serverId: string): Promise<{
+        serverDeleted: boolean;
+        tokensDeleted: number;
+        aclsDeleted: number;
+        bindingsDeleted: number;
+    }>;
+    /**
      * Perform database health check
      */
     healthCheck(): Promise<boolean>;

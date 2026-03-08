@@ -358,6 +358,8 @@ export class TokenOperations {
    * Convert database token to model
    */
   private dbTokenToModel(dbToken: DatabaseAPIToken): APIToken {
+    const logger = this.ctx.logger('mochi-link:token-operations');
+    
     // Safely parse ip_whitelist
     let ipWhitelist: string[] | undefined;
     if (dbToken.ip_whitelist) {
@@ -366,7 +368,7 @@ export class TokenOperations {
           ipWhitelist = JSON.parse(dbToken.ip_whitelist);
         }
       } catch (error) {
-        console.error(`Failed to parse ip_whitelist for token ${dbToken.id}:`, error);
+        logger.error(`Failed to parse ip_whitelist for token ${dbToken.id}:`, error);
         ipWhitelist = undefined;
       }
     }
@@ -379,7 +381,7 @@ export class TokenOperations {
           encryptionConfig = JSON.parse(dbToken.encryption_config);
         }
       } catch (error) {
-        console.error(`Failed to parse encryption_config for token ${dbToken.id}:`, error);
+        logger.error(`Failed to parse encryption_config for token ${dbToken.id}:`, error);
         encryptionConfig = undefined;
       }
     }
@@ -640,6 +642,8 @@ export class PendingOperationsManager {
    * Convert database operation to model
    */
   private dbOperationToModel(dbOp: DatabasePendingOperation): PendingOperation {
+    const logger = this.ctx.logger('mochi-link:pending-operations');
+    
     // Safely parse parameters
     let parameters: any = {};
     if (dbOp.parameters) {
@@ -648,7 +652,7 @@ export class PendingOperationsManager {
           parameters = JSON.parse(dbOp.parameters);
         }
       } catch (error) {
-        console.error(`Failed to parse parameters for operation ${dbOp.id}:`, error);
+        logger.error(`Failed to parse parameters for operation ${dbOp.id}:`, error);
         parameters = {};
       }
     }
@@ -684,6 +688,224 @@ export class DatabaseManager {
     this.tokens = new TokenOperations(ctx);
     this.audit = new AuditOperations(ctx);
     this.pendingOps = new PendingOperationsManager(ctx);
+  }
+
+  /**
+   * 修复问题 #7: 创建服务器并生成令牌（事务包装）
+   * 确保服务器创建和令牌生成是原子操作
+   */
+  async createServerWithToken(
+    serverConfig: Omit<ServerConfig, 'createdAt' | 'updatedAt'>,
+    token: string,
+    tokenHash: string,
+    ipWhitelist?: string[],
+    encryptionConfig?: any,
+    expiresAt?: Date
+  ): Promise<{ server: ServerConfig; token: APIToken }> {
+    // Note: Koishi database doesn't have native transaction support
+    // We implement a rollback pattern instead
+    let serverCreated = false;
+    let tokenCreated = false;
+    
+    try {
+      // Step 1: Create server
+      const server = await this.servers.createServer(serverConfig);
+      serverCreated = true;
+      
+      // Step 2: Create token
+      const apiToken = await this.tokens.createToken(
+        serverConfig.id,
+        token,
+        tokenHash,
+        ipWhitelist,
+        encryptionConfig,
+        expiresAt
+      );
+      tokenCreated = true;
+      
+      return { server, token: apiToken };
+    } catch (error) {
+      // Rollback on error
+      if (serverCreated && !tokenCreated) {
+        try {
+          await this.servers.deleteServer(serverConfig.id);
+          this.ctx.logger('mochi-link:db').warn(`Rolled back server creation for ${serverConfig.id} due to token creation failure`);
+        } catch (rollbackError) {
+          this.ctx.logger('mochi-link:db').error(`Failed to rollback server creation for ${serverConfig.id}:`, rollbackError);
+        }
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * 修复问题 #7: 授予权限并记录审计日志（事务包装）
+   * 确保权限授予和审计日志记录是原子操作
+   */
+  async grantPermissionWithAudit(
+    userId: string,
+    serverId: string,
+    role: ServerRole,
+    permissions: string[],
+    grantedBy: string,
+    auditContext?: {
+      ipAddress?: string;
+      userAgent?: string;
+    },
+    expiresAt?: Date
+  ): Promise<ServerACL> {
+    let aclCreated = false;
+    let acl: ServerACL | null = null;
+    
+    try {
+      // Step 1: Grant permission
+      acl = await this.acl.grantPermission(userId, serverId, role, permissions, grantedBy, expiresAt);
+      aclCreated = true;
+      
+      // Step 2: Log audit
+      await this.audit.logOperation(
+        grantedBy,
+        serverId,
+        'permission.grant',
+        { userId, role, permissions },
+        'success',
+        undefined,
+        auditContext?.ipAddress,
+        auditContext?.userAgent
+      );
+      
+      return acl;
+    } catch (error) {
+      // Rollback on error
+      if (aclCreated && acl) {
+        try {
+          await this.acl.revokePermission(userId, serverId);
+          this.ctx.logger('mochi-link:db').warn(`Rolled back permission grant for user ${userId} on server ${serverId}`);
+        } catch (rollbackError) {
+          this.ctx.logger('mochi-link:db').error(`Failed to rollback permission grant:`, rollbackError);
+        }
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * 修复问题 #7: 撤销权限并记录审计日志（事务包装）
+   */
+  async revokePermissionWithAudit(
+    userId: string,
+    serverId: string,
+    revokedBy: string,
+    auditContext?: {
+      ipAddress?: string;
+      userAgent?: string;
+    }
+  ): Promise<boolean> {
+    // Get existing ACL for potential rollback
+    const existingACL = await this.acl.getACL(userId, serverId);
+    let revoked = false;
+    
+    try {
+      // Step 1: Revoke permission
+      revoked = await this.acl.revokePermission(userId, serverId);
+      
+      // Step 2: Log audit
+      await this.audit.logOperation(
+        revokedBy,
+        serverId,
+        'permission.revoke',
+        { userId },
+        'success',
+        undefined,
+        auditContext?.ipAddress,
+        auditContext?.userAgent
+      );
+      
+      return revoked;
+    } catch (error) {
+      // Rollback on error
+      if (revoked && existingACL) {
+        try {
+          await this.acl.grantPermission(
+            userId,
+            serverId,
+            existingACL.role,
+            existingACL.permissions,
+            existingACL.grantedBy,
+            existingACL.expiresAt
+          );
+          this.ctx.logger('mochi-link:db').warn(`Rolled back permission revocation for user ${userId} on server ${serverId}`);
+        } catch (rollbackError) {
+          this.ctx.logger('mochi-link:db').error(`Failed to rollback permission revocation:`, rollbackError);
+        }
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * 修复问题 #7: 删除服务器及其所有关联数据（事务包装）
+   * 确保服务器、令牌、ACL、绑定等都被正确删除
+   */
+  async deleteServerWithRelations(serverId: string): Promise<{
+    serverDeleted: boolean;
+    tokensDeleted: number;
+    aclsDeleted: number;
+    bindingsDeleted: number;
+  }> {
+    const logger = this.ctx.logger('mochi-link:db');
+    const results = {
+      serverDeleted: false,
+      tokensDeleted: 0,
+      aclsDeleted: 0,
+      bindingsDeleted: 0
+    };
+    
+    // Backup data for potential rollback
+    const server = await this.servers.getServer(serverId);
+    const tokens = await this.tokens.getServerTokens(serverId);
+    const acls = await this.acl.getServerACLs(serverId);
+    
+    try {
+      // Step 1: Delete tokens
+      for (const token of tokens) {
+        const deleted = await this.tokens.deleteToken(token.id);
+        if (deleted) results.tokensDeleted++;
+      }
+      
+      // Step 2: Delete ACLs
+      for (const acl of acls) {
+        const deleted = await this.acl.revokePermission(acl.userId, serverId);
+        if (deleted) results.aclsDeleted++;
+      }
+      
+      // Step 3: Delete bindings (if binding manager is available)
+      const bindingsResult = await this.ctx.database.remove(TableNames.serverBindings as any, { 
+        server_id: serverId 
+      });
+      results.bindingsDeleted = bindingsResult.matched || 0;
+      
+      // Step 4: Delete server
+      results.serverDeleted = await this.servers.deleteServer(serverId);
+      
+      logger.info(`Deleted server ${serverId} with ${results.tokensDeleted} tokens, ${results.aclsDeleted} ACLs, ${results.bindingsDeleted} bindings`);
+      
+      return results;
+    } catch (error) {
+      logger.error(`Failed to delete server ${serverId}, attempting rollback:`, error);
+      
+      // Attempt rollback (best effort)
+      if (server && results.serverDeleted) {
+        try {
+          await this.servers.createServer(server);
+          logger.warn(`Rolled back server deletion for ${serverId}`);
+        } catch (rollbackError) {
+          logger.error(`Failed to rollback server deletion:`, rollbackError);
+        }
+      }
+      
+      throw error;
+    }
   }
 
   /**

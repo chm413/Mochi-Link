@@ -3,6 +3,8 @@ package com.mochilink.connector.protocol;
 import com.mochilink.connector.MochiLinkPlugin;
 import com.mochilink.connector.protocol.UWBPv2Protocol.ProtocolMessage;
 import com.mochilink.connector.subscription.EventSubscription;
+import com.mochilink.connector.utils.InputValidator;
+import com.mochilink.connector.utils.InputValidator.ValidationResult;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -179,10 +181,13 @@ public class MessageHandler {
         String command = message.getDataString("command");
         String executor = message.getDataString("executor");
         
-        if (command == null || command.trim().isEmpty()) {
-            sendCommandResponse(requestId, false, "", "Command is empty");
+        // Validate command
+        ValidationResult<String> commandResult = InputValidator.validateCommand(command);
+        if (!commandResult.isValid()) {
+            sendCommandResponse(requestId, false, "", commandResult.getError());
             return;
         }
+        final String validCommand = commandResult.getValue();
         
         // Check if console commands are allowed
         if (!plugin.getPluginConfig().isAllowConsoleCommands()) {
@@ -191,19 +196,19 @@ public class MessageHandler {
         }
         
         // Check command blacklist
-        String baseCommand = command.split(" ")[0].toLowerCase();
+        String baseCommand = validCommand.split(" ")[0].toLowerCase();
         if (plugin.getPluginConfig().isCommandBlacklisted(baseCommand)) {
             sendCommandResponse(requestId, false, "", "Command is blacklisted");
             return;
         }
         
-        logger.info(String.format("Executing remote command: %s (requested by: %s)", command, executor));
+        logger.info(String.format("Executing remote command: %s (requested by: %s)", validCommand, executor));
         
         // Execute command on main thread
         new BukkitRunnable() {
             @Override
             public void run() {
-                executeCommand(requestId, command);
+                executeCommand(requestId, validCommand);
             }
         }.runTask(plugin);
     }
@@ -262,8 +267,15 @@ public class MessageHandler {
         String requestId = message.getId();
         String playerId = message.getDataString("playerId");
         
+        // Validate playerId
+        ValidationResult<String> playerIdResult = InputValidator.validatePlayerId(playerId);
+        if (!playerIdResult.isValid()) {
+            sendErrorResponse(requestId, "player.info", playerIdResult.getError());
+            return;
+        }
+        
         try {
-            org.bukkit.entity.Player player = plugin.getServer().getPlayer(java.util.UUID.fromString(playerId));
+            org.bukkit.entity.Player player = plugin.getServer().getPlayer(java.util.UUID.fromString(playerIdResult.getValue()));
             
             if (player == null) {
                 sendErrorResponse(requestId, "player.info", "Player not found");
@@ -317,12 +329,19 @@ public class MessageHandler {
         String playerId = message.getDataString("playerId");
         String reason = message.getDataString("reason");
         
-        if (reason == null || reason.isEmpty()) {
-            reason = "Kicked by administrator";
+        // Validate playerId
+        ValidationResult<String> playerIdResult = InputValidator.validatePlayerId(playerId);
+        if (!playerIdResult.isValid()) {
+            sendErrorResponse(requestId, "player.kick", playerIdResult.getError());
+            return;
         }
         
+        // Validate and sanitize reason
+        ValidationResult<String> reasonResult = InputValidator.validateReason(reason);
+        final String sanitizedReason = reasonResult.getValue();
+        
         try {
-            org.bukkit.entity.Player player = plugin.getServer().getPlayer(java.util.UUID.fromString(playerId));
+            org.bukkit.entity.Player player = plugin.getServer().getPlayer(java.util.UUID.fromString(playerIdResult.getValue()));
             
             if (player == null) {
                 sendErrorResponse(requestId, "player.kick", "Player not found");
@@ -330,17 +349,16 @@ public class MessageHandler {
             }
             
             String playerName = player.getName();
-            final String kickReason = reason;
             
             // Kick on main thread
             plugin.getServer().getScheduler().runTask(plugin, () -> {
-                player.kickPlayer(kickReason);
+                player.kickPlayer(sanitizedReason);
             });
             
             JsonObject responseData = new JsonObject();
             responseData.addProperty("success", true);
             responseData.addProperty("playerName", playerName);
-            responseData.addProperty("reason", kickReason);
+            responseData.addProperty("reason", sanitizedReason);
             
             String response = protocol.createResponseMessage(
                 requestId, "player.kick", responseData.toString()
@@ -393,6 +411,26 @@ public class MessageHandler {
         String playerName = message.getDataString("playerName");
         String playerId = message.getDataString("playerId");
         
+        // Validate playerName if provided
+        if (playerName != null && !playerName.isEmpty()) {
+            ValidationResult<String> nameResult = InputValidator.validatePlayerName(playerName);
+            if (!nameResult.isValid()) {
+                sendErrorResponse(requestId, "whitelist.add", nameResult.getError());
+                return;
+            }
+            playerName = nameResult.getValue();
+        }
+        
+        // Validate playerId if provided
+        if (playerId != null && !playerId.isEmpty()) {
+            ValidationResult<String> idResult = InputValidator.validatePlayerId(playerId);
+            if (!idResult.isValid()) {
+                sendErrorResponse(requestId, "whitelist.add", idResult.getError());
+                return;
+            }
+            playerId = idResult.getValue();
+        }
+        
         try {
             org.bukkit.OfflinePlayer player;
             
@@ -430,6 +468,26 @@ public class MessageHandler {
         String requestId = message.getId();
         String playerName = message.getDataString("playerName");
         String playerId = message.getDataString("playerId");
+        
+        // Validate playerName if provided
+        if (playerName != null && !playerName.isEmpty()) {
+            ValidationResult<String> nameResult = InputValidator.validatePlayerName(playerName);
+            if (!nameResult.isValid()) {
+                sendErrorResponse(requestId, "whitelist.remove", nameResult.getError());
+                return;
+            }
+            playerName = nameResult.getValue();
+        }
+        
+        // Validate playerId if provided
+        if (playerId != null && !playerId.isEmpty()) {
+            ValidationResult<String> idResult = InputValidator.validatePlayerId(playerId);
+            if (!idResult.isValid()) {
+                sendErrorResponse(requestId, "whitelist.remove", idResult.getError());
+                return;
+            }
+            playerId = idResult.getValue();
+        }
         
         try {
             org.bukkit.OfflinePlayer player;
@@ -657,10 +715,13 @@ public class MessageHandler {
         String command = message.getDataString("command");
         String executor = message.getDataString("executor");
         
-        if (command == null || command.trim().isEmpty()) {
-            sendCommandResponse(commandId, false, "", "Command is empty");
+        // Validate command
+        ValidationResult<String> commandResult = InputValidator.validateCommand(command);
+        if (!commandResult.isValid()) {
+            sendCommandResponse(commandId, false, "", commandResult.getError());
             return;
         }
+        final String validCommand = commandResult.getValue();
         
         // Check if console commands are allowed
         if (!plugin.getPluginConfig().isAllowConsoleCommands()) {
@@ -669,19 +730,19 @@ public class MessageHandler {
         }
         
         // Check command blacklist
-        String baseCommand = command.split(" ")[0].toLowerCase();
+        String baseCommand = validCommand.split(" ")[0].toLowerCase();
         if (plugin.getPluginConfig().isCommandBlacklisted(baseCommand)) {
             sendCommandResponse(commandId, false, "", "Command is blacklisted");
             return;
         }
         
-        logger.info(String.format("Executing remote command: %s (requested by: %s)", command, executor));
+        logger.info(String.format("Executing remote command: %s (requested by: %s)", validCommand, executor));
         
         // Execute command on main thread
         new BukkitRunnable() {
             @Override
             public void run() {
-                executeCommand(commandId, command);
+                executeCommand(commandId, validCommand);
             }
         }.runTask(plugin);
     }
@@ -829,13 +890,23 @@ public class MessageHandler {
         String playerId = message.getDataString("playerId");
         String messageText = message.getDataString("message");
         
-        if (messageText == null || messageText.isEmpty()) {
-            sendErrorResponse(requestId, "player.message", "Missing message parameter");
+        // Validate playerId
+        ValidationResult<String> playerIdResult = InputValidator.validatePlayerId(playerId);
+        if (!playerIdResult.isValid()) {
+            sendErrorResponse(requestId, "player.message", playerIdResult.getError());
             return;
         }
         
+        // Validate and sanitize message
+        ValidationResult<String> messageResult = InputValidator.validateMessage(messageText);
+        if (!messageResult.isValid()) {
+            sendErrorResponse(requestId, "player.message", messageResult.getError());
+            return;
+        }
+        final String sanitizedMessage = messageResult.getValue();
+        
         try {
-            org.bukkit.entity.Player player = plugin.getServer().getPlayer(java.util.UUID.fromString(playerId));
+            org.bukkit.entity.Player player = plugin.getServer().getPlayer(java.util.UUID.fromString(playerIdResult.getValue()));
             
             if (player == null) {
                 sendErrorResponse(requestId, "player.message", "Player not found");
@@ -846,7 +917,7 @@ public class MessageHandler {
             
             // Send message on main thread
             plugin.getServer().getScheduler().runTask(plugin, () -> {
-                player.sendMessage(messageText);
+                player.sendMessage(sanitizedMessage);
             });
             
             JsonObject responseData = new JsonObject();

@@ -46,10 +46,9 @@ jobs:
       - name: Build with Gradle
         working-directory: connectors/${{ matrix.connector }}
         run: gradle build --no-daemon --warning-mode all
-        continue-on-error: ${{ matrix.connector == 'nukkit' }}
       
       - name: Upload artifacts
-        if: success() || matrix.connector == 'nukkit'
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.connector }}-connector
