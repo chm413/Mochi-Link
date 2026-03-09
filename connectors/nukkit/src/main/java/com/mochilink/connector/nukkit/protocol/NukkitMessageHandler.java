@@ -634,13 +634,13 @@ public class NukkitMessageHandler {
             
             // Get ban list from server
             if ("ip".equalsIgnoreCase(banType)) {
-                server.getIPBans().getEntries().keySet().forEach(ip -> {
+                server.getIPBans().getAll().keySet().forEach(ip -> {
                     JsonObject banObj = new JsonObject();
                     banObj.addProperty("target", ip);
                     banlistArray.add(banObj);
                 });
             } else {
-                server.getNameBans().getEntries().keySet().forEach(name -> {
+                server.getNameBans().getAll().keySet().forEach(name -> {
                     JsonObject banObj = new JsonObject();
                     banObj.addProperty("target", name);
                     banlistArray.add(banObj);
