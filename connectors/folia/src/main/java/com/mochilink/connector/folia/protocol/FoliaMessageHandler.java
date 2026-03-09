@@ -699,7 +699,8 @@ public class FoliaMessageHandler {
                 banList = plugin.getServer().getBanList(org.bukkit.BanList.Type.NAME);
             }
             
-            for (org.bukkit.BanEntry entry : banList.getBanEntries()) {
+            for (Object entryObj : banList.getBanEntries()) {
+                org.bukkit.BanEntry<?> entry = (org.bukkit.BanEntry<?>) entryObj;
                 JsonObject banObj = new JsonObject();
                 banObj.addProperty("target", entry.getTarget());
                 banObj.addProperty("reason", entry.getReason());
