@@ -229,8 +229,8 @@ public class MochiLinkForgeCommand {
         
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         
-        subscriptions.forEach((subId, subscription) -> {
-            sendMessage(ctx, "§eID: §f" + subId);
+        subscriptions.forEach(subscription -> {
+            sendMessage(ctx, "§eID: §f" + subscription.getId());
             sendMessage(ctx, "§7  Events: " + String.join(", ", subscription.getEventTypes()));
             
             if (!subscription.getFilters().isEmpty()) {

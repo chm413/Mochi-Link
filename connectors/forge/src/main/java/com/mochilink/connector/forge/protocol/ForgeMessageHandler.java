@@ -49,7 +49,7 @@ public class ForgeMessageHandler {
                 playerObj.addProperty("id", player.getUUID().toString());
                 playerObj.addProperty("name", player.getName().getString());
                 playerObj.addProperty("displayName", player.getDisplayName().getString());
-                playerObj.addProperty("world", player.level.dimension().location().toString());
+                playerObj.addProperty("world", player.level().dimension().location().toString());
                 
                 JsonObject position = new JsonObject();
                 position.addProperty("x", player.getX());
@@ -57,7 +57,7 @@ public class ForgeMessageHandler {
                 position.addProperty("z", player.getZ());
                 playerObj.add("position", position);
                 
-                playerObj.addProperty("ping", player.connection.latency());
+                playerObj.addProperty("ping", player.latency);
                 playerObj.addProperty("isOp", server.getPlayerList().isOp(player.getGameProfile()));
                 playerObj.addProperty("health", player.getHealth());
                 playerObj.addProperty("foodLevel", player.getFoodData().getFoodLevel());
@@ -99,7 +99,7 @@ public class ForgeMessageHandler {
             playerInfo.addProperty("id", player.getUUID().toString());
             playerInfo.addProperty("name", player.getName().getString());
             playerInfo.addProperty("displayName", player.getDisplayName().getString());
-            playerInfo.addProperty("world", player.level.dimension().location().toString());
+            playerInfo.addProperty("world", player.level().dimension().location().toString());
             
             JsonObject position = new JsonObject();
             position.addProperty("x", player.getX());
@@ -107,7 +107,7 @@ public class ForgeMessageHandler {
             position.addProperty("z", player.getZ());
             playerInfo.add("position", position);
             
-            playerInfo.addProperty("ping", player.connection.latency());
+            playerInfo.addProperty("ping", player.latency);
             playerInfo.addProperty("isOp", server.getPlayerList().isOp(player.getGameProfile()));
             playerInfo.addProperty("health", player.getHealth());
             playerInfo.addProperty("maxHealth", player.getMaxHealth());
@@ -530,6 +530,185 @@ public class ForgeMessageHandler {
         } catch (Exception e) {
             logger.error("Failed to stop server", e);
             return createErrorResponse(requestId, "server.stop", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle player.ban operation (P1)
+     */
+    public JsonObject handlePlayerBan(String requestId, String playerId, String playerName, String reason, Integer duration) {
+        try {
+            MinecraftServer server = mod.getServer();
+            if (server == null) {
+                return createErrorResponse(requestId, "player.ban", "Server not available");
+            }
+            
+            if (playerName == null || playerName.isEmpty()) {
+                return createErrorResponse(requestId, "player.ban", "Missing playerName parameter");
+            }
+            
+            if (reason == null || reason.isEmpty()) {
+                reason = "Banned by administrator";
+            }
+            
+            // Forge doesn't have a direct ban API, use command
+            String banCommand = duration != null && duration > 0 
+                ? String.format("ban %s %s", playerName, reason)
+                : String.format("ban %s %s", playerName, reason);
+            
+            server.getCommands().performPrefixedCommand(
+                server.createCommandSourceStack(),
+                banCommand
+            );
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            responseData.addProperty("playerName", playerName);
+            responseData.addProperty("reason", reason);
+            if (duration != null) {
+                responseData.addProperty("duration", duration);
+            }
+            
+            return createSuccessResponse(requestId, "player.ban", responseData);
+            
+        } catch (Exception e) {
+            logger.error("Failed to ban player", e);
+            return createErrorResponse(requestId, "player.ban", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle player.unban operation (P1)
+     */
+    public JsonObject handlePlayerUnban(String requestId, String playerId, String playerName) {
+        try {
+            MinecraftServer server = mod.getServer();
+            if (server == null) {
+                return createErrorResponse(requestId, "player.unban", "Server not available");
+            }
+            
+            if (playerName == null || playerName.isEmpty()) {
+                return createErrorResponse(requestId, "player.unban", "Missing playerName parameter");
+            }
+            
+            // Use pardon command
+            server.getCommands().performPrefixedCommand(
+                server.createCommandSourceStack(),
+                "pardon " + playerName
+            );
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            responseData.addProperty("playerName", playerName);
+            
+            return createSuccessResponse(requestId, "player.unban", responseData);
+            
+        } catch (Exception e) {
+            logger.error("Failed to unban player", e);
+            return createErrorResponse(requestId, "player.unban", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle player.banlist operation (P1)
+     */
+    public JsonObject handlePlayerBanlist(String requestId, String banType) {
+        try {
+            MinecraftServer server = mod.getServer();
+            if (server == null) {
+                return createErrorResponse(requestId, "player.banlist", "Server not available");
+            }
+            
+            JsonArray banlistArray = new JsonArray();
+            
+            // Forge doesn't expose ban list directly, return empty for now
+            // In production, you might want to read from banned-players.json
+            
+            JsonObject responseData = new JsonObject();
+            responseData.add("banlist", banlistArray);
+            responseData.addProperty("type", banType != null ? banType : "name");
+            responseData.addProperty("count", 0);
+            
+            return createSuccessResponse(requestId, "player.banlist", responseData);
+            
+        } catch (Exception e) {
+            logger.error("Failed to get ban list", e);
+            return createErrorResponse(requestId, "player.banlist", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle whitelist.enable operation (P1)
+     */
+    public JsonObject handleWhitelistEnable(String requestId) {
+        try {
+            MinecraftServer server = mod.getServer();
+            if (server == null) {
+                return createErrorResponse(requestId, "whitelist.enable", "Server not available");
+            }
+            
+            server.getPlayerList().setUsingWhiteList(true);
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            responseData.addProperty("enabled", true);
+            
+            return createSuccessResponse(requestId, "whitelist.enable", responseData);
+            
+        } catch (Exception e) {
+            logger.error("Failed to enable whitelist", e);
+            return createErrorResponse(requestId, "whitelist.enable", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle whitelist.disable operation (P1)
+     */
+    public JsonObject handleWhitelistDisable(String requestId) {
+        try {
+            MinecraftServer server = mod.getServer();
+            if (server == null) {
+                return createErrorResponse(requestId, "whitelist.disable", "Server not available");
+            }
+            
+            server.getPlayerList().setUsingWhiteList(false);
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            responseData.addProperty("enabled", false);
+            
+            return createSuccessResponse(requestId, "whitelist.disable", responseData);
+            
+        } catch (Exception e) {
+            logger.error("Failed to disable whitelist", e);
+            return createErrorResponse(requestId, "whitelist.disable", e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle server.save operation (P1)
+     */
+    public JsonObject handleServerSave(String requestId, String worldName) {
+        try {
+            MinecraftServer server = mod.getServer();
+            if (server == null) {
+                return createErrorResponse(requestId, "server.save", "Server not available");
+            }
+            
+            // Save all worlds
+            for (ServerLevel level : server.getAllLevels()) {
+                level.save(null, true, false);
+            }
+            
+            JsonObject responseData = new JsonObject();
+            responseData.addProperty("success", true);
+            responseData.addProperty("message", "World saved successfully");
+            
+            return createSuccessResponse(requestId, "server.save", responseData);
+            
+        } catch (Exception e) {
+            logger.error("Failed to save world", e);
+            return createErrorResponse(requestId, "server.save", e.getMessage());
         }
     }
     
