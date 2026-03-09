@@ -146,21 +146,25 @@ export class CommandHandler {
             return 'Usage: config <get|set> [key] [value]';
         }
         
-        const action = args[0].toLowerCase();
+        const action = args[0]?.toLowerCase();
+        
+        if (!action) {
+            return 'Usage: config <get|set> [key] [value]';
+        }
         
         switch (action) {
             case 'get':
                 if (args.length === 1) {
                     return this.showAllConfig();
                 } else {
-                    return this.getConfigValue(args[1]);
+                    return this.getConfigValue(args[1] ?? '');
                 }
                 
             case 'set':
                 if (args.length < 3) {
                     return 'Usage: config set <key> <value>';
                 }
-                return this.setConfigValue(args[1], args[2]);
+                return this.setConfigValue(args[1] ?? '', args[2] ?? '');
                 
             default:
                 return `Unknown config action: ${action}\nAvailable actions: get, set`;
@@ -240,7 +244,11 @@ export class CommandHandler {
             return output;
         }
         
-        const action = args[0].toLowerCase();
+        const action = args[0]?.toLowerCase();
+        
+        if (!action) {
+            return this.handleReconnectionControl([]);
+        }
         
         switch (action) {
             case 'enable':

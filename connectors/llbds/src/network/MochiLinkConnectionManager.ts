@@ -347,7 +347,7 @@ export class MochiLinkConnectionManager extends EventEmitter {
     /**
      * Handle disconnect request
      */
-    private handleDisconnectRequest(message: any): void {
+    private handleDisconnectRequest(_message: any): void {
         this.logger.info('Received disconnect request from server');
         this.disconnect();
     }

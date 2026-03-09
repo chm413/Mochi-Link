@@ -402,12 +402,12 @@ class MochiLinkExternalService {
             
             await this.connectionManager.send(response);
             
-        } catch (error) {
+        } catch (error: unknown) {
             const response = {
                 type: 'response',
                 id: message.id,
                 success: false,
-                error: error.message,
+                error: error instanceof Error ? error.message : String(error),
                 timestamp: new Date().toISOString()
             };
             
