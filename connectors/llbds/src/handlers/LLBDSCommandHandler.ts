@@ -59,14 +59,14 @@ export class LLBDSCommandHandler {
      */
     private registerMochiLinkCommand(): void {
         if (typeof mc !== 'undefined' && mc.regPlayerCmd) {
-            mc.regPlayerCmd('mochilink', 'Mochi-Link connector management', (player: any, args: string[]) => {
+            mc.regPlayerCmd('mochilink', 'Mochi-Link connector management', (player: any, args: string[] = []) => {
                 try {
                     if (args.length === 0) {
                         this.sendHelpMessage(player);
                         return;
                     }
                     
-                    const subCommand = args[0].toLowerCase();
+                    const subCommand = args[0]?.toLowerCase();
                     
                     switch (subCommand) {
                         case 'status':
@@ -105,7 +105,7 @@ export class LLBDSCommandHandler {
         
         // Also register console command
         if (typeof mc !== 'undefined' && mc.regConsoleCmd) {
-            mc.regConsoleCmd('mochilink', 'Mochi-Link connector management', (args: string[]) => {
+            mc.regConsoleCmd('mochilink', 'Mochi-Link connector management', (args: string[] = []) => {
                 try {
                     if (args.length === 0) {
                         logger.info('Mochi-Link Console Commands:');
@@ -116,7 +116,7 @@ export class LLBDSCommandHandler {
                         return;
                     }
                     
-                    const subCommand = args[0].toLowerCase();
+                    const subCommand = args[0]?.toLowerCase();
                     
                     switch (subCommand) {
                         case 'status':

@@ -77,9 +77,9 @@ if (typeof module !== 'undefined' && module.exports) {
  * This class runs inside the LLBDS process and provides minimal overhead
  */
 export class MochiLinkLLBDSPlugin {
-    private lseBridge: LSEBridge;
-    private eventHandler: LLBDSEventHandler;
-    private commandHandler: LLBDSCommandHandler;
+    private lseBridge!: LSEBridge;
+    private eventHandler!: LLBDSEventHandler;
+    private commandHandler!: LLBDSCommandHandler;
     private config: LLBDSConfig;
     
     private isEnabled: boolean = false;

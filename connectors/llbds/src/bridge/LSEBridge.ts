@@ -19,10 +19,6 @@ export class LSEBridge {
     // Event callbacks
     private eventCallbacks: Map<string, Function[]> = new Map();
     
-    // Command queue for external service
-    private commandQueue: any[] = [];
-    private commandResults: Map<string, any> = new Map();
-    
     constructor(port: number, config: LLBDSConfig) {
         this.httpPort = port;
         this.config = config;
@@ -46,7 +42,7 @@ export class LSEBridge {
             
             this._isRunning = true;
             logger.info(`LSE Bridge started on port ${this.httpPort}`);
-            logger.info(`LSE 桥接器已在端�?${this.httpPort} 启动`);
+            logger.info(`LSE 桥接器已在端�?${this.httpPort} 启动`);
             
         } catch (error) {
             logger.error('Failed to start LSE Bridge:', error);
@@ -61,7 +57,7 @@ export class LSEBridge {
         if (!this.server) return;
         
         // Health check
-        this.server.onGet('/health', (req: any, res: any) => {
+        this.server.onGet('/health', (_req: any, res: any) => {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 status: 'ok',
@@ -72,14 +68,14 @@ export class LSEBridge {
         });
         
         // Server status
-        this.server.onGet('/api/server/status', (req: any, res: any) => {
+        this.server.onGet('/api/server/status', (_req: any, res: any) => {
             const status = this.getServerStatus();
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: true, data: status }));
         });
         
         // Player list
-        this.server.onGet('/api/players', (req: any, res: any) => {
+        this.server.onGet('/api/players', (_req: any, res: any) => {
             const players = this.getPlayerList();
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: true, data: players }));
@@ -98,11 +94,11 @@ export class LSEBridge {
                     timestamp: new Date().toISOString()
                 }));
                 
-            } catch (error) {
+            } catch (error: unknown) {
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ 
                     success: false, 
-                    error: error.message 
+                    error: error instanceof Error ? error.message : String(error)
                 }));
             }
         });
@@ -116,11 +112,11 @@ export class LSEBridge {
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: true }));
                 
-            } catch (error) {
+            } catch (error: unknown) {
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ 
                     success: false, 
-                    error: error.message 
+                    error: error instanceof Error ? error.message : String(error)
                 }));
             }
         });
@@ -246,11 +242,11 @@ export class LSEBridge {
             
             return status;
             
-        } catch (error) {
+        } catch (error: unknown) {
             logger.error('Failed to get server status:', error);
             return {
                 online: false,
-                error: error.message,
+                error: error instanceof Error ? error.message : String(error),
                 timestamp: new Date().toISOString()
             };
         }
@@ -313,13 +309,13 @@ export class LSEBridge {
                 timestamp: new Date().toISOString()
             };
             
-        } catch (error) {
+        } catch (error: unknown) {
             logger.error('Failed to execute command:', error);
             return {
                 command,
                 output: '',
                 success: false,
-                error: error.message,
+                error: error instanceof Error ? error.message : String(error),
                 timestamp: new Date().toISOString()
             };
         }

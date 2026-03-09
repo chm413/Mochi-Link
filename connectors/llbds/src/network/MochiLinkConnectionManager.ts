@@ -69,7 +69,7 @@ export class MochiLinkConnectionManager extends EventEmitter {
      * Connect to Mochi-Link management system
      */
     public async connect(): Promise<void> {
-        if (this.isConnected || this.isConnecting) {
+        if (this._isConnected || this._isConnecting) {
             return;
         }
         
@@ -141,7 +141,7 @@ export class MochiLinkConnectionManager extends EventEmitter {
      * Send message to Mochi-Link
      */
     public async send(message: any): Promise<void> {
-        if (!this.isConnected || !this.ws) {
+        if (!this._isConnected || !this.ws) {
             // Queue message for later sending
             this.messageQueue.push(message);
             this.logger.debug('Message queued (not connected):', message.type || 'unknown');
@@ -418,7 +418,7 @@ export class MochiLinkConnectionManager extends EventEmitter {
         this.clearHeartbeat();
         
         this.heartbeatInterval = setInterval(async () => {
-            if (this.isConnected) {
+            if (this._isConnected) {
                 try {
                     const heartbeat = {
                         type: 'request',
@@ -510,9 +510,9 @@ export class MochiLinkConnectionManager extends EventEmitter {
      * Get connection status
      */
     public getConnectionStatus(): string {
-        if (this.isConnected) {
+        if (this._isConnected) {
             return 'connected';
-        } else if (this.isConnecting) {
+        } else if (this._isConnecting) {
             return 'connecting';
         } else {
             return 'disconnected';
@@ -525,14 +525,14 @@ export class MochiLinkConnectionManager extends EventEmitter {
     public getConnectionStats(): any {
         const reconnectionStatus = this.reconnectionManager.getStatus();
         return {
-            connected: this.isConnected,
-            connecting: this.isConnecting,
+            connected: this._isConnected,
+            connecting: this._isConnecting,
             reconnectAttempts: reconnectionStatus.currentAttempts,
             totalReconnectAttempts: reconnectionStatus.totalAttempts,
             reconnectionDisabled: reconnectionStatus.disabled,
             queuedMessages: this.messageQueue.length,
             pendingMessages: this.pendingMessages.size,
-            lastConnectTime: this.isConnected ? Date.now() : null
+            lastConnectTime: this._isConnected ? Date.now() : null
         };
     }
     

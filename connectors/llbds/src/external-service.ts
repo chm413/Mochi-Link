@@ -2,9 +2,7 @@ import express from 'express';
 import * as cors from 'cors';
 import * as helmet from 'helmet';
 import * as compression from 'compression';
-import * as WebSocket from 'ws';
 import * as cron from 'node-cron';
-import * as si from 'systeminformation';
 import * as winston from 'winston';
 import { createServer } from 'http';
 import { LLBDSConfig } from './config/LLBDSConfig';
@@ -26,12 +24,12 @@ import { ExternalPerformanceMonitor } from './monitoring/ExternalPerformanceMoni
  */
 
 class MochiLinkExternalService {
-    private app: express.Application;
+    private app!: express.Application;
     private server: any;
-    private config: LLBDSConfig;
-    private connectionManager: MochiLinkConnectionManager;
-    private performanceMonitor: ExternalPerformanceMonitor;
-    private logger: winston.Logger;
+    private config!: LLBDSConfig;
+    private connectionManager!: MochiLinkConnectionManager;
+    private performanceMonitor!: ExternalPerformanceMonitor;
+    private logger!: winston.Logger;
     
     private httpPort: number = 25581; // External service HTTP port
     private lseBridgePort: number = 25580; // LSE bridge port
@@ -104,7 +102,7 @@ class MochiLinkExternalService {
      */
     private setupRoutes(): void {
         // Health check endpoint
-        this.app.get('/health', (req, res) => {
+        this.app.get('/health', (_req, res) => {
             res.json({
                 status: 'ok',
                 service: 'mochi-link-external-service',
@@ -116,26 +114,26 @@ class MochiLinkExternalService {
         });
         
         // Server data endpoints
-        this.app.get('/api/server/status', (req, res) => {
+        this.app.get('/api/server/status', (_req, res) => {
             res.json({
                 success: true,
                 data: this.serverData
             });
         });
         
-        this.app.post('/api/server/update', (req, res) => {
+        this.app.post('/api/server/update', (_req, res) => {
             try {
-                this.serverData = { ...this.serverData, ...req.body };
-                this.logger.debug('Server data updated:', req.body);
+                this.serverData = { ...this.serverData, ..._req.body };
+                this.logger.debug('Server data updated:', _req.body);
                 res.json({ success: true });
-            } catch (error) {
+            } catch (error: unknown) {
                 this.logger.error('Failed to update server data:', error);
-                res.status(500).json({ success: false, error: error.message });
+                res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
             }
         });
         
         // Player data endpoints
-        this.app.get('/api/players', (req, res) => {
+        this.app.get('/api/players', (_req, res) => {
             res.json({
                 success: true,
                 data: Array.from(this.playerData.values())
@@ -148,9 +146,9 @@ class MochiLinkExternalService {
                 this.playerData.set(playerId, { ...this.playerData.get(playerId), ...data });
                 this.logger.debug(`Player data updated for ${playerId}:`, data);
                 res.json({ success: true });
-            } catch (error) {
+            } catch (error: unknown) {
                 this.logger.error('Failed to update player data:', error);
-                res.status(500).json({ success: false, error: error.message });
+                res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
             }
         });
         
@@ -160,9 +158,9 @@ class MochiLinkExternalService {
                 this.playerData.delete(playerId);
                 this.logger.debug(`Player data removed for ${playerId}`);
                 res.json({ success: true });
-            } catch (error) {
+            } catch (error: unknown) {
                 this.logger.error('Failed to remove player data:', error);
-                res.status(500).json({ success: false, error: error.message });
+                res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
             }
         });
         
@@ -172,9 +170,9 @@ class MochiLinkExternalService {
                 const event = req.body;
                 this.forwardEventToMochiLink(event);
                 res.json({ success: true });
-            } catch (error) {
+            } catch (error: unknown) {
                 this.logger.error('Failed to forward event:', error);
-                res.status(500).json({ success: false, error: error.message });
+                res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
             }
         });
         
@@ -184,14 +182,14 @@ class MochiLinkExternalService {
                 const { command, timeout = 30000 } = req.body;
                 const result = await this.executeCommandOnServer(command, timeout);
                 res.json({ success: true, result });
-            } catch (error) {
+            } catch (error: unknown) {
                 this.logger.error('Failed to execute command:', error);
-                res.status(500).json({ success: false, error: error.message });
+                res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
             }
         });
         
         // Performance data endpoint
-        this.app.get('/api/performance', (req, res) => {
+        this.app.get('/api/performance', (_req, res) => {
             res.json({
                 success: true,
                 data: this.performanceData
@@ -199,7 +197,7 @@ class MochiLinkExternalService {
         });
         
         // Shutdown endpoint
-        this.app.post('/shutdown', (req, res) => {
+        this.app.post('/shutdown', (_req, res) => {
             res.json({ success: true, message: 'Shutting down...' });
             setTimeout(() => {
                 this.shutdown();
@@ -514,7 +512,7 @@ class MochiLinkExternalService {
                     await this.connectionManager.send(message);
                 }
                 
-            } catch (error) {
+            } catch (error: unknown) {
                 this.logger.error('Failed to collect performance data:', error);
             }
         });

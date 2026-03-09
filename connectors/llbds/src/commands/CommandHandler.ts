@@ -192,14 +192,14 @@ export class CommandHandler {
             return `Unknown config key: ${key}`;
         }
         
-        return `${key}: ${value}`;
+        return `${key}: ${value ?? 'undefined'}`;
     }
     
     /**
      * Set config value
      */
     private setConfigValue(key: string, value: string): string {
-        return `Setting ${key} to ${value}...\nNote: Config changes require service restart to take effect\nPlease edit config.json manually and restart the service`;
+        return `Setting ${key ?? 'unknown'} to ${value ?? 'undefined'}...\nNote: Config changes require service restart to take effect\nPlease edit config.json manually and restart the service`;
     }
     
     /**
@@ -233,7 +233,7 @@ export class CommandHandler {
             output += `Total Attempts: ${status.totalAttempts}\n`;
             output += `Next Interval: ${status.nextInterval}ms\n`;
             
-            if (status.lastAttemptTime > 0) {
+            if (status.lastAttemptTime && status.lastAttemptTime > 0) {
                 output += `Last Attempt: ${new Date(status.lastAttemptTime).toLocaleString()}\n`;
             }
             
