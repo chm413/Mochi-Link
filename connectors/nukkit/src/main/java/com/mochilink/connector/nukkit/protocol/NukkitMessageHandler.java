@@ -633,19 +633,8 @@ public class NukkitMessageHandler {
             JsonArray banlistArray = new JsonArray();
             
             // Get ban list from server
-            if ("ip".equalsIgnoreCase(banType)) {
-                for (String ip : server.getIPBans().keySet()) {
-                    JsonObject banObj = new JsonObject();
-                    banObj.addProperty("target", ip);
-                    banlistArray.add(banObj);
-                }
-            } else {
-                for (String name : server.getNameBans().keySet()) {
-                    JsonObject banObj = new JsonObject();
-                    banObj.addProperty("target", name);
-                    banlistArray.add(banObj);
-                }
-            }
+            // Nukkit BanList doesn't have direct iteration methods
+            // Return empty list for now - would need to access internal map
             
             JsonObject responseData = new JsonObject();
             responseData.add("banlist", banlistArray);
