@@ -784,17 +784,17 @@ public class FabricMessageHandler {
             
             // Get ban list from server
             if ("ip".equalsIgnoreCase(banType)) {
-                server.getPlayerManager().getIpBanList().getNames().forEach(ip -> {
+                for (String ip : server.getPlayerManager().getIpBanList().getNames()) {
                     JsonObject banObj = new JsonObject();
                     banObj.addProperty("target", ip);
                     banlistArray.add(banObj);
-                });
+                }
             } else {
-                server.getPlayerManager().getUserBanList().getNames().forEach(name -> {
+                for (String name : server.getPlayerManager().getUserBanList().getNames()) {
                     JsonObject banObj = new JsonObject();
                     banObj.addProperty("target", name);
                     banlistArray.add(banObj);
-                });
+                }
             }
             
             JsonObject responseData = new JsonObject();
