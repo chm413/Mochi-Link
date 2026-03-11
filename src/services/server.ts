@@ -1228,7 +1228,7 @@ export class ServerManager {
           const requestId = `cmd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
           
           // 记录请求发送
-          this.logger?.info(`[${requestId}] Sending command to ${serverId}: ${command}`);
+          console.log(`[${requestId}] Sending command to ${serverId}: ${command}`);
           
           // Send command via connection
           const message = {
@@ -1251,7 +1251,7 @@ export class ServerManager {
               resolve: (response: any) => {
                 clearTimeout(timeoutHandle);
                 // 记录响应接收
-                this.logger?.info(`[${requestId}] Received response from ${serverId}: success=${response.data?.success}`);
+                console.log(`[${requestId}] Received response from ${serverId}: success=${response.data?.success}`);
                 
                 // 解析响应数据
                 if (response.data?.success === false || response.data?.error) {
@@ -1271,9 +1271,7 @@ export class ServerManager {
               },
               reject: (error: any) => {
                 clearTimeout(timeoutHandle);
-                this.logger?.error(`[${requestId}] Request failed for ${serverId}: ${error.message}`);
-                reject(error);
-              },
+                console.error(`[${requestId}] Request failed for ${serverId}: ${error.message}`);
                 reject(error);
               },
               timeout: timeoutHandle
