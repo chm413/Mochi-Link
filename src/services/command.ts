@@ -195,7 +195,13 @@ export class CommandExecutionService {
         }
       }
 
-      this.logger.info(`Command executed on ${serverId}: ${command} (${result.executionTime}ms)`);
+      this.logger.info(`Command executed on ${serverId}: ${command} (${result.executionTime}ms) - Success: ${result.success}`);
+      if (result.output && result.output.length > 0) {
+        this.logger.debug(`Command output: ${result.output.join(', ')}`);
+      }
+      if (result.error) {
+        this.logger.warn(`Command error: ${result.error}`);
+      }
       return result;
 
     } catch (error) {

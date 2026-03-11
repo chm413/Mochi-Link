@@ -324,39 +324,54 @@ public class ForgeMessageHandler {
      * Handle command execute operation
      */
     public JsonObject handleCommandExecute(String requestId, String command) {
+        logger.info("[{}] Command execution request: command={}", requestId, command);
+        
         if (command == null || command.isEmpty()) {
+            logger.warn("[{}] Command validation failed: Missing command parameter", requestId);
             return createErrorResponse(requestId, "command.execute", "Missing command parameter");
         }
         
         try {
             MinecraftServer server = mod.getServer();
             if (server == null) {
+                logger.error("[{}] Server not available for command execution", requestId);
                 return createErrorResponse(requestId, "command.execute", "Server not available");
             }
             
-            logger.info("Executing command: {}", command);
+            logger.info("[{}] Executing command: {}", requestId, command);
+            
+            long startTime = System.currentTimeMillis();
             
             // Execute command on server thread
             server.execute(() -> {
                 try {
+                    logger.debug("[{}] Command execution started on server thread", requestId);
                     server.getCommands().performPrefixedCommand(
                         server.createCommandSourceStack(),
                         command
                     );
+                    logger.debug("[{}] Command execution completed on server thread", requestId);
                 } catch (Exception e) {
-                    logger.error("Failed to execute command", e);
+                    logger.error("[{}] Command execution failed on server thread: {}", requestId, e.getMessage(), e);
                 }
             });
+            
+            long executionTime = System.currentTimeMillis() - startTime;
             
             JsonObject responseData = new JsonObject();
             responseData.addProperty("success", true);
             responseData.addProperty("command", command);
+            responseData.addProperty("executionTime", executionTime);
             responseData.addProperty("message", "Command executed successfully");
+            
+            logger.info("[{}] Command execution response prepared: success=true, time={}ms", 
+                requestId, executionTime);
             
             return createSuccessResponse(requestId, "command.execute", responseData);
             
         } catch (Exception e) {
-            logger.error("Failed to execute command", e);
+            logger.error("[{}] Command execution failed: command={}, error={}", 
+                requestId, command, e.getMessage(), e);
             return createErrorResponse(requestId, "command.execute", e.getMessage());
         }
     }

@@ -384,9 +384,12 @@ public class FabricMessageHandler {
      * Handle command execute operation
      */
     public JsonObject handleCommandExecute(String requestId, String command) {
+            logger.info("[{}] Command execution request: command={}", requestId, command);
+            
             // 验证 command
             ValidationResult<String> commandResult = InputValidator.validateCommand(command);
             if (!commandResult.isValid()) {
+                logger.warn("[{}] Command validation failed: {}", requestId, commandResult.getError());
                 return createErrorResponse(requestId, "command.execute", commandResult.getError());
             }
 
@@ -395,22 +398,25 @@ public class FabricMessageHandler {
             try {
                 MinecraftServer server = mod.getServer();
                 if (server == null) {
+                    logger.error("[{}] Server not available for command execution", requestId);
                     return createErrorResponse(requestId, "command.execute", "Server not available");
                 }
 
-                logger.info("Executing command: {}", validCommand);
+                logger.info("[{}] Executing command: {}", requestId, validCommand);
 
                 long startTime = System.currentTimeMillis();
 
                 // Execute command on server thread
                 server.execute(() -> {
                     try {
+                        logger.debug("[{}] Command execution started on server thread", requestId);
                         server.getCommandManager().executeWithPrefix(
                             server.getCommandSource(),
                             validCommand
                         );
+                        logger.debug("[{}] Command execution completed on server thread", requestId);
                     } catch (Exception e) {
-                        logger.error("Failed to execute command", e);
+                        logger.error("[{}] Command execution failed on server thread: {}", requestId, e.getMessage(), e);
                     }
                 });
 
@@ -425,10 +431,14 @@ public class FabricMessageHandler {
                 output.add("Command executed successfully");
                 responseData.add("output", output);
 
+                logger.info("[{}] Command execution response prepared: success=true, time={}ms", 
+                    requestId, executionTime);
+
                 return createSuccessResponse(requestId, "command.execute", responseData);
 
             } catch (Exception e) {
-                logger.error("Failed to execute command", e);
+                logger.error("[{}] Command execution failed: command={}, error={}", 
+                    requestId, validCommand, e.getMessage(), e);
                 return createErrorResponse(requestId, "command.execute", e.getMessage());
             }
         }

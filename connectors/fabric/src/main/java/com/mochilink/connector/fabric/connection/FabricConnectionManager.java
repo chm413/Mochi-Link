@@ -288,9 +288,13 @@ public class FabricConnectionManager {
         String requestId = request.get("id").getAsString();
         JsonObject data = request.has("data") ? request.getAsJsonObject("data") : new JsonObject();
         
+        // 记录请求开始
+        logger.info("[{}] Processing request: op={}", requestId, op);
+        long startTime = System.currentTimeMillis();
+        
         // 速率限制检查
         if (!rateLimiter.tryAcquire(op)) {
-            logger.warn("Rate limit exceeded for operation: {}", op);
+            logger.warn("[{}] Rate limit exceeded for operation: {}", requestId, op);
             sendErrorResponse(requestId, op, "Rate limit exceeded. Please try again later.");
             return;
         }
@@ -300,14 +304,15 @@ public class FabricConnectionManager {
             mod.getMessageHandler();
         
         if (messageHandler == null) {
-            logger.warn("Message handler not initialized");
+            logger.warn("[{}] Message handler not initialized", requestId);
             sendErrorResponse(requestId, op, "Message handler not available");
             return;
         }
         
         JsonObject response = null;
         
-        switch (op) {
+        try {
+            switch (op) {
             case "player.list":
                 response = messageHandler.handlePlayerList(requestId);
                 break;
@@ -398,14 +403,26 @@ public class FabricConnectionManager {
                 handleEventUnsubscribe(request, requestId);
                 return; // Event unsubscribe handles its own response
             default:
-                logger.debug("Unknown operation: {}", op);
+                logger.debug("[{}] Unknown operation: {}", requestId, op);
                 sendErrorResponse(requestId, op, "Unknown operation: " + op);
                 return;
+        }
+        } catch (Exception e) {
+            long executionTime = System.currentTimeMillis() - startTime;
+            logger.error("[{}] Request processing failed: op={}, time={}ms, error={}", 
+                requestId, op, executionTime, e.getMessage(), e);
+            sendErrorResponse(requestId, op, "Internal server error: " + e.getMessage());
+            return;
         }
         
         // Send response if available
         if (response != null && wsClient != null && wsClient.isOpen()) {
+            long executionTime = System.currentTimeMillis() - startTime;
+            logger.info("[{}] Request completed: op={}, time={}ms", requestId, op, executionTime);
             wsClient.send(response.toString());
+        } else {
+            long executionTime = System.currentTimeMillis() - startTime;
+            logger.warn("[{}] No response generated: op={}, time={}ms", requestId, op, executionTime);
         }
     }
     
