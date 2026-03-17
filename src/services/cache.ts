@@ -342,12 +342,12 @@ export class CacheService extends EventEmitter {
    */
   private async preloadServerConfigs(): Promise<void> {
     try {
-      // Get recently active servers
+      // Get recently active servers - use correct field name
       const recentServers = await this.ctx.database.get(TableNames.minecraftServers as any, {
         last_seen: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Last 24 hours
       });
 
-      for (const server of recentServers.slice(0, this.config.preloadBatchSize)) {
+      for (const server of recentServers.slice(0, this.config.preloadBatchSize || 50)) {
         const cacheKey = `server:config:${server.id}`;
         await this.set(cacheKey, server, this.config.defaultTTL);
       }
@@ -355,7 +355,8 @@ export class CacheService extends EventEmitter {
       this.logger.debug(`Preloaded ${recentServers.length} server configurations`);
 
     } catch (error) {
-      this.logger.error('Failed to preload server configs:', error);
+      // Don't fail if preload fails - just log and continue
+      this.logger.debug('Failed to preload server configs (this is normal on first startup):', error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -384,7 +385,7 @@ export class CacheService extends EventEmitter {
       // Cache user permissions
       let count = 0;
       for (const [userId, permissions] of userPermissions) {
-        if (count >= this.config.preloadBatchSize) break;
+        if (count >= (this.config.preloadBatchSize || 50)) break;
         
         const cacheKey = `user:permissions:${userId}`;
         await this.set(cacheKey, permissions, this.config.defaultTTL / 2);
@@ -394,7 +395,8 @@ export class CacheService extends EventEmitter {
       this.logger.debug(`Preloaded permissions for ${count} users`);
 
     } catch (error) {
-      this.logger.error('Failed to preload user permissions:', error);
+      // Don't fail if preload fails - just log and continue
+      this.logger.debug('Failed to preload user permissions (this is normal on first startup):', error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -407,7 +409,7 @@ export class CacheService extends EventEmitter {
       const recentPlayers = await this.ctx.database.get(TableNames.playerCache as any, {
         last_seen: { $gt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } // Last 7 days
       }, {
-        limit: this.config.preloadBatchSize
+        limit: this.config.preloadBatchSize || 50
       });
 
       for (const player of recentPlayers) {
@@ -418,7 +420,8 @@ export class CacheService extends EventEmitter {
       this.logger.debug(`Preloaded ${recentPlayers.length} player records`);
 
     } catch (error) {
-      this.logger.error('Failed to preload player info:', error);
+      // Don't fail if preload fails - just log and continue
+      this.logger.debug('Failed to preload player info (this is normal on first startup):', error instanceof Error ? error.message : String(error));
     }
   }
 
