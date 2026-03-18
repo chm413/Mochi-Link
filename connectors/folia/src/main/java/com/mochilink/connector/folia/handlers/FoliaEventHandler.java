@@ -50,7 +50,7 @@ public class FoliaEventHandler implements Listener {
         
         // Build event data for filtering
         Map<String, Object> filterData = new HashMap<>();
-        filterData.put("join_message", event.getJoinMessage());
+        filterData.put("join_message", event.getJoinMessage() != null ? event.getJoinMessage().toString() : "");
         filterData.put("first_join", !player.hasPlayedBefore());
         filterData.put("player_count", plugin.getServer().getOnlinePlayers().size());
         filterData.put("player_name", player.getName());
@@ -81,7 +81,7 @@ public class FoliaEventHandler implements Listener {
         eventData.add("player", playerInfo);
         
         // Additional event data
-        eventData.addProperty("join_message", event.getJoinMessage());
+        eventData.addProperty("join_message", event.getJoinMessage() != null ? event.getJoinMessage().toString() : "");
         eventData.addProperty("first_join", !player.hasPlayedBefore());
         eventData.addProperty("player_count", plugin.getServer().getOnlinePlayers().size());
         
@@ -104,7 +104,7 @@ public class FoliaEventHandler implements Listener {
         
         // Build filter data
         Map<String, Object> filterData = new HashMap<>();
-        filterData.put("quit_message", event.getQuitMessage());
+        filterData.put("quit_message", event.getQuitMessage() != null ? event.getQuitMessage().toString() : "");
         filterData.put("player_name", player.getName());
         filterData.put("player_uuid", player.getUniqueId().toString());
         
@@ -129,7 +129,7 @@ public class FoliaEventHandler implements Listener {
         playerInfo.add("location", location);
         
         eventData.add("player", playerInfo);
-        eventData.addProperty("quit_message", event.getQuitMessage());
+        eventData.addProperty("quit_message", event.getQuitMessage() != null ? event.getQuitMessage().toString() : "");
         eventData.addProperty("player_count", plugin.getServer().getOnlinePlayers().size() - 1);
         
         connectionManager.sendEvent("player.leave", eventData);
@@ -192,7 +192,7 @@ public class FoliaEventHandler implements Listener {
         
         // Build filter data
         Map<String, Object> filterData = new HashMap<>();
-        filterData.put("death_message", event.getDeathMessage());
+        filterData.put("death_message", event.getDeathMessage() != null ? event.getDeathMessage().toString() : "");
         filterData.put("player_name", player.getName());
         filterData.put("player_uuid", player.getUniqueId().toString());
         
@@ -217,7 +217,7 @@ public class FoliaEventHandler implements Listener {
         playerInfo.add("location", location);
         
         eventData.add("player", playerInfo);
-        eventData.addProperty("death_message", event.getDeathMessage());
+        eventData.addProperty("death_message", event.getDeathMessage() != null ? event.getDeathMessage().toString() : "");
         eventData.addProperty("keep_inventory", event.getKeepInventory());
         eventData.addProperty("keep_level", event.getKeepLevel());
         eventData.addProperty("dropped_exp", event.getDroppedExp());
@@ -287,7 +287,7 @@ public class FoliaEventHandler implements Listener {
         
         // Build filter data
         Map<String, Object> filterData = new HashMap<>();
-        filterData.put("kick_reason", event.getReason());
+        filterData.put("kick_reason", event.getReason() != null ? event.getReason().toString() : "");
         filterData.put("player_name", player.getName());
         filterData.put("player_uuid", player.getUniqueId().toString());
         filterData.put("cancelled", event.isCancelled());
@@ -306,11 +306,11 @@ public class FoliaEventHandler implements Listener {
         playerInfo.addProperty("displayName", player.getDisplayName().toString());
         
         eventData.add("player", playerInfo);
-        eventData.addProperty("kick_reason", event.getReason());
-        eventData.addProperty("leave_message", event.getLeaveMessage());
+        eventData.addProperty("kick_reason", event.getReason() != null ? event.getReason().toString() : "");
+        eventData.addProperty("leave_message", event.getLeaveMessage() != null ? event.getLeaveMessage().toString() : "");
         eventData.addProperty("cancelled", event.isCancelled());
         
         connectionManager.sendEvent("player.kick", eventData);
-        logger.info("Player kicked: " + player.getName() + " - " + event.getReason());
+        logger.info("Player kicked: " + player.getName() + " - " + (event.getReason() != null ? event.getReason().toString() : ""));
     }
 }
