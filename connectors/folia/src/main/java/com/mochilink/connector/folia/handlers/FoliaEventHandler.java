@@ -68,7 +68,7 @@ public class FoliaEventHandler implements Listener {
         JsonObject playerInfo = new JsonObject();
         playerInfo.addProperty("id", player.getUniqueId().toString());
         playerInfo.addProperty("name", player.getName());
-        playerInfo.addProperty("displayName", player.getDisplayName());
+        playerInfo.addProperty("displayName", player.getDisplayName().toString());
         
         // Location information
         JsonObject location = new JsonObject();
@@ -119,7 +119,7 @@ public class FoliaEventHandler implements Listener {
         JsonObject playerInfo = new JsonObject();
         playerInfo.addProperty("id", player.getUniqueId().toString());
         playerInfo.addProperty("name", player.getName());
-        playerInfo.addProperty("displayName", player.getDisplayName());
+        playerInfo.addProperty("displayName", player.getDisplayName().toString());
         
         JsonObject location = new JsonObject();
         location.addProperty("world", player.getWorld().getName());
@@ -169,7 +169,7 @@ public class FoliaEventHandler implements Listener {
         JsonObject playerInfo = new JsonObject();
         playerInfo.addProperty("id", player.getUniqueId().toString());
         playerInfo.addProperty("name", player.getName());
-        playerInfo.addProperty("displayName", player.getDisplayName());
+        playerInfo.addProperty("displayName", player.getDisplayName().toString());
         
         eventData.add("player", playerInfo);
         eventData.addProperty("message", event.getMessage());
@@ -207,7 +207,7 @@ public class FoliaEventHandler implements Listener {
         JsonObject playerInfo = new JsonObject();
         playerInfo.addProperty("id", player.getUniqueId().toString());
         playerInfo.addProperty("name", player.getName());
-        playerInfo.addProperty("displayName", player.getDisplayName());
+        playerInfo.addProperty("displayName", player.getDisplayName().toString());
         
         JsonObject location = new JsonObject();
         location.addProperty("world", player.getWorld().getName());
@@ -264,7 +264,7 @@ public class FoliaEventHandler implements Listener {
         JsonObject playerInfo = new JsonObject();
         playerInfo.addProperty("id", player.getUniqueId().toString());
         playerInfo.addProperty("name", player.getName());
-        playerInfo.addProperty("displayName", player.getDisplayName());
+        playerInfo.addProperty("displayName", player.getDisplayName().toString());
         
         eventData.add("player", playerInfo);
         eventData.addProperty("advancement", advancement);
@@ -303,7 +303,7 @@ public class FoliaEventHandler implements Listener {
         JsonObject playerInfo = new JsonObject();
         playerInfo.addProperty("id", player.getUniqueId().toString());
         playerInfo.addProperty("name", player.getName());
-        playerInfo.addProperty("displayName", player.getDisplayName());
+        playerInfo.addProperty("displayName", player.getDisplayName().toString());
         
         eventData.add("player", playerInfo);
         eventData.addProperty("kick_reason", event.getReason());

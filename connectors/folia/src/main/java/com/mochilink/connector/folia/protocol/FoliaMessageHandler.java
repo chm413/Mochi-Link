@@ -40,7 +40,7 @@ public class FoliaMessageHandler {
                 JsonObject playerObj = new JsonObject();
                 playerObj.addProperty("id", player.getUniqueId().toString());
                 playerObj.addProperty("name", player.getName());
-                playerObj.addProperty("displayName", player.getDisplayName());
+                playerObj.addProperty("displayName", player.getDisplayName().toString());
                 playerObj.addProperty("world", player.getWorld().getName());
                 
                 JsonObject position = new JsonObject();
@@ -91,7 +91,7 @@ public class FoliaMessageHandler {
             JsonObject playerInfo = new JsonObject();
             playerInfo.addProperty("id", player.getUniqueId().toString());
             playerInfo.addProperty("name", player.getName());
-            playerInfo.addProperty("displayName", player.getDisplayName());
+            playerInfo.addProperty("displayName", player.getDisplayName().toString());
             playerInfo.addProperty("world", player.getWorld().getName());
             
             JsonObject position = new JsonObject();
