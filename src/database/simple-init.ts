@@ -17,8 +17,11 @@ export interface MinecraftServer {
   core_type: 'java' | 'bedrock';
   core_name: string;
   core_version?: string;
-  // 连接模式定义以 Connector 视角为准：forward = Connector 主动连接 Koishi，reverse = Koishi 主动连接 Connector
-  connection_mode: 'forward' | 'reverse';
+  // 统一的 WebSocket 能力字段（推荐）
+  accept_inbound_ws: boolean;
+  dial_outbound_ws: boolean;
+  // 兼容字段：由能力字段映射而来（accept_inbound_ws=true => forward, dial_outbound_ws=true => reverse）
+  connection_mode?: 'forward' | 'reverse';
   connection_config: string; // JSON string
   status: 'online' | 'offline' | 'error';
   owner_id?: string;
@@ -134,6 +137,8 @@ export class SimpleDatabaseManager {
       core_name: 'string',
       core_version: 'string',
       connection_mode: 'string',
+      accept_inbound_ws: { type: 'boolean', initial: true },
+      dial_outbound_ws: { type: 'boolean', initial: false },
       connection_config: 'text',
       status: { type: 'string', initial: 'offline' },
       owner_id: 'string',
