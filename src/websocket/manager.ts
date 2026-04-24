@@ -14,10 +14,7 @@ import { HeartbeatManager, HeartbeatConfig } from './heartbeat';
 import { ProtocolHandler } from '../protocol/handler';
 import { ConnectionSecurityManager, ConnectionSecurityConfig } from '../services/connection-security';
 import { 
-  Connection, 
-  ConnectionMode, 
   ConnectionError,
-  AuthenticationError,
   UWBPMessage,
   ServerConfig
 } from '../types';
@@ -71,6 +68,17 @@ interface ConnectionEntry {
   capabilities: string[];
 }
 
+type LifecycleState = 'connecting' | 'authenticated' | 'disconnected' | 'retrying';
+
+interface ConnectionLifecycle {
+  state: LifecycleState;
+  updatedAt: number;
+  retries: number;
+  lastError?: string;
+}
+
+type LifecycleEvent = 'connected' | 'authenticated' | 'disconnected' | 'retry' | 'error';
+
 // ============================================================================
 // WebSocket Connection Manager
 // ============================================================================
@@ -89,6 +97,7 @@ export class WebSocketConnectionManager extends EventEmitter {
   
   // State
   private isRunning = false;
+  private connectionLifecycles = new Map<string, ConnectionLifecycle>();
 
   constructor(
     tokenManager: TokenManager,
@@ -194,6 +203,7 @@ export class WebSocketConnectionManager extends EventEmitter {
       // Clear state
       this.connections.clear();
       this.clients.clear();
+      this.connectionLifecycles.clear();
 
       this.isRunning = false;
       this.emit('stopped');
@@ -249,6 +259,8 @@ export class WebSocketConnectionManager extends EventEmitter {
     }
 
     try {
+      this.transitionLifecycle(serverConfig.id, 'connecting');
+
       // Create client configuration
       const clientConfig: WebSocketClientConfig = {
         url: this.buildWebSocketURL(serverConfig),
@@ -277,9 +289,6 @@ export class WebSocketConnectionManager extends EventEmitter {
       if (!connection) {
         throw new ConnectionError('Failed to establish connection', serverConfig.id);
       }
-
-      // Register connection
-      this.registerConnection(connection, 'client', serverConfig);
 
       return connection;
 
@@ -431,10 +440,18 @@ export class WebSocketConnectionManager extends EventEmitter {
       connectedAt: entry.connectedAt,
       lastActivity: entry.lastActivity,
       authenticated: entry.authenticated,
+      lifecycle: this.connectionLifecycles.get(serverId),
       capabilities: entry.capabilities,
       connectionStats: entry.connection.getStats(),
       heartbeatStats: this.heartbeatManager.getStats(serverId)
     };
+  }
+
+  /**
+   * Get lifecycle state for a specific server connection
+   */
+  getConnectionLifecycle(serverId: string): ConnectionLifecycle | null {
+    return this.connectionLifecycles.get(serverId) || null;
   }
 
   /**
@@ -476,16 +493,17 @@ export class WebSocketConnectionManager extends EventEmitter {
   private setupManagerHandlers(): void {
     // Heartbeat manager events
     this.heartbeatManager.on('heartbeatFailure', (serverId) => {
-      this.emit('connectionLost', serverId, 'Heartbeat failure');
+      this.emitLifecycleEvent(serverId, 'error', new Error('Heartbeat failure'));
     });
 
     this.heartbeatManager.on('reconnectRequired', (serverId, reason) => {
+      this.emitLifecycleEvent(serverId, 'retry', { reason, source: 'heartbeat' });
       this.handleReconnectionRequired(serverId, reason);
     });
 
     // Authentication manager events
     this.authManager.on('authenticationSuccess', (serverId, token) => {
-      this.emit('authenticated', serverId, token);
+      this.emitLifecycleEvent(serverId, 'authenticated', token);
       
       // Record authentication success in security manager
       if (this.connectionSecurityManager) {
@@ -499,7 +517,7 @@ export class WebSocketConnectionManager extends EventEmitter {
     });
 
     this.authManager.on('authenticationError', (serverId, error) => {
-      this.emit('authenticationFailed', serverId, error);
+      this.emitLifecycleEvent(serverId, 'error', error);
       
       // Record authentication failure in security manager
       if (this.connectionSecurityManager) {
@@ -543,10 +561,12 @@ export class WebSocketConnectionManager extends EventEmitter {
     if (!this.server) return;
 
     this.server.on('connection', (connection: WebSocketConnection) => {
+      this.emitLifecycleEvent(connection.serverId, 'connected', { mode: 'server' });
       this.registerConnection(connection, 'server');
     });
 
     this.server.on('disconnection', (connection: WebSocketConnection) => {
+      this.emitLifecycleEvent(connection.serverId, 'disconnected');
       this.unregisterConnection(connection.serverId);
     });
 
@@ -568,10 +588,12 @@ export class WebSocketConnectionManager extends EventEmitter {
 
   private setupClientHandlers(client: MochiWebSocketClient, serverConfig: ServerConfig): void {
     client.on('connected', (connection: WebSocketConnection) => {
+      this.emitLifecycleEvent(serverConfig.id, 'connected', { mode: 'client' });
       this.registerConnection(connection, 'client', serverConfig);
     });
 
     client.on('disconnected', () => {
+      this.emitLifecycleEvent(serverConfig.id, 'disconnected');
       this.unregisterConnection(serverConfig.id);
     });
 
@@ -583,6 +605,7 @@ export class WebSocketConnectionManager extends EventEmitter {
     });
 
     client.on('authenticated', () => {
+      this.emitLifecycleEvent(serverConfig.id, 'authenticated');
       const entry = this.connections.get(serverConfig.id);
       if (entry) {
         entry.authenticated = true;
@@ -590,23 +613,25 @@ export class WebSocketConnectionManager extends EventEmitter {
     });
 
     client.on('error', (error) => {
-      this.emit('connectionError', error, serverConfig.id);
+      this.emitLifecycleEvent(serverConfig.id, 'error', error);
     });
 
     client.on('reconnecting', (attempt, interval) => {
-      this.emit('reconnecting', serverConfig.id, attempt, interval);
+      this.emitLifecycleEvent(serverConfig.id, 'retry', { attempt, interval, source: 'client' });
     });
 
     client.on('reconnectionFailed', (error, attempts) => {
-      this.emit('reconnectionFailed', serverConfig.id, error, attempts);
+      this.emitLifecycleEvent(serverConfig.id, 'error', error);
+      this.emit('retry', serverConfig.id, { failed: true, attempts });
     });
 
     client.on('reconnectionDisabled', (error, totalAttempts) => {
-      this.emit('reconnectionDisabled', serverConfig.id, error, totalAttempts);
+      this.emitLifecycleEvent(serverConfig.id, 'error', error || new Error('Reconnection disabled'));
+      this.emit('retry', serverConfig.id, { disabled: true, totalAttempts });
     });
 
     client.on('reconnectionEnabled', () => {
-      this.emit('reconnectionEnabled', serverConfig.id);
+      this.emit('retry', serverConfig.id, { enabled: true });
     });
   }
 
@@ -639,6 +664,7 @@ export class WebSocketConnectionManager extends EventEmitter {
     };
 
     this.connections.set(connection.serverId, entry);
+    this.transitionLifecycle(connection.serverId, entry.authenticated ? 'authenticated' : 'connecting');
 
     // Register with connection security manager if available
     if (this.connectionSecurityManager) {
@@ -686,6 +712,7 @@ export class WebSocketConnectionManager extends EventEmitter {
 
     // Remove from registry
     this.connections.delete(serverId);
+    this.transitionLifecycle(serverId, 'disconnected');
 
     this.emit('connectionUnregistered', serverId, entry.mode);
   }
@@ -708,15 +735,66 @@ export class WebSocketConnectionManager extends EventEmitter {
     }
   }
 
-  private async handleReconnectionRequired(serverId: string, reason: string): Promise<void> {
+  private async handleReconnectionRequired(serverId: string, _reason: string): Promise<void> {
     const client = this.clients.get(serverId);
     if (client && this.config.autoReconnect) {
       try {
         await client.reconnect();
       } catch (error) {
-        this.emit('reconnectionFailed', serverId, error);
+        this.emitLifecycleEvent(serverId, 'error', error);
       }
     }
+  }
+
+  private emitLifecycleEvent(serverId: string, event: LifecycleEvent, payload?: unknown): void {
+    switch (event) {
+      case 'connected':
+        this.transitionLifecycle(serverId, 'connecting');
+        this.emit('connected', serverId, payload);
+        break;
+      case 'authenticated':
+        this.transitionLifecycle(serverId, 'authenticated');
+        this.emit('authenticated', serverId, payload);
+        break;
+      case 'disconnected':
+        this.transitionLifecycle(serverId, 'disconnected');
+        this.emit('disconnected', serverId, payload);
+        break;
+      case 'retry':
+        this.transitionLifecycle(serverId, 'retrying');
+        this.emit('retry', serverId, payload);
+        break;
+      case 'error':
+        this.recordLifecycleError(serverId, payload);
+        this.emit('error', payload, serverId);
+        break;
+      default:
+        break;
+    }
+  }
+
+  private transitionLifecycle(serverId: string, state: LifecycleState): void {
+    const current = this.connectionLifecycles.get(serverId);
+    const retries = state === 'retrying' ? (current?.retries || 0) + 1 : current?.retries || 0;
+
+    this.connectionLifecycles.set(serverId, {
+      state,
+      updatedAt: Date.now(),
+      retries,
+      lastError: current?.lastError
+    });
+  }
+
+  private recordLifecycleError(serverId: string, payload?: unknown): void {
+    const current = this.connectionLifecycles.get(serverId);
+    const message = payload instanceof Error ? payload.message : payload ? String(payload) : undefined;
+
+    this.connectionLifecycles.set(serverId, {
+      state: current?.state || 'disconnected',
+      updatedAt: Date.now(),
+      retries: current?.retries || 0,
+      lastError: message
+    });
   }
 
   private buildWebSocketURL(serverConfig: ServerConfig): string {
