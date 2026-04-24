@@ -169,6 +169,8 @@ export function apply(ctx: Context, config: PluginConfig) {
     let serviceManager: ServiceManager | null = null;
     let wsManager: MochiWebSocketServer | null = null;
     let httpServer: HTTPServer | null = null;
+    const LEGACY_MODE_COMPAT_WINDOW = 'v1.7.x（兼容期）';
+    const LEGACY_MODE_REMOVE_WINDOW = 'v1.8.0（移除期）';
     let isInitialized = false;
     
     /**
@@ -253,7 +255,12 @@ export function apply(ctx: Context, config: PluginConfig) {
     function normalizeServerConnectionConfig(
         rawConfig: Record<string, any> | undefined,
         legacyMode?: 'forward' | 'reverse'
-    ): { capabilities: WsCapabilities; connectionConfig: Record<string, any>; mappedMode: 'forward' | 'reverse' } {
+    ): {
+        capabilities: WsCapabilities;
+        connectionConfig: Record<string, any>;
+        mappedMode: 'forward' | 'reverse';
+        usedLegacyMode: boolean;
+    } {
         const parsedConfig = rawConfig || {};
         const wsCapabilities = parsedConfig.ws_capabilities || {};
 
@@ -288,6 +295,7 @@ export function apply(ctx: Context, config: PluginConfig) {
         return {
             capabilities,
             mappedMode,
+            usedLegacyMode: !hasNewFields && Boolean(legacyMode),
             connectionConfig: {
                 ...parsedConfig,
                 ws_capabilities: capabilities
@@ -332,6 +340,16 @@ export function apply(ctx: Context, config: PluginConfig) {
             
             await dbManager.initialize();
             logger.info('Database initialized successfully');
+            const migrationSummary = dbManager.getStartupMigrationSummary();
+            if (migrationSummary.migratedReverseToForward > 0) {
+                logger.warn(`已自动迁移 ${migrationSummary.migratedReverseToForward} 条 legacy reverse 数据到新语义（forward-only）。`);
+                logger.warn(`版本窗口：${LEGACY_MODE_COMPAT_WINDOW} 继续兼容读取旧值并告警；${LEGACY_MODE_REMOVE_WINDOW} 将彻底移除旧值读取。`);
+            } else if (migrationSummary.warnedLegacyRead > 0) {
+                logger.warn(`检测到 ${migrationSummary.warnedLegacyRead} 条 reverse 数据已带能力字段，按新语义保留并继续告警。`);
+                logger.warn(`版本窗口：${LEGACY_MODE_COMPAT_WINDOW} 继续兼容读取旧值并告警；${LEGACY_MODE_REMOVE_WINDOW} 将彻底移除旧值读取。`);
+            } else {
+                logger.info(`版本窗口：${LEGACY_MODE_COMPAT_WINDOW} 继续兼容读取旧值并告警；${LEGACY_MODE_REMOVE_WINDOW} 将彻底移除旧值读取。`);
+            }
             
             // Initialize service manager
             serviceManager = new ServiceManager(ctx);
@@ -712,10 +730,16 @@ export function apply(ctx: Context, config: PluginConfig) {
           }
           
           const header = '服务器列表：';
+          const migrationSummary = dbManager.getStartupMigrationSummary();
+          const migrationNotice = migrationSummary.migratedReverseToForward > 0
+            ? `\n⚠️ 已自动迁移: 启动时已将 ${migrationSummary.migratedReverseToForward} 条 legacy reverse 数据映射为新语义（forward-only）。`
+            : migrationSummary.warnedLegacyRead > 0
+              ? `\n⚠️ 兼容读取告警: 检测到 ${migrationSummary.warnedLegacyRead} 条 reverse 数据已带能力字段，当前按新语义保留。`
+              : '';
           const items = servers.map((s: any) => {
             return `  [${s.id}] ${s.name} (${s.core_type}/${s.core_name}) - ${s.status}`;
           }).join('\n');
-          return header + '\n' + items;
+          return header + migrationNotice + '\n' + items;
         } catch (error) {
           logger.error('Failed to list servers:', error);
           return '获取服务器列表失败';
@@ -1025,6 +1049,23 @@ export function apply(ctx: Context, config: PluginConfig) {
             return `❌ 服务器连接配置冲突: ${(capabilityError as Error).message}\n` +
                    '💡 修复建议: 使用 mochi.server.update（或直接修正数据库）后，仅保留一组有效能力字段。';
           }
+          let parsedConfig: Record<string, any> = {};
+          if (typeof server.connection_config === 'string' && server.connection_config.trim()) {
+            try {
+              parsedConfig = JSON.parse(server.connection_config);
+            } catch {
+              parsedConfig = {};
+            }
+          }
+          const normalizedForNotice = normalizeServerConnectionConfig(
+            parsedConfig,
+            server?.connection_mode === 'forward' || server?.connection_mode === 'reverse'
+              ? server.connection_mode
+              : undefined
+          );
+          const legacyWarning = normalizedForNotice.usedLegacyMode
+            ? `\n  ⚠️ 兼容期告警: 当前版本仍兼容读取 legacy connection_mode（${LEGACY_MODE_COMPAT_WINDOW}），${LEGACY_MODE_REMOVE_WINDOW} 将移除。`
+            : '';
 
           return `服务器信息：\n` +
                  `  ID: ${server.id}\n` +
@@ -1035,6 +1076,7 @@ export function apply(ctx: Context, config: PluginConfig) {
                  `  状态: ${server.status}\n` +
                  `  连接模式: ${formatConnectionModeHelp(capabilitiesToMode(wsCapabilities))}\n` +
                  `  WS 能力: accept_inbound_ws=${wsCapabilities.accept_inbound_ws}, dial_outbound_ws=${wsCapabilities.dial_outbound_ws}\n` +
+                 `${legacyWarning}` +
                  `  创建时间: ${server.created_at.toLocaleString()}\n` +
                  `  最后更新: ${server.updated_at.toLocaleString()}`;
         } catch (error) {
