@@ -17,6 +17,7 @@ export interface MinecraftServer {
   core_type: 'java' | 'bedrock';
   core_name: string;
   core_version?: string;
+  // 连接模式定义以 Connector 视角为准：forward = Connector 主动连接 Koishi，reverse = Koishi 主动连接 Connector
   connection_mode: 'forward' | 'reverse';
   connection_config: string; // JSON string
   status: 'online' | 'offline' | 'error';

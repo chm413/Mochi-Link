@@ -3,16 +3,16 @@
 
 # 连接配置
 connection:
-  # 连接模式: forward (正向连接) 或 reverse (反向连接)
+  # 连接模式（以 Connector 视角定义）: forward = Connector 主动连接 Koishi，reverse = Koishi 主动连接 Connector
   mode: "forward"
   
-  # 正向连接配置 (插件作为客户端连接到 Koishi)
+  # forward 配置（Connector 主动连接 Koishi）
   forward:
     host: "127.0.0.1"
     port: 8080
     ssl: false
     
-  # 反向连接配置 (Koishi 连接到插件)
+  # reverse 配置（Koishi 主动连接 Connector）
   reverse:
     port: 25566
     bind_address: "0.0.0.0"

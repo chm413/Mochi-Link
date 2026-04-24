@@ -18,6 +18,7 @@ public class PluginConfig {
     private FileConfiguration config;
     
     // Connection settings
+    // 连接模式定义以 Connector 视角为准：forward = Connector 主动连接 Koishi，reverse = Koishi 主动连接 Connector
     private String connectionMode;
     private String forwardHost;
     private int forwardPort;
@@ -250,14 +251,14 @@ public class PluginConfig {
     }
     
     /**
-     * Check if forward connection mode is enabled
+     * Check if forward connection mode is enabled (Connector actively connects to Koishi)
      */
     public boolean isForwardMode() {
         return "forward".equalsIgnoreCase(connectionMode);
     }
     
     /**
-     * Check if reverse connection mode is enabled
+     * Check if reverse connection mode is enabled (Koishi actively connects to Connector)
      */
     public boolean isReverseMode() {
         return "reverse".equalsIgnoreCase(connectionMode);
