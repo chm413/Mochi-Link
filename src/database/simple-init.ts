@@ -299,20 +299,21 @@ export class SimpleDatabaseManager {
         }
       }
 
-      const hasColumnCapabilities =
-        typeof server.accept_inbound_ws === 'boolean' ||
-        typeof server.dial_outbound_ws === 'boolean';
+      const hasOwn = (obj: any, key: string): boolean =>
+        !!obj && typeof obj === 'object' && Object.prototype.hasOwnProperty.call(obj, key);
       const hasConfigCapabilities =
-        typeof parsedConfig?.accept_inbound_ws === 'boolean' ||
-        typeof parsedConfig?.dial_outbound_ws === 'boolean' ||
-        typeof parsedConfig?.ws_capabilities?.accept_inbound_ws === 'boolean' ||
-        typeof parsedConfig?.ws_capabilities?.dial_outbound_ws === 'boolean';
-      const hasNewCapabilities = hasColumnCapabilities || hasConfigCapabilities;
+        hasOwn(parsedConfig, 'accept_inbound_ws') ||
+        hasOwn(parsedConfig, 'dial_outbound_ws') ||
+        hasOwn(parsedConfig?.ws_capabilities, 'accept_inbound_ws') ||
+        hasOwn(parsedConfig?.ws_capabilities, 'dial_outbound_ws');
+      const hasMigrationMarker =
+        hasOwn(parsedConfig?.migration, 'auto_migrated_legacy_reverse_at');
+      const isNonLegacyByConfig = hasConfigCapabilities || hasMigrationMarker;
 
-      // 兼容窗口：如果已有能力字段，视为新语义数据，保留 reverse，仅输出告警提示。
-      if (hasNewCapabilities) {
+      // 兼容窗口：仅当配置中已有显式能力字段或明确迁移标记，才视为新语义数据并保留 reverse。
+      if (isNonLegacyByConfig) {
         warnedLegacyRead++;
-        logger.warn(`检测到服务器 ${server.id} 使用 reverse 且包含能力字段，保留为新语义数据（兼容窗口内）。`);
+        logger.warn(`检测到服务器 ${server.id} 使用 reverse 且配置中存在能力字段或迁移标记，保留为新语义数据（兼容窗口内）。`);
         skipped++;
         continue;
       }
