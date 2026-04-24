@@ -11,6 +11,13 @@ import type { MochiWebSocketServer } from './websocket/server';
 import type { WebSocketConnection } from './websocket/connection';
 import { ServiceManager } from './services';
 import type { HTTPServer } from './http/server';
+import {
+    capabilitiesToMode,
+    normalizeServerConnectionConfig,
+    parseConnectionConfig,
+    resolveServerWsCapabilities,
+    WsCapabilities,
+} from './utils/connection-config';
 
 // ============================================================================
 // Helper Functions
@@ -221,109 +228,6 @@ export function apply(ctx: Context, config: PluginConfig) {
         return mode;
     }
 
-    interface WsCapabilities {
-        accept_inbound_ws: boolean;
-        dial_outbound_ws: boolean;
-    }
-
-    function modeToCapabilities(mode: 'forward' | 'reverse'): WsCapabilities {
-        return mode === 'forward'
-            ? { accept_inbound_ws: true, dial_outbound_ws: false }
-            : { accept_inbound_ws: false, dial_outbound_ws: true };
-    }
-
-    function capabilitiesToMode(caps: WsCapabilities): 'forward' | 'reverse' {
-        return caps.accept_inbound_ws ? 'forward' : 'reverse';
-    }
-
-    function validateWsCapabilities(caps: WsCapabilities): void {
-        if (caps.accept_inbound_ws && caps.dial_outbound_ws) {
-            throw new Error(
-                '配置冲突：accept_inbound_ws 与 dial_outbound_ws 不能同时为 true。\n' +
-                '修复建议：二选一。常见场景建议使用 accept_inbound_ws=true, dial_outbound_ws=false。'
-            );
-        }
-
-        if (!caps.accept_inbound_ws && !caps.dial_outbound_ws) {
-            throw new Error(
-                '配置无效：accept_inbound_ws 与 dial_outbound_ws 不能同时为 false。\n' +
-                '修复建议：至少启用一种能力。常见场景建议使用 accept_inbound_ws=true。'
-            );
-        }
-    }
-
-    function normalizeServerConnectionConfig(
-        rawConfig: Record<string, any> | undefined,
-        legacyMode?: 'forward' | 'reverse'
-    ): {
-        capabilities: WsCapabilities;
-        connectionConfig: Record<string, any>;
-        mappedMode: 'forward' | 'reverse';
-        usedLegacyMode: boolean;
-    } {
-        const parsedConfig = rawConfig || {};
-        const wsCapabilities = parsedConfig.ws_capabilities || {};
-
-        const fromCapabilities: WsCapabilities = {
-            accept_inbound_ws: wsCapabilities.accept_inbound_ws ?? parsedConfig.accept_inbound_ws,
-            dial_outbound_ws: wsCapabilities.dial_outbound_ws ?? parsedConfig.dial_outbound_ws
-        };
-
-        const hasNewFields =
-            typeof fromCapabilities.accept_inbound_ws === 'boolean' ||
-            typeof fromCapabilities.dial_outbound_ws === 'boolean';
-
-        const capabilities = hasNewFields
-            ? {
-                accept_inbound_ws: Boolean(fromCapabilities.accept_inbound_ws),
-                dial_outbound_ws: Boolean(fromCapabilities.dial_outbound_ws)
-            }
-            : legacyMode
-                ? modeToCapabilities(legacyMode)
-                : { accept_inbound_ws: true, dial_outbound_ws: false };
-
-        validateWsCapabilities(capabilities);
-
-        const mappedMode = capabilitiesToMode(capabilities);
-        if (legacyMode && mappedMode !== legacyMode) {
-            throw new Error(
-                `配置冲突：legacy connection_mode=${legacyMode} 与能力字段不一致（映射为 ${mappedMode}）。\n` +
-                '修复建议：删除 legacy connection_mode，仅保留 accept_inbound_ws / dial_outbound_ws。'
-            );
-        }
-
-        return {
-            capabilities,
-            mappedMode,
-            usedLegacyMode: !hasNewFields && Boolean(legacyMode),
-            connectionConfig: {
-                ...parsedConfig,
-                ws_capabilities: capabilities
-            }
-        };
-    }
-
-    function resolveServerWsCapabilities(server: any): WsCapabilities {
-        let parsedConfig: any = {};
-        if (typeof server?.connection_config === 'string' && server.connection_config.trim()) {
-            try {
-                parsedConfig = JSON.parse(server.connection_config);
-            } catch {
-                parsedConfig = {};
-            }
-        } else if (server?.connection_config && typeof server.connection_config === 'object') {
-            parsedConfig = server.connection_config;
-        }
-
-        const normalized = normalizeServerConnectionConfig(
-            parsedConfig,
-            server?.connection_mode === 'forward' || server?.connection_mode === 'reverse'
-                ? server.connection_mode
-                : undefined
-        );
-        return normalized.capabilities;
-    }
-    
     // Initialize on ready
     ctx.on('ready', async () => {
         try {
@@ -1049,16 +953,8 @@ export function apply(ctx: Context, config: PluginConfig) {
             return `❌ 服务器连接配置冲突: ${(capabilityError as Error).message}\n` +
                    '💡 修复建议: 使用 mochi.server.update（或直接修正数据库）后，仅保留一组有效能力字段。';
           }
-          let parsedConfig: Record<string, any> = {};
-          if (typeof server.connection_config === 'string' && server.connection_config.trim()) {
-            try {
-              parsedConfig = JSON.parse(server.connection_config);
-            } catch {
-              parsedConfig = {};
-            }
-          }
           const normalizedForNotice = normalizeServerConnectionConfig(
-            parsedConfig,
+            parseConnectionConfig(server),
             server?.connection_mode === 'forward' || server?.connection_mode === 'reverse'
               ? server.connection_mode
               : undefined
