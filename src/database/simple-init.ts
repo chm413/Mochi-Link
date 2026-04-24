@@ -120,6 +120,16 @@ declare module 'koishi' {
 // ============================================================================
 
 export class SimpleDatabaseManager {
+  private startupMigrationSummary: {
+    migratedReverseToForward: number;
+    skipped: number;
+    warnedLegacyRead: number;
+  } = {
+    migratedReverseToForward: 0,
+    skipped: 0,
+    warnedLegacyRead: 0
+  };
+
   constructor(private ctx: Context, private tablePrefix: string = 'mochi') {}
 
   /**
@@ -256,6 +266,95 @@ export class SimpleDatabaseManager {
       primary: 'id',
       autoInc: true
     });
+
+    await this.migrateLegacyConnectionMode();
+  }
+
+  /**
+   * Startup migration: map legacy reverse values to the new connector-perspective semantics.
+   * Legacy `reverse` is migrated to `forward` (forward-only fallback) and synchronized with
+   * capability fields.
+   */
+  async migrateLegacyConnectionMode(): Promise<void> {
+    const prefix = this.tablePrefix.replace(/\.$/, '_');
+    const logger = this.ctx.logger('mochi-link:db-migration');
+    const servers = await this.ctx.database.get(`${prefix}servers` as any, {}) as any[];
+
+    let migrated = 0;
+    let skipped = 0;
+    let warnedLegacyRead = 0;
+
+    for (const server of servers) {
+      if (server.connection_mode !== 'reverse') {
+        skipped++;
+        continue;
+      }
+
+      let parsedConfig: Record<string, any> = {};
+      if (typeof server.connection_config === 'string' && server.connection_config.trim()) {
+        try {
+          parsedConfig = JSON.parse(server.connection_config);
+        } catch {
+          parsedConfig = {};
+        }
+      }
+
+      const hasColumnCapabilities =
+        typeof server.accept_inbound_ws === 'boolean' ||
+        typeof server.dial_outbound_ws === 'boolean';
+      const hasConfigCapabilities =
+        typeof parsedConfig?.accept_inbound_ws === 'boolean' ||
+        typeof parsedConfig?.dial_outbound_ws === 'boolean' ||
+        typeof parsedConfig?.ws_capabilities?.accept_inbound_ws === 'boolean' ||
+        typeof parsedConfig?.ws_capabilities?.dial_outbound_ws === 'boolean';
+      const hasNewCapabilities = hasColumnCapabilities || hasConfigCapabilities;
+
+      // 兼容窗口：如果已有能力字段，视为新语义数据，保留 reverse，仅输出告警提示。
+      if (hasNewCapabilities) {
+        warnedLegacyRead++;
+        logger.warn(`检测到服务器 ${server.id} 使用 reverse 且包含能力字段，保留为新语义数据（兼容窗口内）。`);
+        skipped++;
+        continue;
+      }
+
+      const migratedConfig = {
+        ...parsedConfig,
+        ws_capabilities: {
+          accept_inbound_ws: true,
+          dial_outbound_ws: false
+        },
+        migration: {
+          auto_migrated_legacy_reverse_at: new Date().toISOString()
+        }
+      };
+
+      await this.ctx.database.set(`${prefix}servers` as any, { id: server.id }, {
+        connection_mode: 'forward',
+        accept_inbound_ws: true,
+        dial_outbound_ws: false,
+        connection_config: JSON.stringify(migratedConfig),
+        updated_at: new Date()
+      });
+
+      migrated++;
+      logger.warn(`已自动迁移服务器 ${server.id}: legacy connection_mode=reverse -> forward（新语义/forward-only）`);
+    }
+
+    this.startupMigrationSummary = {
+      migratedReverseToForward: migrated,
+      skipped,
+      warnedLegacyRead
+    };
+
+    if (migrated > 0) {
+      logger.info(`启动迁移完成：已自动迁移 ${migrated} 条 legacy reverse 数据（下一版本将彻底移除 legacy connection_mode 读取）。`);
+    } else {
+      logger.info('启动迁移检查完成：未发现需要自动迁移的 legacy reverse 数据。');
+    }
+  }
+
+  getStartupMigrationSummary(): { migratedReverseToForward: number; skipped: number; warnedLegacyRead: number } {
+    return this.startupMigrationSummary;
   }
 
   /**
