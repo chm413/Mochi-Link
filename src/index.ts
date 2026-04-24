@@ -113,7 +113,7 @@ export const usage = `
 ## 主要功能
 
 - 🎯 **跨核心统一接口**: 支持 Java 版 (Paper/Folia) 和基岩版 (LLBDS/PMMP) 服务器
-- 🔗 **双向连接架构**: 支持正向和反向 WebSocket 连接模式
+- 🔗 **双向连接架构**: 支持 forward / reverse WebSocket 连接模式（以 Connector 视角定义：forward = Connector 主动连接 Koishi）
 - 👥 **多服务器管理**: 在一个实例中管理多台 MC 服务器
 - 🛡️ **权限分离控制**: 基于服务器 ID 的细粒度权限管理
 - 📊 **实时监控推送**: 服务器状态、玩家活动、性能指标实时推送
@@ -211,6 +211,12 @@ export function apply(ctx: Context, config: PluginConfig) {
         }
         
         return null;
+    }
+
+    function formatConnectionModeHelp(mode: string): string {
+        if (mode === 'forward') return 'forward（Connector 主动连接 Koishi）';
+        if (mode === 'reverse') return 'reverse（Koishi 主动连接 Connector）';
+        return mode;
     }
     
     // Initialize on ready
@@ -638,7 +644,8 @@ export function apply(ctx: Context, config: PluginConfig) {
         if (!id || !name) {
           return '用法: mochi.server.add <id> <name> [-t type] [-c core]\n' +
                  '示例: mochi.server.add survival 生存服 -t java -c paper\n' +
-                 '      mochi.server.add survival "My Server" -t java -c paper  (名称包含空格时使用引号)';
+                 '      mochi.server.add survival "My Server" -t java -c paper  (名称包含空格时使用引号)\n' +
+                 '连接模式说明: 采用 Connector 视角，forward = Connector 主动连接 Koishi，reverse = Koishi 主动连接 Connector';
         }
         
         if (!options) {
@@ -739,7 +746,8 @@ export function apply(ctx: Context, config: PluginConfig) {
         
         if (!id || !name) {
           return '用法: mochi.server.register <id> <name> [--host host] [-p port] [-t type] [-c core]\n' +
-                 '示例: mochi.server.register survival 生存服 --host 127.0.0.1 -p 25565 -t java -c paper';
+                 '示例: mochi.server.register survival 生存服 --host 127.0.0.1 -p 25565 -t java -c paper\n' +
+                 '连接模式说明: 采用 Connector 视角，forward = Connector 主动连接 Koishi，reverse = Koishi 主动连接 Connector';
         }
         
         if (!options) {
@@ -909,7 +917,7 @@ export function apply(ctx: Context, config: PluginConfig) {
                  `  核心: ${server.core_name}\n` +
                  `  版本: ${server.core_version || '未知'}\n` +
                  `  状态: ${server.status}\n` +
-                 `  连接模式: ${server.connection_mode}\n` +
+                 `  连接模式: ${formatConnectionModeHelp(server.connection_mode)}\n` +
                  `  创建时间: ${server.created_at.toLocaleString()}\n` +
                  `  最后更新: ${server.updated_at.toLocaleString()}`;
         } catch (error) {

@@ -21,7 +21,9 @@ import java.util.logging.Logger;
 /**
  * Manages WebSocket connections to the Mochi-Link management server
  * 
- * Handles both forward and reverse connection modes, automatic reconnection with exponential backoff,
+ * Handles both forward and reverse connection modes (Connector perspective:
+ * forward = Connector actively connects to Koishi, reverse = Koishi actively connects to Connector),
+ * automatic reconnection with exponential backoff,
  * and message routing using the U-WBP v2 protocol.
  */
 public class ConnectionManager {

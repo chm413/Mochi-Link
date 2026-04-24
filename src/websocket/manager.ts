@@ -215,7 +215,7 @@ export class WebSocketConnectionManager extends EventEmitter {
   // ============================================================================
 
   /**
-   * Connect to a server (forward connection mode)
+   * Connect to a server (reverse connection mode, Connector 视角)
    */
   async connectToServer(serverConfig: ServerConfig): Promise<WebSocketConnection> {
     if (!this.isRunning) {
