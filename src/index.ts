@@ -113,7 +113,7 @@ export const usage = `
 ## 主要功能
 
 - 🎯 **跨核心统一接口**: 支持 Java 版 (Paper/Folia) 和基岩版 (LLBDS/PMMP) 服务器
-- 🔗 **双向连接架构**: 支持 forward / reverse WebSocket 连接模式（以 Connector 视角定义：forward = Connector 主动连接 Koishi）
+- 🔗 **双向连接架构**: 支持基于能力字段的 WebSocket 连接（accept_inbound_ws / dial_outbound_ws）
 - 👥 **多服务器管理**: 在一个实例中管理多台 MC 服务器
 - 🛡️ **权限分离控制**: 基于服务器 ID 的细粒度权限管理
 - 📊 **实时监控推送**: 服务器状态、玩家活动、性能指标实时推送
@@ -217,6 +217,103 @@ export function apply(ctx: Context, config: PluginConfig) {
         if (mode === 'forward') return 'forward（Connector 主动连接 Koishi）';
         if (mode === 'reverse') return 'reverse（Koishi 主动连接 Connector）';
         return mode;
+    }
+
+    interface WsCapabilities {
+        accept_inbound_ws: boolean;
+        dial_outbound_ws: boolean;
+    }
+
+    function modeToCapabilities(mode: 'forward' | 'reverse'): WsCapabilities {
+        return mode === 'forward'
+            ? { accept_inbound_ws: true, dial_outbound_ws: false }
+            : { accept_inbound_ws: false, dial_outbound_ws: true };
+    }
+
+    function capabilitiesToMode(caps: WsCapabilities): 'forward' | 'reverse' {
+        return caps.accept_inbound_ws ? 'forward' : 'reverse';
+    }
+
+    function validateWsCapabilities(caps: WsCapabilities): void {
+        if (caps.accept_inbound_ws && caps.dial_outbound_ws) {
+            throw new Error(
+                '配置冲突：accept_inbound_ws 与 dial_outbound_ws 不能同时为 true。\n' +
+                '修复建议：二选一。常见场景建议使用 accept_inbound_ws=true, dial_outbound_ws=false。'
+            );
+        }
+
+        if (!caps.accept_inbound_ws && !caps.dial_outbound_ws) {
+            throw new Error(
+                '配置无效：accept_inbound_ws 与 dial_outbound_ws 不能同时为 false。\n' +
+                '修复建议：至少启用一种能力。常见场景建议使用 accept_inbound_ws=true。'
+            );
+        }
+    }
+
+    function normalizeServerConnectionConfig(
+        rawConfig: Record<string, any> | undefined,
+        legacyMode?: 'forward' | 'reverse'
+    ): { capabilities: WsCapabilities; connectionConfig: Record<string, any>; mappedMode: 'forward' | 'reverse' } {
+        const parsedConfig = rawConfig || {};
+        const wsCapabilities = parsedConfig.ws_capabilities || {};
+
+        const fromCapabilities: WsCapabilities = {
+            accept_inbound_ws: wsCapabilities.accept_inbound_ws ?? parsedConfig.accept_inbound_ws,
+            dial_outbound_ws: wsCapabilities.dial_outbound_ws ?? parsedConfig.dial_outbound_ws
+        };
+
+        const hasNewFields =
+            typeof fromCapabilities.accept_inbound_ws === 'boolean' ||
+            typeof fromCapabilities.dial_outbound_ws === 'boolean';
+
+        const capabilities = hasNewFields
+            ? {
+                accept_inbound_ws: Boolean(fromCapabilities.accept_inbound_ws),
+                dial_outbound_ws: Boolean(fromCapabilities.dial_outbound_ws)
+            }
+            : legacyMode
+                ? modeToCapabilities(legacyMode)
+                : { accept_inbound_ws: true, dial_outbound_ws: false };
+
+        validateWsCapabilities(capabilities);
+
+        const mappedMode = capabilitiesToMode(capabilities);
+        if (legacyMode && mappedMode !== legacyMode) {
+            throw new Error(
+                `配置冲突：legacy connection_mode=${legacyMode} 与能力字段不一致（映射为 ${mappedMode}）。\n` +
+                '修复建议：删除 legacy connection_mode，仅保留 accept_inbound_ws / dial_outbound_ws。'
+            );
+        }
+
+        return {
+            capabilities,
+            mappedMode,
+            connectionConfig: {
+                ...parsedConfig,
+                ws_capabilities: capabilities
+            }
+        };
+    }
+
+    function resolveServerWsCapabilities(server: any): WsCapabilities {
+        let parsedConfig: any = {};
+        if (typeof server?.connection_config === 'string' && server.connection_config.trim()) {
+            try {
+                parsedConfig = JSON.parse(server.connection_config);
+            } catch {
+                parsedConfig = {};
+            }
+        } else if (server?.connection_config && typeof server.connection_config === 'object') {
+            parsedConfig = server.connection_config;
+        }
+
+        const normalized = normalizeServerConnectionConfig(
+            parsedConfig,
+            server?.connection_mode === 'forward' || server?.connection_mode === 'reverse'
+                ? server.connection_mode
+                : undefined
+        );
+        return normalized.capabilities;
     }
     
     // Initialize on ready
@@ -645,7 +742,7 @@ export function apply(ctx: Context, config: PluginConfig) {
           return '用法: mochi.server.add <id> <name> [-t type] [-c core]\n' +
                  '示例: mochi.server.add survival 生存服 -t java -c paper\n' +
                  '      mochi.server.add survival "My Server" -t java -c paper  (名称包含空格时使用引号)\n' +
-                 '连接模式说明: 采用 Connector 视角，forward = Connector 主动连接 Koishi，reverse = Koishi 主动连接 Connector';
+                 '连接能力说明: 使用 accept_inbound_ws / dial_outbound_ws（推荐仅启用其一）';
         }
         
         if (!options) {
@@ -668,14 +765,18 @@ export function apply(ctx: Context, config: PluginConfig) {
           const expiresAt = new Date();
           expiresAt.setFullYear(expiresAt.getFullYear() + 1);
           
+          const normalizedConnection = normalizeServerConnectionConfig({}, 'forward');
+
           // 创建服务器记录
           await ctx.database.create(`${config.database?.prefix || 'mochi'}_servers` as any, {
             id,
             name,
             core_type: (options.type || 'java') as 'java' | 'bedrock',
             core_name: options.core || 'paper',
-            connection_mode: 'reverse',
-            connection_config: JSON.stringify({}),
+            connection_mode: normalizedConnection.mappedMode,
+            accept_inbound_ws: normalizedConnection.capabilities.accept_inbound_ws,
+            dial_outbound_ws: normalizedConnection.capabilities.dial_outbound_ws,
+            connection_config: JSON.stringify(normalizedConnection.connectionConfig),
             status: 'offline',
             owner_id: session?.userId,
             created_at: new Date(),
@@ -747,7 +848,7 @@ export function apply(ctx: Context, config: PluginConfig) {
         if (!id || !name) {
           return '用法: mochi.server.register <id> <name> [--host host] [-p port] [-t type] [-c core]\n' +
                  '示例: mochi.server.register survival 生存服 --host 127.0.0.1 -p 25565 -t java -c paper\n' +
-                 '连接模式说明: 采用 Connector 视角，forward = Connector 主动连接 Koishi，reverse = Koishi 主动连接 Connector';
+                 '连接能力说明: 使用 accept_inbound_ws / dial_outbound_ws（推荐仅启用其一）';
         }
         
         if (!options) {
@@ -795,17 +896,24 @@ export function apply(ctx: Context, config: PluginConfig) {
           const expiresAt = new Date();
           expiresAt.setFullYear(expiresAt.getFullYear() + 1);
           
+          const normalizedConnection = normalizeServerConnectionConfig(
+            {
+              host: host,
+              port: port
+            },
+            'forward'
+          );
+
           // 创建服务器记录
           await ctx.database.create(`${config.database?.prefix || 'mochi'}_servers` as any, {
             id,
             name,
             core_type: finalType as 'java' | 'bedrock',
             core_name: core,
-            connection_mode: 'reverse',
-            connection_config: JSON.stringify({
-              host: host,
-              port: port
-            }),
+            connection_mode: normalizedConnection.mappedMode,
+            accept_inbound_ws: normalizedConnection.capabilities.accept_inbound_ws,
+            dial_outbound_ws: normalizedConnection.capabilities.dial_outbound_ws,
+            connection_config: JSON.stringify(normalizedConnection.connectionConfig),
             status: 'offline',
             owner_id: session?.userId,
             created_at: new Date(),
@@ -910,6 +1018,14 @@ export function apply(ctx: Context, config: PluginConfig) {
             return `服务器 ${targetServerId} 不存在`;
           }
           
+          let wsCapabilities: WsCapabilities;
+          try {
+            wsCapabilities = resolveServerWsCapabilities(server);
+          } catch (capabilityError) {
+            return `❌ 服务器连接配置冲突: ${(capabilityError as Error).message}\n` +
+                   '💡 修复建议: 使用 mochi.server.update（或直接修正数据库）后，仅保留一组有效能力字段。';
+          }
+
           return `服务器信息：\n` +
                  `  ID: ${server.id}\n` +
                  `  名称: ${server.name}\n` +
@@ -917,7 +1033,8 @@ export function apply(ctx: Context, config: PluginConfig) {
                  `  核心: ${server.core_name}\n` +
                  `  版本: ${server.core_version || '未知'}\n` +
                  `  状态: ${server.status}\n` +
-                 `  连接模式: ${formatConnectionModeHelp(server.connection_mode)}\n` +
+                 `  连接模式: ${formatConnectionModeHelp(capabilitiesToMode(wsCapabilities))}\n` +
+                 `  WS 能力: accept_inbound_ws=${wsCapabilities.accept_inbound_ws}, dial_outbound_ws=${wsCapabilities.dial_outbound_ws}\n` +
                  `  创建时间: ${server.created_at.toLocaleString()}\n` +
                  `  最后更新: ${server.updated_at.toLocaleString()}`;
         } catch (error) {
