@@ -18,6 +18,7 @@ import {
     resolveServerWsCapabilities,
     WsCapabilities,
 } from './utils/connection-config';
+import { formatLegacyModeWindowNotice, getLegacyModeWindows } from './constants/version-policy';
 
 // ============================================================================
 // Helper Functions
@@ -176,8 +177,8 @@ export function apply(ctx: Context, config: PluginConfig) {
     let serviceManager: ServiceManager | null = null;
     let wsManager: MochiWebSocketServer | null = null;
     let httpServer: HTTPServer | null = null;
-    const LEGACY_MODE_COMPAT_WINDOW = 'v1.7.x（兼容期）';
-    const LEGACY_MODE_REMOVE_WINDOW = 'v1.8.0（移除期）';
+    const legacyModeWindows = getLegacyModeWindows();
+    const legacyModeWindowNotice = formatLegacyModeWindowNotice(legacyModeWindows.runtimeVersion);
     let isInitialized = false;
     
     /**
@@ -247,12 +248,12 @@ export function apply(ctx: Context, config: PluginConfig) {
             const migrationSummary = dbManager.getStartupMigrationSummary();
             if (migrationSummary.migratedReverseToForward > 0) {
                 logger.warn(`已自动迁移 ${migrationSummary.migratedReverseToForward} 条 legacy reverse 数据到新语义（forward-only）。`);
-                logger.warn(`版本窗口：${LEGACY_MODE_COMPAT_WINDOW} 继续兼容读取旧值并告警；${LEGACY_MODE_REMOVE_WINDOW} 将彻底移除旧值读取。`);
+                logger.warn(legacyModeWindowNotice);
             } else if (migrationSummary.warnedLegacyRead > 0) {
                 logger.warn(`检测到 ${migrationSummary.warnedLegacyRead} 条 reverse 数据已带能力字段，按新语义保留并继续告警。`);
-                logger.warn(`版本窗口：${LEGACY_MODE_COMPAT_WINDOW} 继续兼容读取旧值并告警；${LEGACY_MODE_REMOVE_WINDOW} 将彻底移除旧值读取。`);
+                logger.warn(legacyModeWindowNotice);
             } else {
-                logger.info(`版本窗口：${LEGACY_MODE_COMPAT_WINDOW} 继续兼容读取旧值并告警；${LEGACY_MODE_REMOVE_WINDOW} 将彻底移除旧值读取。`);
+                logger.info(legacyModeWindowNotice);
             }
             
             // Initialize service manager
@@ -636,9 +637,9 @@ export function apply(ctx: Context, config: PluginConfig) {
           const header = '服务器列表：';
           const migrationSummary = dbManager.getStartupMigrationSummary();
           const migrationNotice = migrationSummary.migratedReverseToForward > 0
-            ? `\n⚠️ 已自动迁移: 启动时已将 ${migrationSummary.migratedReverseToForward} 条 legacy reverse 数据映射为新语义（forward-only）。`
+            ? `\n⚠️ 已自动迁移: 启动时已将 ${migrationSummary.migratedReverseToForward} 条 legacy reverse 数据映射为新语义（forward-only）。\nℹ️ ${legacyModeWindowNotice}`
             : migrationSummary.warnedLegacyRead > 0
-              ? `\n⚠️ 兼容读取告警: 检测到 ${migrationSummary.warnedLegacyRead} 条 reverse 数据已带能力字段，当前按新语义保留。`
+              ? `\n⚠️ 兼容读取告警: 检测到 ${migrationSummary.warnedLegacyRead} 条 reverse 数据已带能力字段，当前按新语义保留。\nℹ️ ${legacyModeWindowNotice}`
               : '';
           const items = servers.map((s: any) => {
             return `  [${s.id}] ${s.name} (${s.core_type}/${s.core_name}) - ${s.status}`;
@@ -960,7 +961,7 @@ export function apply(ctx: Context, config: PluginConfig) {
               : undefined
           );
           const legacyWarning = normalizedForNotice.usedLegacyMode
-            ? `\n  ⚠️ 兼容期告警: 当前版本仍兼容读取 legacy connection_mode（${LEGACY_MODE_COMPAT_WINDOW}），${LEGACY_MODE_REMOVE_WINDOW} 将移除。`
+            ? `\n  ⚠️ 兼容期告警: 当前版本仍兼容读取 legacy connection_mode（${legacyModeWindows.compatWindow}），${legacyModeWindows.removeWindow} 将移除。`
             : '';
 
           return `服务器信息：\n` +
