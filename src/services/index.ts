@@ -190,7 +190,7 @@ export * from '../connection';
 // Service Manager
 // ============================================================================
 
-import { Context } from 'koishi';
+import { Context, Logger } from 'koishi';
 import { AuditService } from './audit';
 import { PermissionManager } from './permission';
 import { TokenManager } from './token';
@@ -228,8 +228,10 @@ export class ServiceManager {
   public pluginIntegration: PluginIntegrationService;
   public performance: PerformanceOptimizationService;
   private db: DatabaseManager;
+  private logger: Logger;
 
   constructor(private ctx: Context) {
+    this.logger = ctx.logger('mochi-link:services');
     this.db = new DatabaseManager(ctx);
     this.audit = new AuditService(ctx);
     this.permission = new PermissionManager(ctx);
@@ -275,7 +277,7 @@ export class ServiceManager {
    * Initialize all services
    */
   async initialize(): Promise<void> {
-    const logger = this.ctx.logger('mochi-link:services');
+    const logger = this.logger;
     logger.info('Initializing services...');
 
     try {
@@ -299,22 +301,35 @@ export class ServiceManager {
    * Cleanup all services
    */
   async cleanup(): Promise<void> {
-    const logger = this.ctx.logger('mochi-link:services');
+    const logger = this.logger;
     logger.info('Cleaning up services...');
 
-    try {
-      // Cleanup services in reverse order
-      await this.performance.shutdown();
-      await this.pluginIntegration.cleanup();
-      await this.monitoring.shutdown();
-      await this.event.shutdown();
-      await this.messageRouter.cleanup();
-      await this.binding.cleanup();
-      await this.server.cleanup();
-      
+    const cleanupSteps: Array<[string, () => void | Promise<void>]> = [
+      ['performance', () => this.performance.shutdown()],
+      ['plugin integration', () => this.pluginIntegration.cleanup()],
+      ['monitoring', () => this.monitoring.shutdown()],
+      ['event', () => this.event.shutdown()],
+      ['message router', () => this.messageRouter.cleanup()],
+      ['binding', () => this.binding.cleanup()],
+      ['whitelist', () => this.whitelist.cleanup()],
+      ['player', () => this.player.cleanup()],
+      ['server', () => this.server.cleanup()]
+    ];
+
+    let failureCount = 0;
+    for (const [name, cleanup] of cleanupSteps) {
+      try {
+        await cleanup();
+      } catch (error) {
+        failureCount += 1;
+        logger.error(`Failed to clean up ${name} service:`, error);
+      }
+    }
+
+    if (failureCount === 0) {
       logger.info('All services cleaned up successfully');
-    } catch (error) {
-      logger.error('Service cleanup failed:', error);
+    } else {
+      logger.warn(`Service cleanup completed with ${failureCount} failure(s)`);
     }
   }
 

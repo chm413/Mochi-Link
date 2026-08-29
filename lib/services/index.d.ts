@@ -78,6 +78,7 @@ export declare class ServiceManager {
     pluginIntegration: PluginIntegrationService;
     performance: PerformanceOptimizationService;
     private db;
+    private logger;
     constructor(ctx: Context);
     /**
      * Initialize all services

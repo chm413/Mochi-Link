@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-mochi-link",
   "version": "1.7.0",
-  "description": "Mochi-Link (大福连) - Minecraft 统一管理与监控系统",
+  "description": "Mochi-Link (大福连) - Minecraft 统一管理与监控 Koishi 插件",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -36,17 +36,7 @@
     "lint:fix": "eslint src --ext .ts --fix",
     "clean": "rimraf lib",
     "setup": "node scripts/dev.js setup",
-    "check": "node scripts/dev.js check",
-    "deploy:init": "node scripts/deploy.js init",
-    "deploy:init:dev": "node scripts/deploy.js init development",
-    "deploy:init:staging": "node scripts/deploy.js init staging",
-    "deploy:init:prod": "node scripts/deploy.js init production",
-    "deploy:build": "node scripts/deploy.js build",
-    "deploy:validate": "node scripts/deploy.js validate",
-    "deploy:start": "node scripts/deploy.js start",
-    "deploy:stop": "node scripts/deploy.js stop",
-    "deploy:status": "node scripts/deploy.js status",
-    "start": "node lib/index.js"
+    "check": "node scripts/dev.js check"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",
@@ -60,12 +50,11 @@
     "openapi-types": "^12.1.3",
     "rimraf": "^4.4.1",
     "ts-jest": "^29.1.0",
-    "typescript": "^5.0.2"
+    "typescript": "^5.0.2",
+    "koishi": "^4.18.11"
   },
   "dependencies": {
-    "koishi": "^4.15.0",
-    "uuid": "^9.0.0",
-    "ws": "^8.13.0"
+    "ws": "^8.21.3"
   },
   "peerDependencies": {
     "koishi": "^4.15.0"

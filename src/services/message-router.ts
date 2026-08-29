@@ -42,7 +42,7 @@ export interface ServerEvent {
   serverId: string;
   eventType: string;
   data: any;
-  timestamp: string;  // ISO 8601 格式字符串，与 BaseEvent 保持一致
+  timestamp: number | string;  // 新消息使用毫秒整数，兼容读取历史 ISO 字符串
 }
 
 export interface GroupMessage {
@@ -424,7 +424,10 @@ export class MessageRouter extends EventEmitter {
     }
 
     // 验证消息格式模板
-    const validation = validateMessageFormat(format);
+    const dataPlaceholders = event.data && typeof event.data === 'object'
+      ? Object.keys(event.data).map((key) => `{${key}}`)
+      : [];
+    const validation = validateMessageFormat(format, dataPlaceholders);
     if (!validation.valid) {
       this.logger.warn(`Invalid event format: ${validation.error}`);
       // 使用默认格式
@@ -442,7 +445,7 @@ export class MessageRouter extends EventEmitter {
       Object.keys(event.data).forEach(key => {
         const value = String(event.data[key]);
         const safeValue = sanitizeUserInput(value, { maxLength: 200 });
-        formatted = formatted.replace(`{${key}}`, safeValue);
+        formatted = formatted.split(`{${key}}`).join(safeValue);
       });
     }
 
@@ -505,7 +508,7 @@ export class MessageRouter extends EventEmitter {
       if (cleanedCount > 0) {
         this.logger.debug(`Cleaned up ${cleanedCount} expired rate limit entries`);
       }
-    }, 60000); // 每分钟执行一次
+    }, 60000).unref?.(); // 每分钟执行一次
   }
 
   /**

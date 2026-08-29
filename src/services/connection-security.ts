@@ -633,7 +633,7 @@ export class ConnectionSecurityManager extends EventEmitter {
 
     this.monitoringInterval = setInterval(() => {
       this.performSecurityCheck();
-    }, this.config.securityMonitoring.monitoringInterval);
+    }, this.config.securityMonitoring.monitoringInterval).unref?.();
   }
 
   /**
@@ -642,7 +642,7 @@ export class ConnectionSecurityManager extends EventEmitter {
   private startCleanup(): void {
     this.cleanupInterval = setInterval(() => {
       this.cleanupExpiredRecords();
-    }, this.config.connectionLimits.cleanupInterval);
+    }, this.config.connectionLimits.cleanupInterval).unref?.();
   }
 
   /**

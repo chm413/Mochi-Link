@@ -18,7 +18,7 @@ const createMockContext = (): Context => ({
   })),
   database: {
     get: jest.fn().mockResolvedValue([]),
-    create: jest.fn().mockResolvedValue([{ id: 1 }]),
+    create: jest.fn().mockResolvedValue({ id: 1 }),
     set: jest.fn().mockResolvedValue({ matched: 1 }),
     remove: jest.fn().mockResolvedValue({ matched: 1 }),
     getUser: jest.fn().mockResolvedValue({ 
@@ -56,10 +56,10 @@ describe('Permission Management Property Tests', () => {
         // Mock database responses for consistent testing
         const mockContext = createMockContext();
         (mockContext.database.get as jest.Mock).mockImplementation((table, query) => {
-          if (table === 'minecraft_servers') {
+          if (table === 'mochi_servers') {
             return Promise.resolve([]);
           }
-          if (table === 'server_acl') {
+          if (table === 'mochi_server_acl') {
             return Promise.resolve([]);
           }
           return Promise.resolve([]);

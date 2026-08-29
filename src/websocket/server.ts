@@ -149,7 +149,10 @@ export class MochiWebSocketServer extends EventEmitter {
    * Stop the WebSocket server
    */
   async stop(): Promise<void> {
+    this.authManager.shutdown();
+
     if (!this.isRunning) {
+      this.connections.clear();
       return;
     }
 

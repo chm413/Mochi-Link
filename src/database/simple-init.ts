@@ -6,6 +6,7 @@
 
 import { Context } from 'koishi';
 import { APIToken } from '../types';
+import { buildTableName } from './table-names';
 
 // ============================================================================
 // Database Types
@@ -132,15 +133,17 @@ export class SimpleDatabaseManager {
 
   constructor(private ctx: Context, private tablePrefix: string = 'mochi') {}
 
+  private table(baseName: string): string {
+    return buildTableName(this.tablePrefix, baseName);
+  }
+
   /**
    * Initialize database tables
    */
   async initialize(): Promise<void> {
     const ctx = this.ctx;
-    const prefix = this.tablePrefix.replace(/\.$/, '_'); // Replace . with _
-
     // Minecraft Servers Table
-    ctx.model.extend(`${prefix}servers` as any, {
+    ctx.model.extend(this.table('servers') as any, {
       id: 'string',
       name: 'string',
       core_type: 'string',
@@ -161,7 +164,7 @@ export class SimpleDatabaseManager {
     });
 
     // Server Access Control List Table
-    ctx.model.extend(`${prefix}server_acl` as any, {
+    ctx.model.extend(this.table('server_acl') as any, {
       id: 'unsigned',
       user_id: 'string',
       server_id: 'string',
@@ -176,7 +179,7 @@ export class SimpleDatabaseManager {
     });
 
     // API Tokens Table
-    ctx.model.extend(`${prefix}api_tokens` as any, {
+    ctx.model.extend(this.table('api_tokens') as any, {
       id: 'unsigned',
       server_id: 'string',
       token: 'string',
@@ -192,7 +195,7 @@ export class SimpleDatabaseManager {
     });
 
     // Audit Logs Table
-    ctx.model.extend(`${prefix}audit_logs` as any, {
+    ctx.model.extend(this.table('audit_logs') as any, {
       id: 'unsigned',
       user_id: 'string',
       server_id: 'string',
@@ -209,7 +212,7 @@ export class SimpleDatabaseManager {
     });
 
     // Group Bindings Table
-    ctx.model.extend(`${prefix}group_bindings` as any, {
+    ctx.model.extend(this.table('group_bindings') as any, {
       id: 'unsigned',
       group_id: 'string',
       server_id: 'string',
@@ -225,7 +228,7 @@ export class SimpleDatabaseManager {
     });
 
     // Pending Operations Table
-    ctx.model.extend(`${prefix}pending_operations` as any, {
+    ctx.model.extend(this.table('pending_operations') as any, {
       id: 'unsigned',
       server_id: 'string',
       operation_type: 'string',
@@ -240,7 +243,7 @@ export class SimpleDatabaseManager {
     });
 
     // Player Cache Table
-    ctx.model.extend(`${prefix}player_cache` as any, {
+    ctx.model.extend(this.table('player_cache') as any, {
       id: 'unsigned',
       uuid: 'string',
       xuid: 'string',
@@ -255,7 +258,7 @@ export class SimpleDatabaseManager {
     });
 
     // Server Bindings Table
-    ctx.model.extend(`${prefix}server_bindings` as any, {
+    ctx.model.extend(this.table('server_bindings') as any, {
       id: 'unsigned',
       group_id: 'string',
       server_id: 'string',
@@ -276,9 +279,8 @@ export class SimpleDatabaseManager {
    * capability fields.
    */
   async migrateLegacyConnectionMode(): Promise<void> {
-    const prefix = this.tablePrefix.replace(/\.$/, '_');
     const logger = this.ctx.logger('mochi-link:db-migration');
-    const servers = await this.ctx.database.get(`${prefix}servers` as any, {}) as any[];
+    const servers = await this.ctx.database.get(this.table('servers') as any, {}) as any[];
 
     let migrated = 0;
     let skipped = 0;
@@ -329,7 +331,7 @@ export class SimpleDatabaseManager {
         }
       };
 
-      await this.ctx.database.set(`${prefix}servers` as any, { id: server.id }, {
+      await this.ctx.database.set(this.table('servers') as any, { id: server.id }, {
         connection_mode: 'forward',
         accept_inbound_ws: true,
         dial_outbound_ws: false,
@@ -363,14 +365,13 @@ export class SimpleDatabaseManager {
    */
   async createServer(server: Omit<MinecraftServer, 'created_at' | 'updated_at'>): Promise<MinecraftServer> {
     const now = new Date();
-    const prefix = this.tablePrefix.replace(/\.$/, '_');
     const newServer: MinecraftServer = {
       ...server,
       created_at: now,
       updated_at: now
     };
 
-    await this.ctx.database.create(`${prefix}servers` as any, newServer);
+    await this.ctx.database.create(this.table('servers') as any, newServer);
     return newServer;
   }
 
@@ -378,8 +379,7 @@ export class SimpleDatabaseManager {
    * Get server by ID
    */
   async getServer(id: string): Promise<MinecraftServer | null> {
-    const prefix = this.tablePrefix.replace(/\.$/, '_');
-    const servers = await this.ctx.database.get(`${prefix}servers` as any, { id });
+    const servers = await this.ctx.database.get(this.table('servers') as any, { id });
     return (servers[0] as any) || null;
   }
 
@@ -387,16 +387,14 @@ export class SimpleDatabaseManager {
    * List all servers
    */
   async listServers(): Promise<MinecraftServer[]> {
-    const prefix = this.tablePrefix.replace(/\.$/, '_');
-    return await this.ctx.database.get(`${prefix}servers` as any, {}) as any;
+    return await this.ctx.database.get(this.table('servers') as any, {}) as any;
   }
 
   /**
    * Update server
    */
   async updateServer(id: string, updates: Partial<MinecraftServer>): Promise<void> {
-    const prefix = this.tablePrefix.replace(/\.$/, '_');
-    await this.ctx.database.set(`${prefix}servers` as any, { id }, {
+    await this.ctx.database.set(this.table('servers') as any, { id }, {
       ...updates,
       updated_at: new Date()
     });
@@ -406,16 +404,14 @@ export class SimpleDatabaseManager {
    * Delete server
    */
   async deleteServer(id: string): Promise<void> {
-    const prefix = this.tablePrefix.replace(/\.$/, '_');
-    await this.ctx.database.remove(`${prefix}servers` as any, { id });
+    await this.ctx.database.remove(this.table('servers') as any, { id });
   }
 
   /**
    * Create audit log
    */
   async createAuditLog(log: Omit<AuditLog, 'id' | 'timestamp'>): Promise<void> {
-    const prefix = this.tablePrefix.replace(/\.$/, '_');
-    await this.ctx.database.create(`${prefix}audit_logs` as any, {
+    await this.ctx.database.create(this.table('audit_logs') as any, {
       ...log,
       timestamp: new Date()
     });
@@ -425,8 +421,7 @@ export class SimpleDatabaseManager {
    * Get recent audit logs
    */
   async getAuditLogs(limit: number = 100): Promise<AuditLog[]> {
-    const prefix = this.tablePrefix.replace(/\.$/, '_');
-    const logs = await this.ctx.database.get(`${prefix}audit_logs` as any, {});
+    const logs = await this.ctx.database.get(this.table('audit_logs') as any, {});
     return logs.slice(-limit) as any;
   }
 
@@ -434,7 +429,6 @@ export class SimpleDatabaseManager {
    * Create group binding
    */
   async createGroupBinding(binding: Omit<GroupBinding, 'id' | 'created_at' | 'updated_at'>): Promise<GroupBinding> {
-    const prefix = this.tablePrefix.replace(/\.$/, '_');
     const now = new Date();
     const newBinding: any = {
       ...binding,
@@ -442,7 +436,7 @@ export class SimpleDatabaseManager {
       updated_at: now
     };
     
-    const result = await this.ctx.database.create(`${prefix}group_bindings` as any, newBinding);
+    const result = await this.ctx.database.create(this.table('group_bindings') as any, newBinding);
     return { ...newBinding, id: result.id } as GroupBinding;
   }
 
@@ -450,8 +444,7 @@ export class SimpleDatabaseManager {
    * Get group bindings by group ID
    */
   async getGroupBindings(groupId: string): Promise<GroupBinding[]> {
-    const prefix = this.tablePrefix.replace(/\.$/, '_');
-    const bindings = await this.ctx.database.get(`${prefix}group_bindings` as any, { 
+    const bindings = await this.ctx.database.get(this.table('group_bindings') as any, {
       group_id: groupId,
       status: 'active'
     });
@@ -473,16 +466,14 @@ export class SimpleDatabaseManager {
    * Delete group binding
    */
   async deleteGroupBinding(id: number): Promise<void> {
-    const prefix = this.tablePrefix.replace(/\.$/, '_');
-    await this.ctx.database.remove(`${prefix}group_bindings` as any, { id });
+    await this.ctx.database.remove(this.table('group_bindings') as any, { id });
   }
 
   /**
    * Get all bindings for a server
    */
   async getServerBindings(serverId: string): Promise<GroupBinding[]> {
-    const prefix = this.tablePrefix.replace(/\.$/, '_');
-    const bindings = await this.ctx.database.get(`${prefix}group_bindings` as any, { 
+    const bindings = await this.ctx.database.get(this.table('group_bindings') as any, {
       server_id: serverId,
       status: 'active'
     });
@@ -497,12 +488,11 @@ export class SimpleDatabaseManager {
     encryptionConfig?: any;
     expiresAt?: Date;
   }): Promise<APIToken> {
-    const prefix = this.tablePrefix.replace(/\.$/, '_');
     const now = new Date();
     
     const tokenData: any = {
       server_id: serverId,
-      token: token,
+      token: '',
       token_hash: tokenHash,
       ip_whitelist: options?.ipWhitelist ? JSON.stringify(options.ipWhitelist) : null,
       encryption_config: options?.encryptionConfig ? JSON.stringify(options.encryptionConfig) : null,
@@ -511,7 +501,7 @@ export class SimpleDatabaseManager {
       last_used: null
     };
     
-    const result = await this.ctx.database.create(`${prefix}api_tokens` as any, tokenData);
+    const result = await this.ctx.database.create(this.table('api_tokens') as any, tokenData);
     
     return {
       id: result.id,
@@ -530,15 +520,14 @@ export class SimpleDatabaseManager {
    * Get API tokens for a server
    */
   async getAPITokens(serverId: string): Promise<APIToken[]> {
-    const prefix = this.tablePrefix.replace(/\.$/, '_');
-    const tokens = await this.ctx.database.get(`${prefix}api_tokens` as any, { 
+    const tokens = await this.ctx.database.get(this.table('api_tokens') as any, {
       server_id: serverId
     });
     
     return tokens.map((t: any) => ({
       id: t.id,
       serverId: t.server_id,
-      token: t.token,
+      token: t.token || '',
       tokenHash: t.token_hash,
       ipWhitelist: t.ip_whitelist ? JSON.parse(t.ip_whitelist) : undefined,
       encryptionConfig: t.encryption_config ? JSON.parse(t.encryption_config) : undefined,
@@ -552,15 +541,13 @@ export class SimpleDatabaseManager {
    * Delete API token
    */
   async deleteAPIToken(tokenId: number): Promise<void> {
-    const prefix = this.tablePrefix.replace(/\.$/, '_');
-    await this.ctx.database.remove(`${prefix}api_tokens` as any, { id: tokenId });
+    await this.ctx.database.remove(this.table('api_tokens') as any, { id: tokenId });
   }
 
   /**
    * Delete all API tokens for a server
    */
   async deleteServerAPITokens(serverId: string): Promise<void> {
-    const prefix = this.tablePrefix.replace(/\.$/, '_');
-    await this.ctx.database.remove(`${prefix}api_tokens` as any, { server_id: serverId });
+    await this.ctx.database.remove(this.table('api_tokens') as any, { server_id: serverId });
   }
 }

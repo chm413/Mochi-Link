@@ -32,7 +32,7 @@ export interface ServerEvent {
     serverId: string;
     eventType: string;
     data: any;
-    timestamp: string;
+    timestamp: number | string;
 }
 export interface GroupMessage {
     groupId: string;

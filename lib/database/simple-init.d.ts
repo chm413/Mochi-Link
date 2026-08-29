@@ -11,7 +11,9 @@ export interface MinecraftServer {
     core_type: 'java' | 'bedrock';
     core_name: string;
     core_version?: string;
-    connection_mode: 'forward' | 'reverse';
+    accept_inbound_ws: boolean;
+    dial_outbound_ws: boolean;
+    connection_mode?: 'forward' | 'reverse';
     connection_config: string;
     status: 'online' | 'offline' | 'error';
     owner_id?: string;
@@ -96,11 +98,24 @@ declare module 'koishi' {
 export declare class SimpleDatabaseManager {
     private ctx;
     private tablePrefix;
+    private startupMigrationSummary;
     constructor(ctx: Context, tablePrefix?: string);
+    private table;
     /**
      * Initialize database tables
      */
     initialize(): Promise<void>;
+    /**
+     * Startup migration: map legacy reverse values to the new connector-perspective semantics.
+     * Legacy `reverse` is migrated to `forward` (forward-only fallback) and synchronized with
+     * capability fields.
+     */
+    migrateLegacyConnectionMode(): Promise<void>;
+    getStartupMigrationSummary(): {
+        migratedReverseToForward: number;
+        skipped: number;
+        warnedLegacyRead: number;
+    };
     /**
      * Create a new server
      */

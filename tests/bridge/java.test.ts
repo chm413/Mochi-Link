@@ -141,7 +141,7 @@ describe('JavaConnectorBridge', () => {
       expect(result.success).toBe(true);
       expect(result.output).toContain('There are 0 of a max of 20 players online');
       expect(result.executionTime).toBeGreaterThan(0);
-      expect(mockConnectionAdapter.sendCommand).toHaveBeenCalledWith('list');
+      expect(mockConnectionAdapter.sendCommand).toHaveBeenCalledWith('list', undefined);
     });
 
     it('should handle command failures', async () => {
@@ -165,6 +165,20 @@ describe('JavaConnectorBridge', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Request timeout');
+    });
+
+    it('should fail when no connector adapter exists', async () => {
+      const detachedBridge = new JavaConnectorBridge(config);
+
+      const result = await detachedBridge.executeCommand('list');
+
+      expect(result).toEqual({
+        success: false,
+        output: [],
+        error: 'No active Java connector adapter is available',
+        executionTime: 0
+      });
+      expect(await detachedBridge.isHealthy()).toBe(false);
     });
   });
 
@@ -247,7 +261,7 @@ describe('JavaConnectorBridge', () => {
       expect(players[0].name).toBe('TestPlayer1');
       expect(players[0].edition).toBe('Java');
       expect(players[1].name).toBe('TestPlayer2');
-      expect(mockConnectionAdapter.sendCommand).toHaveBeenCalledWith('list');
+      expect(mockConnectionAdapter.sendCommand).toHaveBeenCalledWith('list', undefined);
     });
 
     it('should perform player actions', async () => {
@@ -267,7 +281,7 @@ describe('JavaConnectorBridge', () => {
 
       expect(result.success).toBe(true);
       expect(result.action).toEqual(action);
-      expect(mockConnectionAdapter.sendCommand).toHaveBeenCalledWith('kick TestPlayer Test kick');
+      expect(mockConnectionAdapter.sendCommand).toHaveBeenCalledWith('kick TestPlayer Test kick', undefined);
     });
 
     it('should handle teleport actions', async () => {
@@ -286,7 +300,7 @@ describe('JavaConnectorBridge', () => {
       const result = await bridge.performPlayerAction(action);
 
       expect(result.success).toBe(true);
-      expect(mockConnectionAdapter.sendCommand).toHaveBeenCalledWith('tp TestPlayer 100 64 200');
+      expect(mockConnectionAdapter.sendCommand).toHaveBeenCalledWith('tp TestPlayer 100 64 200', undefined);
     });
   });
 
@@ -316,7 +330,7 @@ describe('JavaConnectorBridge', () => {
 
       expect(result.success).toBe(true);
       expect(result.operation).toEqual(operation);
-      expect(mockConnectionAdapter.sendCommand).toHaveBeenCalledWith('save-all');
+      expect(mockConnectionAdapter.sendCommand).toHaveBeenCalledWith('save-all', undefined);
     });
 
     it('should update world settings', async () => {
@@ -340,8 +354,8 @@ describe('JavaConnectorBridge', () => {
       const result = await bridge.updateWorldSettings(settings);
 
       expect(result).toBe(true);
-      expect(mockConnectionAdapter.sendCommand).toHaveBeenCalledWith('time set 1000');
-      expect(mockConnectionAdapter.sendCommand).toHaveBeenCalledWith('weather rain');
+      expect(mockConnectionAdapter.sendCommand).toHaveBeenCalledWith('time set 1000', undefined);
+      expect(mockConnectionAdapter.sendCommand).toHaveBeenCalledWith('weather rain', undefined);
     });
   });
 

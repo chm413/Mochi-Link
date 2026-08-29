@@ -18,7 +18,7 @@ const createMockContext = (): Context => ({
   })),
   database: {
     get: jest.fn().mockResolvedValue([]),
-    create: jest.fn().mockResolvedValue([{ id: 1 }]),
+    create: jest.fn().mockResolvedValue({ id: 1 }),
     set: jest.fn().mockResolvedValue({ matched: 1 }),
     remove: jest.fn().mockResolvedValue({ matched: 1 })
   }
@@ -28,7 +28,7 @@ describe('Non-Premium Player Identity Recognition', () => {
   let playerService: PlayerInformationService;
 
   beforeEach(() => {
-    playerService = new PlayerInformationService(createMockContext());
+    playerService = new PlayerInformationService(createMockContext(), jest.fn(() => null));
   });
 
   describe('Premium Status Detection', () => {

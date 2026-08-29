@@ -18,7 +18,7 @@ const createMockContext = (): Context => ({
   })),
   database: {
     get: jest.fn().mockResolvedValue([]),
-    create: jest.fn().mockResolvedValue([{ id: 1 }]),
+    create: jest.fn().mockResolvedValue({ id: 1 }),
     set: jest.fn().mockResolvedValue({ matched: 1 }),
     remove: jest.fn().mockResolvedValue({ matched: 1 })
   }
@@ -61,7 +61,7 @@ describe('Whitelist Offline Operation Caching Property Tests', () => {
       }),
       async ({ serverId, operations, isServerOnline }) => {
         // Feature: minecraft-unified-management, Property 5: 离线操作缓存机制
-        const whitelistManager = new WhitelistManager(createMockContext());
+        const whitelistManager = new WhitelistManager(createMockContext(), jest.fn(() => null));
         
         // Mock server online status
         const mockIsServerOnline = jest.fn().mockResolvedValue(isServerOnline);
@@ -171,7 +171,7 @@ describe('Whitelist Offline Operation Caching Property Tests', () => {
         operationSequence: fc.array(whitelistOperationGenerator, { minLength: 2, maxLength: 5 })
       }),
       async ({ serverId, operationSequence }) => {
-        const whitelistManager = new WhitelistManager(createMockContext());
+        const whitelistManager = new WhitelistManager(createMockContext(), jest.fn(() => null));
         
         // Mock server as offline
         (whitelistManager as any).isServerOnline = jest.fn().mockResolvedValue(false);
@@ -237,7 +237,7 @@ describe('Whitelist Offline Operation Caching Property Tests', () => {
         executor: executorGenerator
       }),
       async ({ serverId, operationCount, playerId, executor }) => {
-        const whitelistManager = new WhitelistManager(createMockContext());
+        const whitelistManager = new WhitelistManager(createMockContext(), jest.fn(() => null));
         
         // Mock server as offline
         (whitelistManager as any).isServerOnline = jest.fn().mockResolvedValue(false);
@@ -297,7 +297,7 @@ describe('Whitelist Offline Operation Caching Property Tests', () => {
         onlineOperations: fc.array(whitelistOperationGenerator, { minLength: 1, maxLength: 3 })
       }),
       async ({ serverId, offlineOperations, onlineOperations }) => {
-        const whitelistManager = new WhitelistManager(createMockContext());
+        const whitelistManager = new WhitelistManager(createMockContext(), jest.fn(() => null));
         
         // Phase 1: Server offline - operations should be cached
         let isOnline = false;
@@ -381,7 +381,7 @@ describe('Whitelist Offline Operation Caching Property Tests', () => {
         operation: whitelistOperationGenerator
       }),
       async ({ serverId, operation }) => {
-        const whitelistManager = new WhitelistManager(createMockContext());
+        const whitelistManager = new WhitelistManager(createMockContext(), jest.fn(() => null));
         
         // Mock server as offline
         (whitelistManager as any).isServerOnline = jest.fn().mockResolvedValue(false);

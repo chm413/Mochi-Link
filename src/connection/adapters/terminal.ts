@@ -116,7 +116,7 @@ export class TerminalConnectionAdapter extends BaseConnectionAdapter {
   }
   protected async doSendMessage(message: UWBPMessage): Promise<void> {
     // Terminal injection only supports command execution
-    if (message.op === 'server.command' && message.data?.command) {
+    if ((message.op === 'command.execute' || message.op === 'server.command') && message.data?.command) {
       const result = await this.doSendCommand(message.data.command);
       
       // Emit a synthetic response event

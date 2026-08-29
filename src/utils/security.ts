@@ -28,7 +28,7 @@ export function escapeHtml(text: string): string {
  * 修复问题 #16: 验证消息格式模板
  * 确保模板只包含允许的占位符
  */
-export function validateMessageFormat(format: string): {
+export function validateMessageFormat(format: string, additionalPlaceholders: string[] = []): {
   valid: boolean;
   error?: string;
   sanitized?: string;
@@ -46,7 +46,8 @@ export function validateMessageFormat(format: string): {
     '{world}',
     '{x}',
     '{y}',
-    '{z}'
+    '{z}',
+    ...additionalPlaceholders.filter((placeholder) => /^\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(placeholder))
   ];
 
   // 检查是否包含潜在危险的内容

@@ -248,15 +248,11 @@ describe('WebSocket Handshake Property Tests', () => {
             challengeData!.timestamp
           );
 
-          // The current implementation has a bug - it uses challengeResponse as the key
-          // So we need to store the challenge data under the HMAC key
-          authManager['activeChallenges'].delete(challengeId);
-          authManager['activeChallenges'].set(challengeResponse, challengeData!);
-
           // Validate authentication response
           const result = await authManager.validateAuthenticationResponse({
             serverId: config.serverId,
             token: config.token,
+            challenge: challengeId,
             challengeResponse: challengeResponse,
             timestamp: Date.now()
           });

@@ -431,7 +431,7 @@ export class PerformanceOptimizationService extends EventEmitter {
 
     this.metricsTimer = setInterval(() => {
       this.collectMetrics();
-    }, this.config.monitoring.metricsInterval);
+    }, this.config.monitoring.metricsInterval).unref?.();
   }
 
   /**
@@ -541,7 +541,7 @@ export class PerformanceOptimizationService extends EventEmitter {
 
     this.optimizationTimer = setInterval(() => {
       this.performAutoOptimization();
-    }, this.config.resources.optimizationInterval);
+    }, this.config.resources.optimizationInterval).unref?.();
   }
 
   /**

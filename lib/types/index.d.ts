@@ -64,6 +64,7 @@ export interface Player {
     edition: 'Java' | 'Bedrock';
     deviceType?: string;
     ipAddress?: string;
+    isPremium?: boolean;
     health?: number;
     level?: number;
     gameMode?: string;
@@ -105,7 +106,7 @@ export interface UWBPMessage {
     id: string;
     op: string;
     data: any;
-    timestamp?: string;
+    timestamp?: number | string;
     serverId?: string;
     version?: string;
 }
@@ -126,12 +127,13 @@ export interface UWBPEvent extends UWBPMessage {
 export interface UWBPSystemMessage extends UWBPMessage {
     type: 'system';
     systemOp: 'ping' | 'pong' | 'disconnect' | 'handshake' | 'capabilities' | 'error';
+    requestId?: string;
 }
 export type EventType = 'player.join' | 'player.leave' | 'player.chat' | 'player.death' | 'player.advancement' | 'server.status' | 'server.logLine' | 'alert.tpsLow' | 'alert.memoryHigh' | 'alert.playerFlood';
 export interface BaseEvent {
     type: EventType;
     serverId: string;
-    timestamp: string;
+    timestamp: number | string;
     version: string;
 }
 export interface PlayerJoinEvent extends BaseEvent {

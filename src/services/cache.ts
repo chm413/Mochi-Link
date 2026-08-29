@@ -623,7 +623,7 @@ export class CacheService extends EventEmitter {
   private startCleanupTimer(): void {
     this.cleanupTimer = setInterval(() => {
       this.cleanupExpiredEntries();
-    }, this.config.cleanupInterval);
+    }, this.config.cleanupInterval).unref?.();
   }
 
   /**
@@ -636,12 +636,12 @@ export class CacheService extends EventEmitter {
 
     this.preloadTimer = setInterval(() => {
       this.preloadData();
-    }, this.config.preloadInterval);
+    }, this.config.preloadInterval).unref?.();
 
     // Initial preload
     setTimeout(() => {
       this.preloadData();
-    }, 5000); // Wait 5 seconds after startup
+    }, 5000).unref?.(); // Wait 5 seconds after startup
   }
 
   // ============================================================================

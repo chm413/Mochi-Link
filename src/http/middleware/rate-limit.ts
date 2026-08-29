@@ -23,7 +23,7 @@ export class RateLimitMiddleware implements HTTPMiddleware {
     // Clean up expired entries every minute
     this.cleanupInterval = setInterval(() => {
       this.cleanupExpiredEntries();
-    }, 60000);
+    }, 60000).unref?.();
   }
 
   async handle(request: HTTPRequest, response: ServerResponse): Promise<{

@@ -23,6 +23,7 @@ export declare class ConnectionModeManager extends EventEmitter {
     private config;
     private connections;
     private ctx;
+    private logger;
     constructor(ctx: Context, config?: ConnectionManagerConfig);
     /**
      * Establish connection to a server

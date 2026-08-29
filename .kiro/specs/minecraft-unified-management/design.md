@@ -4,10 +4,12 @@
 
 Mochi-Link（大福连）是一个 Minecraft 统一管理与监控系统，如同大福（麻薯）一样具有极强的黏性和包容性，把各种核心（LLBDS、Paper、Folia 等）软糯地包裹在一起。系统采用双端协作架构，通过标准化的 U-WBP v2 协议实现跨核心、跨版本、跨平台的统一管理。
 
+> **文档性质**：本文描述目标架构和协议约束，不代表当前仓库已全部实现。当前运行路径、差距与验证结果见 [`docs/AUDIT.md`](../../../docs/AUDIT.md)，协议字段真源见 [`docs/PROTOCOL.md`](../../../docs/PROTOCOL.md)。
+
 ### 核心设计理念
 
 1. **统一抽象**：将不同 Minecraft 核心的差异抽象为统一的 WebSocket API
-2. **双向连接**：支持正向和反向连接模式，适应不同网络架构
+2. **双向连接**：从 Koishi 端以 `accept_inbound_ws` / `dial_outbound_ws` 描述连接方向，适应不同网络架构
 3. **多模式接入**：支持插件、RCON、终端注入等多种服务器接入方式
 4. **实时同步**：通过事件推送和定时上报实现实时状态同步
 5. **权限分离**：基于服务器 ID 的细粒度权限控制
@@ -71,16 +73,17 @@ sequenceDiagram
     participant B as Connector Bridge
     participant S as MC 服务器
     
-    Note over K,S: 正向连接模式
-    K->>B: WebSocket 连接请求
-    B->>K: 握手响应 + 能力声明
-    K->>B: 认证信息
-    B->>K: 认证成功
-    
-    Note over K,S: 反向连接模式  
+    Note over K,S: accept_inbound_ws（旧别名 forward）
     B->>K: WebSocket 连接请求
-    K->>B: 握手响应 + 认证挑战（challenge nonce）
-    B->>K: serverId + 令牌 + 回传 nonce + HMAC 应答
+    K->>B: 握手响应 + 认证挑战
+    B->>K: serverId + token/挑战应答
+    K->>B: 认证成功
+    B->>K: 能力声明（认证后）
+
+    Note over K,S: dial_outbound_ws（旧别名 reverse）
+    K->>B: WebSocket 连接请求
+    B->>K: 握手响应
+    B->>K: serverId + token/挑战应答
     K->>B: 认证成功
     B->>K: 能力声明（认证成功后才被采信）
     
@@ -326,13 +329,15 @@ interface ExecuteCommandResponse {
 ### 数据库表结构
 
 > **实现约定**：以下 DDL 为概念模型（MySQL 方言），仅用于表达字段语义与索引意图。
-> 实际建表通过 Koishi `ctx.model.extend` 完成（见 `src/database/models.ts`），
+> 实际建表通过 Koishi `ctx.model.extend` 完成。当前运行入口见 `src/database/simple-init.ts`，
+> 完整模型草案位于 `src/database/models.ts`；两者必须在后续迁移中合并，不能继续独立演化。
 > 不得使用 `AUTO_INCREMENT` / `ON UPDATE CURRENT_TIMESTAMP` 等 MySQL 专有特性，
-> 以保证 sqlite / mysql / postgres 兼容。表名统一带前缀（默认 `mochi_`）。
+> 以保证 sqlite / mysql / postgres 兼容。以下使用逻辑表名；物理表名由统一生成器构造为
+> `<prefix>_<baseName>`，并先去掉前缀末尾的 `.` 或 `_`。
 
-#### 1. minecraft_servers 表
+#### 1. servers 表
 ```sql
-CREATE TABLE minecraft_servers (
+CREATE TABLE servers (
   id VARCHAR(64) PRIMARY KEY,           -- serverId
   name VARCHAR(255) NOT NULL,           -- 显示名称
   core_type VARCHAR(32) NOT NULL,       -- 核心类型 (Java/Bedrock)
@@ -366,7 +371,7 @@ CREATE TABLE server_acl (
   expires_at TIMESTAMP NULL,           -- 过期时间
   
   UNIQUE KEY uk_user_server (user_id, server_id),
-  FOREIGN KEY (server_id) REFERENCES minecraft_servers(id) ON DELETE CASCADE,
+  FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
   INDEX idx_user (user_id),
   INDEX idx_server (server_id)
 );
@@ -379,12 +384,13 @@ CREATE TABLE api_tokens (
   server_id VARCHAR(64) NOT NULL,      -- 服务器 ID
   token_hash VARCHAR(256) NOT NULL UNIQUE,  -- 令牌哈希（SHA-256，唯一认证依据）
   ip_whitelist JSON,                   -- IP 白名单
-  encryption_config JSON,             -- 加密配置
+  scopes JSON,                        -- 权限范围（目标字段，当前实现尚未接通）
+  tls_required BOOLEAN DEFAULT TRUE,  -- 是否要求 TLS 传输
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   expires_at TIMESTAMP,                -- 过期时间
   last_used TIMESTAMP,                 -- 最后使用时间
   
-  FOREIGN KEY (server_id) REFERENCES minecraft_servers(id) ON DELETE CASCADE,
+  FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
   INDEX idx_server (server_id),
   INDEX idx_token_hash (token_hash)
 );
@@ -429,7 +435,7 @@ CREATE TABLE pending_operations (
   scheduled_at TIMESTAMP,              -- 计划执行时间
   executed_at TIMESTAMP,               -- 实际执行时间
   
-  FOREIGN KEY (server_id) REFERENCES minecraft_servers(id) ON DELETE CASCADE,
+  FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
   INDEX idx_server_status (server_id, status),
   INDEX idx_scheduled (scheduled_at)
 );
@@ -446,7 +452,7 @@ CREATE TABLE server_bindings (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   
   UNIQUE KEY uk_group_server (group_id, server_id),
-  FOREIGN KEY (server_id) REFERENCES minecraft_servers(id) ON DELETE CASCADE,
+  FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
   INDEX idx_group (group_id),
   INDEX idx_server (server_id)
 );
@@ -577,7 +583,7 @@ interface PlayerIdentity {
 **验证：需求 1.1, 1.2, 1.3**
 
 ### 属性 2：数据持久化完整性
-*对于任何*服务器配置注册操作，当操作成功完成时，数据库中应包含所有必需的配置字段（serverId、token、备注、标签等），且数据应可正确检索
+*对于任何*服务器配置注册操作，当操作成功完成时，数据库中应包含所有必需的配置字段（serverId、token_hash、备注、标签等），且数据应可正确检索；原始 token 不得持久化
 **验证：需求 3.1**
 
 ### 属性 3：玩家信息格式统一性
@@ -640,14 +646,15 @@ interface PlayerIdentity {
 
 ```
 1) K → B: { type: 'request', id: 'c-1', op: 'auth.challenge',
-            data: { serverId, challenge: '<32字节随机hex>', timestamp } }
-2) B → K: { type: 'response', id: 'c-1', op: 'auth.challenge',
+            timestamp: 1787980800000,
+            data: { serverId, challenge: '<32字节随机hex>' } }
+2) B → K: { type: 'response', id: 'r-1', requestId: 'c-1', op: 'auth.challenge',
+            timestamp: 1787980800100,
             data: {
               serverId,
               challenge: '<原样回传 nonce，用于服务端检索挑战>',   ← 必填
               token: '<API 令牌>',
-              challengeResponse: 'HMAC-SHA256(key=token, msg=nonce + timestamp)',
-              timestamp
+              challengeResponse: 'HMAC-SHA256(key=token, msg=nonce + request.timestamp)'
             } }
 ```
 
@@ -655,14 +662,15 @@ interface PlayerIdentity {
   两者是**不同字段**，不得混用。
 - 挑战一次性使用：验证成功或失败后立即删除，防重放。
 - HMAC 比较必须使用常量时间比较（`crypto.timingSafeEqual`）。
-- 已知局限：该模式下 `token` 字段仍在链路明文传输（作为 HMAC 密钥来源），挑战-应答
-  仅证明"响应者持有令牌"，不提供传输机密性；机密性由加密协商（需求 9.3）承担。
+- 已知局限：该模式下 `token` 字段仍在链路传输（作为 HMAC 密钥来源），挑战-应答
+  仅证明"响应者持有令牌"，不提供传输机密性；连接必须使用 WSS/TLS。
 - 简化模式（无挑战）：客户端直接发送 `{ serverId, token }`，服务端以令牌哈希查库验证。
 
 ### B. 版本协商
 
-握手第一条消息必须携带 `protocol: 'U-WBP'` 与 `version: 2`。服务端不支持的版本必须
-立即返回错误码 `PROTOCOL_VERSION` 并断开，不得以降级方式继续。
+握手第一条消息必须携带 `protocol: 'U-WBP'` 与 `version: '2.0'`。历史值 `2.0.0`
+可作为同一 2.0 协议线兼容读取；其他不支持版本必须立即返回错误码 `PROTOCOL_VERSION`
+并断开，不得以未协商的降级方式继续。所有新消息的 `timestamp` 使用 Unix epoch 毫秒整数。
 
 ### C. 错误码注册表
 
@@ -683,7 +691,7 @@ interface PlayerIdentity {
 
 ### D. 心跳规范
 
-- 操作名：`system.ping` / `system.pong`（pong 必须回传 ping 的 `id`）。
+- 消息类型与操作名：`type: 'system', op: 'ping'` / `type: 'system', op: 'pong'`；pong 通过 `requestId` 回传 ping 的 `id`。
 - 参数：`interval`（发送间隔，默认 30000ms）、`timeout`（单次超时，默认 10000ms）、
   `maxMissed`（连续丢失上限，默认 3）。
 - 判定：连续 `maxMissed` 次 ping 未收到 pong → 主动断开 → 触发重连流程。
@@ -706,6 +714,8 @@ Paper/Fabric/Forge 连接器沿用单主线程模型，但公共代码必须以"
 避免连接器间复制粘贴分叉。
 
 ### F. API 令牌权限范围（scopes）
+
+> 本节是目标契约。当前数据模型、签发流程和 HTTP/WebSocket 授权尚未端到端接通，完成前不得宣称 scopes 已生效。
 
 api_tokens 增加 `scopes` 字段（JSON 数组）。取值：
 

@@ -146,9 +146,9 @@ export class PluginConnectionAdapter extends BaseConnectionAdapter {
     const message: UWBPMessage = {
       type: 'request',
       id: requestId,
-      op: 'server.command',
+      op: 'command.execute',
       data: { command },
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
       serverId: this.serverId,
       version: '2.0'
     };
@@ -305,7 +305,7 @@ export class PluginConnectionAdapter extends BaseConnectionAdapter {
   private setupHeartbeat(): void {
     this.heartbeatTimer = setInterval(() => {
       this.sendPing();
-    }, 30000); // Ping every 30 seconds
+    }, 30000).unref?.(); // Ping every 30 seconds
   }
 
   private async sendPing(): Promise<void> {
@@ -314,7 +314,7 @@ export class PluginConnectionAdapter extends BaseConnectionAdapter {
       id: `ping-${Date.now()}`,
       op: 'ping',
       data: {},
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
       serverId: this.serverId,
       version: '2.0',
       systemOp: 'ping'
@@ -333,10 +333,11 @@ export class PluginConnectionAdapter extends BaseConnectionAdapter {
       id: `pong-${Date.now()}`,
       op: 'pong',
       data: { pingId },
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
       serverId: this.serverId,
       version: '2.0',
-      systemOp: 'pong'
+      systemOp: 'pong',
+      requestId: pingId
     };
 
     try {
@@ -352,7 +353,7 @@ export class PluginConnectionAdapter extends BaseConnectionAdapter {
       id: `disconnect-${Date.now()}`,
       op: 'disconnect',
       data: { reason: 'Client disconnect' },
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
       serverId: this.serverId,
       version: '2.0',
       systemOp: 'disconnect'

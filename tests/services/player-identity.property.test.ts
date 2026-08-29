@@ -19,7 +19,7 @@ const createMockContext = (): Context => ({
   })),
   database: {
     get: jest.fn().mockResolvedValue([]),
-    create: jest.fn().mockResolvedValue([{ id: 1 }]),
+    create: jest.fn().mockResolvedValue({ id: 1 }),
     set: jest.fn().mockResolvedValue({ matched: 1 }),
     remove: jest.fn().mockResolvedValue({ matched: 1 })
   }
@@ -58,7 +58,7 @@ describe('Non-Premium Player Identity Recognition Property Tests', () => {
       }),
       async ({ playerName, ipAddress, deviceType, serverIds }) => {
         // Feature: minecraft-unified-management, Property 4: 非正版玩家身份识别
-        const playerService = new PlayerInformationService(createMockContext());
+        const playerService = new PlayerInformationService(createMockContext(), jest.fn(() => null));
         
         // Create non-premium player data
         const nonPremiumPlayer: Player = {
@@ -134,7 +134,7 @@ describe('Non-Premium Player Identity Recognition Property Tests', () => {
         playerName: nonPremiumNameGenerator
       }),
       async ({ premiumJavaUuid, premiumBedrockXuid, nonPremiumName, playerName }) => {
-        const playerService = new PlayerInformationService(createMockContext());
+        const playerService = new PlayerInformationService(createMockContext(), jest.fn(() => null));
         const detectPremium = (playerService as any).detectPremiumStatus.bind(playerService);
         
         // Test Java premium player
@@ -199,7 +199,7 @@ describe('Non-Premium Player Identity Recognition Property Tests', () => {
         serverCount: fc.integer({ min: 1, max: 5 })
       }),
       async ({ playerName, hasIp, hasDevice, serverCount }) => {
-        const playerService = new PlayerInformationService(createMockContext());
+        const playerService = new PlayerInformationService(createMockContext(), jest.fn(() => null));
         const calculateConfidence = (playerService as any).calculateIdentityConfidence.bind(playerService);
         
         // Create player with varying amounts of identity information
@@ -253,7 +253,7 @@ describe('Non-Premium Player Identity Recognition Property Tests', () => {
         device2: deviceTypeGenerator
       }),
       async ({ sharedName, ip1, ip2, device1, device2 }) => {
-        const playerService = new PlayerInformationService(createMockContext());
+        const playerService = new PlayerInformationService(createMockContext(), jest.fn(() => null));
         
         // Create two players with same name but different characteristics
         const player1: PlayerDetail = {

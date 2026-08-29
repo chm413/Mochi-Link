@@ -18,7 +18,7 @@ const createMockContext = (): Context => ({
   })),
   database: {
     get: jest.fn().mockResolvedValue([]),
-    create: jest.fn().mockResolvedValue([{ id: 1 }]),
+    create: jest.fn().mockResolvedValue({ id: 1 }),
     set: jest.fn().mockResolvedValue({ matched: 1 }),
     remove: jest.fn().mockResolvedValue({ matched: 1 })
   }
@@ -40,7 +40,7 @@ describe('TokenManager', () => {
   describe('Token Generation', () => {
     test('should generate a secure token with default settings', async () => {
       // Mock database responses
-      (mockContext.database.create as jest.Mock).mockResolvedValue([{ id: 1 }]);
+      (mockContext.database.create as jest.Mock).mockResolvedValue({ id: 1 });
       (mockContext.database.get as jest.Mock).mockResolvedValue([{
         id: 1,
         server_id: 'test-server',
@@ -65,7 +65,7 @@ describe('TokenManager', () => {
     test('should generate token with custom expiration', async () => {
       const expiresIn = 3600; // 1 hour
       
-      (mockContext.database.create as jest.Mock).mockResolvedValue([{ id: 1 }]);
+      (mockContext.database.create as jest.Mock).mockResolvedValue({ id: 1 });
       (mockContext.database.get as jest.Mock).mockResolvedValue([{
         id: 1,
         server_id: 'test-server',
@@ -90,7 +90,7 @@ describe('TokenManager', () => {
     test('should generate token with IP whitelist', async () => {
       const ipWhitelist = ['192.168.1.0/24', '10.0.0.1'];
       
-      (mockContext.database.create as jest.Mock).mockResolvedValue([{ id: 1 }]);
+      (mockContext.database.create as jest.Mock).mockResolvedValue({ id: 1 });
       (mockContext.database.get as jest.Mock).mockResolvedValue([{
         id: 1,
         server_id: 'test-server',
@@ -124,7 +124,7 @@ describe('TokenManager', () => {
         createdAt: new Date()
       };
 
-      (mockContext.database.create as jest.Mock).mockResolvedValue([{ id: 1 }]);
+      (mockContext.database.create as jest.Mock).mockResolvedValue({ id: 1 });
       (mockContext.database.get as jest.Mock).mockResolvedValue([mockAuditLog]);
 
       await expect(tokenManager.generateToken(
@@ -135,7 +135,7 @@ describe('TokenManager', () => {
 
     test('should generate multiple tokens', async () => {
       (mockContext.database.create as jest.Mock).mockImplementation(() => 
-        Promise.resolve([{ id: Math.floor(Math.random() * 1000) }])
+        Promise.resolve({ id: Math.floor(Math.random() * 1000) || 1 })
       );
       (mockContext.database.get as jest.Mock).mockImplementation(() => 
         Promise.resolve([{
@@ -309,7 +309,7 @@ describe('TokenManager', () => {
       const result = await tokenManager.revokeToken(1, 'test-user');
 
       expect(result).toBe(true);
-      expect(mockContext.database.remove).toHaveBeenCalledWith('api_tokens', { id: 1 });
+      expect(mockContext.database.remove).toHaveBeenCalledWith('mochi_api_tokens', { id: 1 });
     });
 
     test('should return false when revoking non-existent token', async () => {

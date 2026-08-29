@@ -4,17 +4,21 @@
 
 本文档规定了 Mochi-Link（大福连）- Minecraft 统一管理与监控系统的需求。该系统如同大福（麻薯）一样具有极强的黏性和包容性，把各种核心（LLBDS、Paper、Folia 等）软糯地包裹在一起，创建一个"全核心统一"的 MC 服务器管理层。不管是 LLBD/基岩版、Paper/Folia 还是其他核心，都通过同一套 WebSocket 接口对外暴露能力。系统采用 Koishi 插件作为管理端，通过标准化的 U-WBP v2 协议与各种服务器端 Connector/Bridge 通信。
 
+> **文档性质**：本文是目标需求，不是完成清单。某项验收标准只有在代码、自动化测试和目标核心运行验证同时提供证据后才算完成。当前实现状态和已知差距见 [`docs/AUDIT.md`](../../../docs/AUDIT.md)。
+
 ## 术语表
 
 - **Connector_Bridge**: 游戏端插件，针对不同核心实现（LLBDS、Paper/Folia 等），负责将核心原生接口转换为标准 WS API
 - **Koishi_插件**: 管理端组件，使用 Koishi 的数据库和权限系统进行多服务器、多群组、多服主管理
 - **U_WBP_v2**: 统一 WebSocket 协议版本 2，标准化的 JSON 消息格式
 - **serverId**: 服务器唯一标识符
-- **正向连接**: Koishi_插件作为 WebSocket 客户端连接到 Connector_Bridge
-- **反向连接**: Connector_Bridge 作为 WebSocket 客户端连接到 Koishi_插件
+- **accept_inbound_ws**: 从 Koishi 端观察，Koishi 监听并接受由 Connector_Bridge 主动建立的 WebSocket 连接；旧配置别名为 `forward`
+- **dial_outbound_ws**: 从 Koishi 端观察，Koishi 主动连接正在监听的 Connector_Bridge；旧配置别名为 `reverse`
+- **正向/反向连接**: 仅指上述旧配置别名。因观察方不同会产生歧义，规范和新代码不得仅依靠中文方向名决定行为
 - **能力声明**: Connector 向管理端声明支持的功能列表（capabilities）
-- **绑定路由**: 群聊与服务器的多对多绑定关系
-- **API_令牌**: 服务器认证 token，支持 IP 白名单和可选加密
+- **接入模式**: `plugin`、`rcon`、`terminal`，描述管理端调用服务器的方式，与 WebSocket 连接方向无关
+- **绑定路由**: 目标模型为群聊与服务器的多对多关系；当前实现限制为一个群组一台服务器
+- **API_令牌**: 服务器认证 secret，明文只展示一次，持久化层只保存哈希；可附加过期时间和 IP 策略
 - **审计记录**: 所有管理动作的日志记录，包含操作者、时间、目标、结果
 
 ## 需求
@@ -37,8 +41,8 @@
 
 #### 验收标准
 
-1. 当使用正向连接时，Koishi_插件应作为 WebSocket 客户端连接到 Connector_Bridge 的端口 A
-2. 当使用反向连接时，Connector_Bridge 应作为 WebSocket 客户端连接到 Koishi_插件的端口 B
+1. 当 `accept_inbound_ws=true`（旧别名 `forward`）时，Koishi_插件应监听端口，Connector_Bridge 应作为 WebSocket 客户端连接 Koishi
+2. 当 `dial_outbound_ws=true`（旧别名 `reverse`）时，Connector_Bridge 应监听端口，Koishi_插件应作为 WebSocket 客户端连接 Connector
 3. 当建立连接时，系统应支持连接模式的动态切换。切换语义必须满足：切换期间新请求入队暂缓发送；在途请求-响应通过 `id` 匹配后按原连接接收或统一超时作废；切换完成后由发起方确认旧连接已关闭，避免双活连接
 4. 当连接建立后，系统应使用相同的 U_WBP_v2 协议，无论连接方向如何。能力声明（capabilities）必须在认证成功之后才被采信，未认证连接的能力声明一律视为不可信数据
 5. 系统应实现心跳重连机制和能力声明交换
@@ -131,7 +135,7 @@
 
 1. 当 Connector_Bridge 连接时，系统应通过 serverId 和 token 进行身份验证
 2. 当建立连接时，系统应支持可选的 IP 白名单验证
-3. 当传输敏感数据时，系统应支持可选的 AES/RSA 通信加密。密钥管理约定：对称密钥由双方共享的 API 令牌经 HKDF 派生，不得在链路上传输；RSA 公钥在认证成功后的密钥交换消息中传递，私钥永不离开持有方。未协商加密前所有消息视为明文传输，协议消息中的敏感字段（IP、令牌）应最小化
+3. 当传输敏感数据时，系统应使用 WSS/TLS 提供传输机密性和服务端身份认证，并最小化协议消息中的敏感字段（IP、令牌）。项目不得用 Base64、XOR、自定义 AES/RSA 握手或已废弃 cipher API 代替 TLS；如未来增加应用层端到端加密，必须先形成独立威胁模型、密钥轮换规范和互操作测试
 4. 当执行管理操作时，系统应基于 Koishi 权限系统进行授权检查，使用 "serverId.操作" 格式的权限命名
 5. 当分配权限时，系统应支持基于角色的权限管理（如腐竹、管理员等身份），每个角色对应特定服务器的操作权限
 6. 当用户管理多个服务器时，系统应确保用户只能操作有权限的服务器
@@ -158,10 +162,10 @@
 #### 验收标准
 
 1. 当发送消息时，系统应使用统一的 JSON 格式，包含 type、id、op、data 等标准字段
-2. 当处理请求响应时，系统应通过 id 字段进行请求响应匹配
+2. 当处理请求响应时，响应应拥有独立 `id`，并通过 `requestId` 字段匹配原请求；仅对缺少 `requestId` 的历史消息兼容回退到 `id`
 3. 当推送事件时，系统应使用标准的事件消息格式
 4. 当连接建立时，系统应执行握手流程，包括认证和能力声明交换
-5. 系统应实现心跳机制（system.ping/pong）和优雅断开连接（system.disconnect）
+5. 系统应实现 `type: system` 的 `ping` / `pong` 心跳消息和 `disconnect` 优雅断开消息；pong 应通过 `requestId` 关联 ping
 
 ### 需求 12：错误处理与连接恢复
 
@@ -205,7 +209,7 @@
 
 #### 验收标准
 
-1. 当系统初始化时，系统应创建 minecraft_servers 表存储服务器配置（serverId、名称、核心类型、连接信息、接入模式、状态、服主信息、标签等）
+1. 当系统初始化时，系统应创建逻辑名为 `servers` 的服务器表存储配置（serverId、名称、核心类型、连接信息、接入模式、状态、服主信息、标签等）；物理表名统一为 `<prefix>_servers`，前缀末尾已有 `.` 或 `_` 时必须先归一化
 2. 当管理访问控制时，系统应使用 server_acl 表存储用户与服务器的权限关系（用户ID、serverId、角色、权限列表、授权时间等）
 3. 当处理 API 认证时，系统应使用 api_tokens 表管理服务器认证令牌（serverId、**令牌哈希**、创建时间、过期时间、IP白名单、加密配置、**权限范围 scopes** 等）。明文令牌不落库
 4. 当记录操作审计时，系统应使用 audit_logs 表存储所有管理操作（操作者、serverId、操作类型、操作内容、时间戳、结果、IP地址等）

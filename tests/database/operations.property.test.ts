@@ -72,7 +72,7 @@ describe('Database Operations - Property Tests', () => {
             status: serverConfig.status as any
           };
           // Mock successful database operations
-          ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+          ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
           ctx.database.get = jest.fn().mockResolvedValue([{
             id: typedConfig.id,
             name: typedConfig.name,
@@ -122,7 +122,7 @@ describe('Database Operations - Property Tests', () => {
         async (serverId, operationType, target, parameters) => {
           // **Validates: Requirements 5.4**
           const typedOperationType = operationType as any;
-          ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+          ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
           ctx.database.get = jest.fn().mockResolvedValue([{
             id: 1,
             server_id: serverId,
@@ -234,7 +234,7 @@ describe('Database Operations - Property Tests', () => {
 
           // Verify permission check uses correct format
           expect(hasPermission).toBe(true);
-          expect(ctx.database.get).toHaveBeenCalledWith('server_acl', {
+          expect(ctx.database.get).toHaveBeenCalledWith('mochi_server_acl', {
             user_id: userId,
             server_id: serverId
           });
@@ -287,7 +287,7 @@ describe('Database Operations - Property Tests', () => {
         async (userId, serverId, operation, operationData, result, errorMessage, ipAddress, userAgent) => {
           // **Validates: Requirements 10.1**
           const typedResult = result as 'success' | 'failure' | 'error';
-          ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+          ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
           ctx.database.get = jest.fn().mockResolvedValue([{
             id: 1,
             user_id: userId,
@@ -369,7 +369,7 @@ describe('Database Operations - Property Tests', () => {
         async (serverId, userIds) => {
           // Mock database operations for concurrent ACL grants
           ctx.database.remove = jest.fn().mockResolvedValue({ matched: 0 });
-          ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+          ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
           
           let callCount = 0;
           ctx.database.get = jest.fn().mockImplementation(() => {

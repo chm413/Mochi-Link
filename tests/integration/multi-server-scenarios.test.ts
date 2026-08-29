@@ -149,7 +149,7 @@ describe('Multi-Server Scenario Integration Tests', () => {
   function setupMultiServerMocks() {
     // Mock server registration and retrieval
     mockContext.database.get.mockImplementation((table: string, query: any) => {
-      if (table === 'minecraft_servers') {
+      if (table === 'mochi_servers') {
         if (query.id) {
           // Return specific server
           const server = mockServers.find(s => s.id === query.id);
@@ -313,7 +313,7 @@ describe('Multi-Server Scenario Integration Tests', () => {
       ];
 
       mockContext.database.get.mockImplementation((table: string, query: any) => {
-        if (table === 'player_cache') {
+        if (table === 'mochi_player_cache') {
           if (query.name === 'CrossServerPlayer') {
             return Promise.resolve(mockPlayerData);
           }

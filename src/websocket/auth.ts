@@ -15,6 +15,7 @@ import {
   UWBPMessage,
   UWBPSystemMessage 
 } from '../types';
+import { UWBP_VERSION } from '../protocol/messages';
 
 // ============================================================================
 // Authentication Types
@@ -159,7 +160,7 @@ export class AuthenticationManager extends EventEmitter {
 
       // Check challenge expiry
       if (Date.now() > challenge.expiresAt) {
-        this.activeChallenges.delete(response.challengeResponse);
+        this.activeChallenges.delete(challengeKey);
         return {
           success: false,
           serverId: response.serverId,
@@ -365,6 +366,7 @@ export class AuthenticationManager extends EventEmitter {
       result = await this.validateAuthenticationResponse({
         serverId,
         token,
+        challenge: data.challenge,
         challengeResponse: data.challengeResponse,
         timestamp: message.timestamp || Date.now()
       }, clientIP);
@@ -465,9 +467,9 @@ export class AuthenticationManager extends EventEmitter {
       id: `auth-success-${Date.now()}`,
       op: 'handshake',
       data: responseData,
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
       serverId: result.serverId,
-      version: '2.0',
+      version: UWBP_VERSION,
       systemOp: 'handshake'
     };
   }
@@ -488,8 +490,8 @@ export class AuthenticationManager extends EventEmitter {
         error,
         code: 'AUTH_FAILED'
       },
-      timestamp: new Date().toISOString(),
-      version: '2.0',
+      timestamp: Date.now(),
+      version: UWBP_VERSION,
       systemOp: 'error'
     };
   }

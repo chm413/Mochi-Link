@@ -94,7 +94,7 @@ export class TokenManager {
       // Create token in database
       const token = await this.tokenOps.createToken(
         options.serverId,
-        rawToken, // Store raw token for initial response only
+        rawToken, // Returned once to the caller; TokenOperations stores only the hash
         tokenHash,
         options.ipWhitelist,
         options.encryptionConfig,
@@ -303,7 +303,7 @@ export class TokenManager {
       // Create new token
       const refreshedToken = await this.tokenOps.createToken(
         existingToken.serverId,
-        '[REDACTED]', // Don't store raw token
+        newRawToken, // Returned once to this operation; persistence stores only the hash
         newTokenHash,
         ipWhitelist,
         encryptionConfig,

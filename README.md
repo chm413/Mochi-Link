@@ -1,265 +1,105 @@
-# Mochi-Link (大福连) - Minecraft 统一管理与监控系统
+# Mochi-Link (大福连)
 
-[![npm](https://img.shields.io/npm/v/koishi-plugin-mochi-link)](https://www.npmjs.com/package/koishi-plugin-mochi-link)
-[![License](https://img.shields.io/github/license/your-org/koishi-plugin-mochi-link)](https://github.com/your-org/koishi-plugin-mochi-link/blob/main/LICENSE)
+Mochi-Link 是一个 Koishi 插件项目，目标是在 Koishi 中通过统一协议管理不同 Minecraft 服务端。管理端负责服务器登记、认证、权限、审计、群组路由和 API；各服务端 Connector 负责把核心原生能力转换为 U-WBP v2 消息。
 
-Mochi-Link（大福连）是一个基于 Koishi 框架的 Minecraft 统一管理与监控系统。如同大福（麻薯）一样具有极强的黏性和包容性，把各种核心（LLBDS、Paper、Folia 等）软糯地包裹在一起，创建一个"全核心统一"的 MC 服务器管理层。
+> 当前版本仍处于开发和一致性修复阶段。仓库包含较完整的管理端与 7 类 Connector 源码，但测试套件仍有失败项，部分设计目标尚未接通。部署前请先阅读 [审计与实现状态](docs/AUDIT.md)。
 
-## ✨ 主要特性
+## 当前范围
 
-### 🎯 跨核心统一接口
-- 支持 Java 版服务器：Paper、Folia、Fabric、Forge、Mohist、Geyser
-- 支持基岩版服务器：LLBDS、Nukkit、PMMP、BDS
-- 通过标准化的 U-WBP v2 协议统一管理不同核心
+管理端已有以下实现入口：
 
-### 🔗 灵活的连接架构
-- **正向连接**：Koishi 插件作为客户端连接到服务器
-- **反向连接**：服务器作为客户端连接到 Koishi 插件
-- **多种接入模式**：插件、RCON、终端注入
+- Koishi 命令：服务器、权限、白名单、玩家、命令执行、事件订阅、群组绑定和审计
+- WebSocket 管理端和 U-WBP v2 消息处理
+- HTTP API、中间件和 OpenAPI 相关代码
+- Koishi 数据库模型、令牌认证、权限与审计服务
+- Java/Paper、Folia、Fabric、Forge、Nukkit、LLBDS、PMMP Connector 源码
 
-### 👥 多服务器管理
-- 单个 Koishi 实例管理多台 MC 服务器
-- 群聊与服务器的多对多绑定关系
-- 基于服务器 ID 的权限分离控制
+当前不能视为已完成的能力：
 
-### 🛡️ 完善的安全机制
-- API 令牌认证和 IP 白名单
-- 可选的 AES/RSA 通信加密
-- 基于角色的权限管理系统
-- 完整的审计日志记录
+- Koishi 主动拨号到 Connector 的完整运行链路
+- 群组到多台服务器的多对多路由；当前实现限制为一个群组绑定一台服务器
+- API token scopes 的端到端授权
+- 应用层 AES/RSA 加密；敏感链路应使用 WSS/TLS
+- Web 管理面板
+- 所有 Connector 的真实核心环境构建与运行验证
 
-### 📊 实时监控推送
-- 玩家事件：加入、离开、聊天、死亡、成就
-- 服务器状态：在线状态、TPS、内存使用
-- 性能告警：TPS 过低、内存过高、玩家洪水攻击
+## 关键定义
 
-### 🎮 统一玩家管理
-- 跨服务器玩家信息聚合
-- 非正版玩家身份识别
-- 统一的黑白名单和封禁系统
-- 离线操作缓存和同步
+连接方向一律从 **Koishi 端点** 描述：
 
-## 🚀 快速开始
+| 能力字段 | 含义 | 旧配置别名 |
+| --- | --- | --- |
+| `accept_inbound_ws` | Koishi 监听，Connector 主动连接 Koishi | `forward` |
+| `dial_outbound_ws` | Koishi 主动连接 Connector，Connector 监听 | `reverse` |
 
-### 安装
+`forward` / `reverse` 容易因观察方不同产生相反解释，只用于兼容旧配置。新文档、日志和代码应优先使用能力字段。
 
-#### 从 npm 安装（即将发布）
+`plugin`、`rcon`、`terminal` 是服务器接入方式，不是 WebSocket 连接方向。完整术语见 [架构与概念定义](docs/ARCHITECTURE.md)。
+
+## 安装与运行
+
+该包必须由 Koishi 加载，不是独立 Node.js 服务。仓库当前没有可用的 npm registry 发布版本，可从 GitHub 安装或在 Koishi 工作区中引用本地目录。
 
 ```bash
-npm install koishi-plugin-mochi-link
+npm install github:chm413/Mochi-Link#master
 ```
 
-或者在 Koishi 控制台中搜索 "mochi-link" 进行安装。
+Koishi 配置示例：
 
-#### 从 GitHub 安装（当前推荐）
+```yaml
+plugins:
+  mochi-link:
+    websocket:
+      host: 0.0.0.0
+      port: 8080
+    http:
+      host: 127.0.0.1
+      port: 8081
+      cors: false
+    database:
+      prefix: mochi
+```
 
-由于插件尚未发布到 npm，请使用以下方式安装：
+插件声明 `database` 为必需服务。令牌明文只在生成或重新生成时展示一次；数据库只应保存哈希。生产网络应启用 WSS/TLS，并限制 HTTP 和 WebSocket 的监听地址、防火墙及反向代理访问范围。
 
-**开发环境**:
+## 常用命令
+
+```text
+mochi.server.list
+mochi.server.register <id> <name>
+mochi.server.token <id> [-r]
+mochi.server.info [id]
+mochi.player.list [serverId]
+mochi.whitelist.add [serverId] <player>
+mochi.exec [serverId] <command...>
+mochi.bind.add <serverId>
+mochi.audit
+```
+
+完整命令与权限要求见 [命令参考](docs/COMMANDS.md)。
+
+## 开发验证
+
 ```bash
-# 克隆仓库
-git clone https://github.com/chm413/Mochi-Link.git
-cd Mochi-Link
-
-# 安装依赖并构建
-npm install
+npm ci
 npm run build
-
-# 在 Koishi 项目中安装
-cd /path/to/koishi-project
-npm install file:../Mochi-Link
+npx tsc -p tsconfig.json --noEmit
+npm test -- --runInBand
+npm run lint -- --no-fix
 ```
 
-**生产环境**:
-```bash
-# 直接从 GitHub 安装
-npm install git+https://github.com/chm413/Mochi-Link.git
+`npm run dev` 是仓库辅助脚本，必须带 `setup`、`check` 等子命令；不要用 `npm start` 或直接执行 `lib/index.js` 启动插件。详见 [开发指南](docs/DEVELOPMENT.md)。
 
-# 或安装特定版本
-npm install git+https://github.com/chm413/Mochi-Link.git#v1.0.0
-```
+## 文档
 
-> 📖 详细安装说明请查看 [KOISHI_INSTALLATION_GUIDE.md](./KOISHI_INSTALLATION_GUIDE.md)  
-> 🚀 快速参考请查看 [QUICK_INSTALL.md](./QUICK_INSTALL.md)
+- [架构与概念定义](docs/ARCHITECTURE.md)
+- [U-WBP v2 协议](docs/PROTOCOL.md)
+- [命令参考](docs/COMMANDS.md)
+- [Connector 状态](docs/CONNECTORS.md)
+- [开发与验证](docs/DEVELOPMENT.md)
+- [审计与实现状态](docs/AUDIT.md)
+- [最初需求规格](.kiro/specs/minecraft-unified-management/requirements.md)
 
-### 基础配置
+## License
 
-1. **启用插件**：在 Koishi 控制台中启用 Mochi-Link 插件
-2. **配置数据库**：确保 Koishi 已配置数据库服务
-3. **设置端口**：配置 WebSocket 和 HTTP API 端口
-4. **安装 Bridge**：在目标 MC 服务器上安装对应的 Connector Bridge
-
-### 服务器注册
-
-```bash
-# 注册 Java 版服务器
-mochi register java-server --core paper --host 127.0.0.1 --port 25565
-
-# 注册基岩版服务器  
-mochi register bedrock-server --core llbds --host 127.0.0.1 --port 19132
-
-# 查看服务器列表
-mochi list
-
-# 查看服务器状态
-mochi status java-server
-```
-
-## 📖 详细文档
-
-### 配置选项
-
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| `websocket.port` | number | 8080 | WebSocket 服务端口 |
-| `websocket.host` | string | 0.0.0.0 | WebSocket 服务地址 |
-| `http.port` | number | 8081 | HTTP API 端口 |
-| `security.tokenExpiry` | number | 86400 | 令牌过期时间（秒） |
-| `monitoring.reportInterval` | number | 30 | 状态上报间隔（秒） |
-
-### API 接口
-
-#### 服务器管理
-- `GET /api/servers` - 获取服务器列表
-- `POST /api/servers` - 注册新服务器
-- `PUT /api/servers/:id` - 更新服务器配置
-- `DELETE /api/servers/:id` - 删除服务器
-
-#### 玩家管理
-- `GET /api/servers/:id/players` - 获取玩家列表
-- `GET /api/servers/:id/players/:playerId` - 获取玩家详情
-- `POST /api/servers/:id/players/:playerId/kick` - 踢出玩家
-
-#### 命令执行
-- `POST /api/servers/:id/commands` - 执行控制台命令
-- `POST /api/servers/:id/actions` - 执行快捷操作
-
-### WebSocket 协议
-
-Mochi-Link 使用 U-WBP v2 (Unified WebSocket Bridge Protocol v2) 进行通信：
-
-```json
-{
-  "type": "request",
-  "id": "uuid-string",
-  "op": "player.list",
-  "data": {},
-  "timestamp": 1234567890,
-  "serverId": "server-id"
-}
-```
-
-## 🔧 开发指南
-
-### 本地开发
-
-```bash
-# 克隆项目
-git clone https://github.com/your-org/koishi-plugin-mochi-link.git
-cd koishi-plugin-mochi-link
-
-# 安装依赖
-npm install
-
-# 开发模式
-npm run dev
-
-# 运行测试
-npm test
-
-# 构建项目
-npm run build
-```
-
-### 测试
-
-项目使用 Jest 和 fast-check 进行单元测试和属性测试：
-
-```bash
-# 运行所有测试
-npm test
-
-# 监听模式
-npm run test:watch
-
-# 生成覆盖率报告
-npm run test:coverage
-```
-
-### 贡献指南
-
-1. Fork 项目
-2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add some amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 创建 Pull Request
-
-## 🏗️ 架构设计
-
-### 系统架构
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   外部管理系统   │    │   Web 管理面板   │    │   Koishi 机器人  │
-└─────────┬───────┘    └─────────┬───────┘    └─────────┬───────┘
-          │                      │                      │
-          └──────────────────────┼──────────────────────┘
-                                 │
-                    ┌─────────────┴─────────────┐
-                    │     Mochi-Link 插件      │
-                    │  ┌─────────┬─────────┐   │
-                    │  │ HTTP API│WebSocket│   │
-                    │  │ Server  │ Server  │   │
-                    │  └─────────┴─────────┘   │
-                    │  ┌─────────────────────┐ │
-                    │  │   Core Services     │ │
-                    │  │ - Protocol Handler  │ │
-                    │  │ - Connection Mgr    │ │
-                    │  │ - Permission Mgr    │ │
-                    │  │ - Data Synchronizer │ │
-                    │  └─────────────────────┘ │
-                    │  ┌─────────────────────┐ │
-                    │  │   Koishi Database   │ │
-                    │  └─────────────────────┘ │
-                    └─────────────┬─────────────┘
-                                  │
-                    ┌─────────────┴─────────────┐
-                    │    Connector Bridges     │
-                    └─────────────┬─────────────┘
-                                  │
-        ┌─────────────────────────┼─────────────────────────┐
-        │                         │                         │
-┌───────┴───────┐        ┌────────┴────────┐       ┌────────┴────────┐
-│  Java 服务器   │        │   基岩版服务器   │       │   其他核心服务器  │
-│ Paper/Folia   │        │  LLBDS/PMMP    │       │ Fabric/Forge    │
-└───────────────┘        └─────────────────┘       └─────────────────┘
-```
-
-### 数据流
-
-1. **连接建立**：Connector Bridge 与 Koishi 插件建立 WebSocket 连接
-2. **认证握手**：交换认证信息和能力声明
-3. **事件推送**：服务器事件实时推送到管理端
-4. **命令执行**：管理端发送命令到服务器执行
-5. **状态同步**：定期同步服务器状态和玩家信息
-
-## 📄 许可证
-
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
-
-## 🤝 支持
-
-- 📧 邮件：chm@ling-hong.top
-- 💬 QQ群：1083149656
-- 🐛 问题反馈：[GitHub Issues](https://github.com/chm413/Mochi-Link/issues)
-- 📖 文档：[Wiki](https://github.com/chm413/Mochi-Link/wiki)
-
-## 🙏 致谢
-
-- [Koishi](https://koishi.chat/) - 优秀的聊天机器人框架
-- [Paper](https://papermc.io/) - 高性能的 Minecraft 服务端
-- [LLBDS](https://github.com/LiteLDev/LiteLoaderBDS) - 基岩版服务器插件加载器
-
----
-
-**Mochi-Link (大福连)** - 让 Minecraft 服务器管理变得简单而统一 🎮✨
+[MIT](LICENSE)

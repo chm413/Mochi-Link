@@ -8,11 +8,16 @@ import { Context } from 'koishi';
 import { createHash } from 'crypto';
 import { TokenManager } from './auth';
 import { APIToken } from '../types';
+import { buildTableName } from '../database/table-names';
 
 export class SimpleTokenManager implements TokenManager {
   private logger = this.ctx.logger('mochi-link:token-manager');
 
   constructor(private ctx: Context, private tablePrefix: string = 'mochi') {}
+
+  private table(baseName: string): string {
+    return buildTableName(this.tablePrefix, baseName);
+  }
 
   /**
    * Validate token for a server
@@ -50,9 +55,7 @@ export class SimpleTokenManager implements TokenManager {
    * Legacy lookup by plaintext token (compatibility only)
    */
   private async lookupByPlaintext(serverId: string, token: string): Promise<APIToken | null> {
-    const prefix = this.tablePrefix.replace(/\.$/, '_');
-
-    const tokens = await this.ctx.database.get(`${prefix}api_tokens` as any, {
+    const tokens = await this.ctx.database.get(this.table('api_tokens') as any, {
       server_id: serverId,
       token: token
     });
@@ -68,9 +71,7 @@ export class SimpleTokenManager implements TokenManager {
    * Get token by hash
    */
   async getTokenByHash(tokenHash: string): Promise<APIToken | null> {
-    const prefix = this.tablePrefix.replace(/\.$/, '_');
-
-    const tokens = await this.ctx.database.get(`${prefix}api_tokens` as any, {
+    const tokens = await this.ctx.database.get(this.table('api_tokens') as any, {
       token_hash: tokenHash
     });
 
@@ -111,7 +112,7 @@ export class SimpleTokenManager implements TokenManager {
     return {
       id: tokenData.id,
       serverId: tokenData.server_id,
-      token: tokenData.token,
+      token: tokenData.token || '',
       tokenHash: tokenData.token_hash,
       ipWhitelist,
       encryptionConfig,
@@ -125,9 +126,7 @@ export class SimpleTokenManager implements TokenManager {
    * Update token last used time
    */
   async updateTokenLastUsed(tokenId: number): Promise<void> {
-    const prefix = this.tablePrefix.replace(/\.$/, '_');
-    
-    await this.ctx.database.set(`${prefix}api_tokens` as any, { id: tokenId }, {
+    await this.ctx.database.set(this.table('api_tokens') as any, { id: tokenId }, {
       last_used: new Date()
     });
   }

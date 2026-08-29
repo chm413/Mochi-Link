@@ -274,7 +274,7 @@ export class TokenOperations {
   ): Promise<APIToken> {
     const dbToken: Partial<DatabaseAPIToken> = {
       server_id: serverId,
-      token,
+      token: '',
       token_hash: tokenHash,
       ip_whitelist: ipWhitelist ? JSON.stringify(ipWhitelist) : undefined,
       encryption_config: encryptionConfig ? JSON.stringify(encryptionConfig) : undefined,
@@ -283,13 +283,15 @@ export class TokenOperations {
     };
 
     const result = await this.ctx.database.create(TableNames.apiTokens as any, dbToken);
-    
-    const created = await this.getTokenById((result as any)[0].id);
+
+    // Koishi v4: database.create 返回创建的行对象（非数组）
+    const created = await this.getTokenById((result as any).id);
     if (!created) {
       throw new Error(`Failed to create token for server ${serverId}`);
     }
-    
-    return created;
+
+    // Return the secret only to the caller that created it; it is not persisted.
+    return { ...created, token };
   }
 
   /**
@@ -389,7 +391,7 @@ export class TokenOperations {
     return {
       id: dbToken.id,
       serverId: dbToken.server_id,
-      token: dbToken.token,
+      token: dbToken.token || '',
       tokenHash: dbToken.token_hash,
       ipWhitelist,
       encryptionConfig,
@@ -538,12 +540,13 @@ export class PendingOperationsManager {
     };
 
     const result = await this.ctx.database.create(TableNames.pendingOperations as any, dbOperation);
-    
-    const created = await this.getOperation((result as any)[0].id);
+
+    // Koishi v4: database.create 返回创建的行对象（非数组）
+    const created = await this.getOperation((result as any).id);
     if (!created) {
       throw new Error('Failed to create pending operation');
     }
-    
+
     return created;
   }
 

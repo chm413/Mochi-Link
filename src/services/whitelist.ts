@@ -1117,14 +1117,17 @@ export class WhitelistManager {
     logger.info('Whitelist Manager initialized');
     
     // Set up periodic sync for online servers
+    // unref：防止孤儿定时器阻止进程退出（测试环境/插件卸载后）
     this.periodicSyncInterval = setInterval(() => {
       this.performPeriodicSync();
     }, this.syncInterval);
-    
+    this.periodicSyncInterval.unref?.();
+
     // Set up expired ban processing (every 5 minutes)
     this.expiredBanInterval = setInterval(() => {
       this.processExpiredBans();
     }, 5 * 60 * 1000);
+    this.expiredBanInterval.unref?.();
     
     // Load pending operations from database on startup
     this.loadPendingOperationsFromDatabase();

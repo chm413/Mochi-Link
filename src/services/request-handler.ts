@@ -301,7 +301,8 @@ export class RequestHandler {
           op: 'server.getInfo' as any,
           data: {},
           serverId: connection.serverId,
-          timestamp: new Date().toISOString()
+          timestamp: Date.now(),
+          version: '2.0'
         };
         
         await connection.send(infoRequest);
@@ -357,7 +358,8 @@ export class RequestHandler {
           op: 'server.getStatus' as any,
           data: {},
           serverId: connection.serverId,
-          timestamp: new Date().toISOString()
+          timestamp: Date.now(),
+          version: '2.0'
         };
         
         await connection.send(statusRequest);
@@ -391,7 +393,8 @@ export class RequestHandler {
           op: 'server.getMetrics' as any,
           data: {},
           serverId: connection.serverId,
-          timestamp: new Date().toISOString()
+          timestamp: Date.now(),
+          version: '2.0'
         };
         
         await connection.send(metricsRequest);

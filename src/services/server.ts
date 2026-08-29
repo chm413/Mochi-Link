@@ -5,7 +5,7 @@
  * status tracking, and multi-server concurrent management.
  */
 
-import { Context } from 'koishi';
+import { Context, Logger } from 'koishi';
 import { 
   ServerConfig, 
   ConnectionConfig, 
@@ -89,6 +89,7 @@ export class ServerManager {
   private statusCache = new Map<string, ServerStatusInfo>();
   private reconnectTimers = new Map<string, NodeJS.Timeout>();
   private connectionManager: ConnectionModeManager;
+  private logger: Logger;
 
   constructor(
     private ctx: Context,
@@ -98,6 +99,7 @@ export class ServerManager {
     private token: TokenManager,
     private pluginIntegration?: PluginIntegrationService
   ) {
+    this.logger = ctx.logger('mochi-link:server');
     this.connectionManager = new ConnectionModeManager(ctx, {
       autoSwitchOnFailure: true,
       preferredModeOrder: ['plugin', 'rcon', 'terminal'],
@@ -960,7 +962,7 @@ export class ServerManager {
    * Cleanup resources
    */
   async cleanup(): Promise<void> {
-    const logger = this.ctx.logger('mochi-link:server');
+    const logger = this.logger;
     
     try {
       // Cleanup connection manager
@@ -1028,14 +1030,15 @@ export class ServerManager {
       // Listen for responses from the server
       connection.on('message', (message: any) => {
         // Handle response messages (U-WBP v2 protocol)
-        if (message.type === 'response' && message.id) {
-          const pending = pendingRequests.get(message.id);
+        const correlationId = message.requestId || message.id;
+        if (message.type === 'response' && correlationId) {
+          const pending = pendingRequests.get(correlationId);
           if (pending) {
             clearTimeout(pending.timeout);
-            pendingRequests.delete(message.id);
+            pendingRequests.delete(correlationId);
             
-            if (message.data?.success === false || message.data?.error) {
-              pending.reject(new Error(message.data?.error || 'Request failed'));
+            if (message.success === false || message.error || message.data?.success === false || message.data?.error) {
+              pending.reject(new Error(message.error || message.data?.error || 'Request failed'));
             } else {
               pending.resolve(message);
             }
@@ -1237,7 +1240,8 @@ export class ServerManager {
             op: 'command.execute',
             data: { command, timeout: requestTimeout },
             serverId,
-            timestamp: new Date().toISOString()
+            timestamp: Date.now(),
+            version: '2.0'
           };
 
           // 修复虚假实现：使用 pendingRequests 等待实际响应

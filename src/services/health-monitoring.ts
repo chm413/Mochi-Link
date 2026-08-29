@@ -385,21 +385,21 @@ export class HealthMonitoringService extends EventEmitter {
     this.systemCheckInterval = setInterval(
       () => this.performSystemCheck(),
       this.config.systemCheckInterval
-    );
+    ).unref?.();
   }
 
   private startServiceChecks(): void {
     this.serviceCheckInterval = setInterval(
       () => this.performServiceChecks(),
       this.config.serviceCheckInterval
-    );
+    ).unref?.();
   }
 
   private startDeepChecks(): void {
     this.deepCheckInterval = setInterval(
       () => this.performDeepCheck(),
       this.config.deepCheckInterval
-    );
+    ).unref?.();
   }
 
   private async performSystemCheck(): Promise<void> {

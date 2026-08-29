@@ -1,203 +1,40 @@
 # Mochi-Link PMMP Connector
 
-Minecraft Bedrock Edition (PMMP) connector plugin for Mochi-Link unified management system.
+这是 Mochi-Link 面向 PocketMine-MP 5 / PHP 8.1+ 的 Connector 源码目录。
 
-## Features
+## 当前状态
 
-- ✅ U-WBP v2 Protocol Compliant
-- ✅ WebSocket Connection to Management Server
-- ✅ Real-time Event Streaming
-- ✅ Remote Command Execution
-- ✅ Player Management
-- ✅ Whitelist Management
-- ✅ Performance Monitoring
-- ✅ Automatic Reconnection
-- ✅ Heartbeat Mechanism
+目录中包含插件清单、配置、U-WBP 消息、连接管理、命令处理、事件处理和性能采集代码，但本仓库尚未提供可复现的 PHAR 构建与真实 PMMP 装载结果。当前实现还存在以下已知限制：
 
-## Requirements
+- WebSocket 客户端包含简化实现和 `null` 回退路径，生产使用前应替换为经过维护的库并完成互操作测试。
+- CPU 指标目前返回占位值 `0.0`，不能用于告警或容量判断。
+- 源码存在不等于所有玩家、白名单、事件和重连操作已经在目标 PMMP 版本验证。
 
-- PocketMine-MP 5.0.0 or higher
-- PHP 8.1 or higher
-- Mochi-Link Management Server
+总体 Connector 状态和协议要求见 [`../../docs/CONNECTORS.md`](../../docs/CONNECTORS.md)。
 
-## Installation
+## 配置
 
-1. Download the latest release from the releases page
-2. Place the `.phar` file in your PMMP `plugins` folder
-3. Start your server to generate the configuration file
-4. Edit `plugins/MochiLinkConnectorPMMP/config.yml` with your settings
-5. Restart your server
+默认配置位于 `resources/config.yml`。连接方向按 Koishi 端点解释：PMMP Connector 主动连接 Koishi 时，Koishi 能力为 `accept_inbound_ws`，旧配置别名为 `forward`。
 
-## Configuration
+必须从 Koishi 的服务器登记/令牌轮换命令取得 token。原始 token 只展示一次，不应提交到仓库或写入日志。跨主机连接应使用 WSS/TLS。
 
-Edit `config.yml` in the plugin folder:
+## 协议
 
-```yaml
-# Management Server Connection
-mochi-link-host: "localhost"
-mochi-link-port: 25580
-mochi-link-path: "/ws"
-use-ssl: false
+新消息必须使用：
 
-# Server Identification
-server-id: ""  # Auto-generated if empty
-server-name: "PMMP Server"
+- U-WBP 版本 `2.0`
+- Unix epoch 毫秒时间戳
+- `requestId` 关联响应
+- `command.execute` 作为命令操作名
 
-# Authentication
-auth-token: "your-auth-token-here"
+完整定义见 [`../../docs/PROTOCOL.md`](../../docs/PROTOCOL.md)。
 
-# Connection Behavior
-timeout: 10000
-retry-attempts: 10
-retry-delay: 5000
-auto-reconnect: true
-reconnect-interval: 30
+## 开发验证
 
-# Performance Monitoring
-enable-monitoring: true
-monitoring-interval: 30
-```
+完成状态至少需要以下证据：
 
-## Commands
-
-- `/mochilink status` - Check connection status
-- `/mochilink reconnect` - Reconnect to management server
-- `/mochilink info` - Show plugin information
-- `/mochilink stats` - Show server statistics
-- `/mochilink help` - Show help message
-
-Aliases: `/ml`, `/mochi`, `/mlp`
-
-## Permissions
-
-- `mochilink.admin` - Full access to MochiLink commands (default: op)
-- `mochilink.manage` - Manage server connections and settings (default: op)
-- `mochilink.monitor` - View server status and monitoring data (default: op)
-
-## Supported Operations
-
-### Server Management
-- Get server status
-- Get server information
-- Execute commands
-
-### Player Management
-- List online players
-- Get player information
-- Kick players
-- Send private messages
-
-### Whitelist Management
-- Get whitelist
-- Add players to whitelist
-- Remove players from whitelist
-
-### Event Streaming
-- Player join/leave events
-- Player chat events
-- Player death events
-- Server metrics events
-
-## Protocol
-
-This connector implements the U-WBP v2 (Unified WebSocket Bridge Protocol version 2.0) for communication with the Mochi-Link management server.
-
-### Message Format
-
-All messages follow the U-WBP v2 standard format:
-
-```json
-{
-  "type": "request|response|event",
-  "id": "unique-message-id",
-  "op": "operation.type",
-  "data": {},
-  "timestamp": 1234567890,
-  "version": "2.0",
-  "serverId": "server-id"
-}
-```
-
-## Development
-
-### Building from Source
-
-1. Clone the repository
-2. Navigate to `connectors/pmmp`
-3. Build using DevTools or your preferred method
-
-### Project Structure
-
-```
-connectors/pmmp/
-├── src/
-│   └── com/mochilink/connector/pmmp/
-│       ├── MochiLinkPMMPPlugin.php          # Main plugin class
-│       ├── config/
-│       │   └── PMMPPluginConfig.php         # Configuration manager
-│       ├── protocol/
-│       │   └── UWBPMessage.php              # U-WBP v2 message class
-│       ├── connection/
-│       │   └── PMMPConnectionManager.php    # WebSocket connection manager
-│       ├── handlers/
-│       │   ├── PMMPEventHandler.php         # Event handler
-│       │   └── PMMPCommandHandler.php       # Command handler
-│       ├── monitoring/
-│       │   └── PMMPPerformanceMonitor.php   # Performance monitor
-│       └── commands/
-│           └── MochiLinkPMMPCommand.php     # Command implementation
-├── resources/
-│   └── config.yml                           # Default configuration
-├── plugin.yml                               # Plugin manifest
-└── README.md                                # This file
-```
-
-## Troubleshooting
-
-### Connection Issues
-
-1. Check that the management server is running
-2. Verify the host and port in config.yml
-3. Ensure the auth token is correct
-4. Check firewall settings
-
-### Performance Issues
-
-1. Adjust monitoring interval in config.yml
-2. Disable debug mode if enabled
-3. Check server resources (CPU, memory)
-
-### Event Not Forwarding
-
-1. Check event forwarding settings in config.yml
-2. Verify connection status with `/mochilink status`
-3. Check server logs for errors
-
-## Support
-
-For issues, questions, or contributions:
-- GitHub Issues: https://github.com/chm413/Mochi-Link/issues
-- Documentation: https://github.com/chm413/Mochi-Link/wiki
-
-## License
-
-This project is licensed under the MIT License.
-
-## Credits
-
-- Author: chm413
-- Protocol: U-WBP v2
-- Platform: PocketMine-MP
-
-## Changelog
-
-### Version 1.0.0 (2024-01-01)
-- Initial release
-- U-WBP v2 protocol implementation
-- WebSocket connection support
-- Event streaming
-- Command execution
-- Player management
-- Whitelist management
-- Performance monitoring
-- Automatic reconnection
+1. PHP 语法检查通过。
+2. 构建出可安装 PHAR。
+3. 在目标 PocketMine-MP 5.x 中成功装载和卸载。
+4. 与当前 Koishi 插件完成认证、心跳、命令、事件和断线重连测试。
+5. 不支持的能力返回明确错误，不返回占位成功结果。

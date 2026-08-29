@@ -192,7 +192,8 @@ describe('Property 4: Non-premium player identity recognition', () => {
           permissions: [],
           edition: playerData.edition,
           deviceType: playerData.deviceType,
-          ipAddress: playerData.ipAddress
+          ipAddress: playerData.ipAddress,
+          isPremium: playerData.isPremium
         };
         
         const identity = await playerInfoService.resolvePlayerIdentity([player]);

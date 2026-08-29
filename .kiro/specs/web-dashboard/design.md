@@ -1,5 +1,7 @@
 # 设计文档：Web Dashboard
 
+> **路线图状态**：本文是未实现的 Web Dashboard 目标设计，不是当前系统架构图。后端 API、认证 scopes 和 WebSocket 事件契约稳定后方可进入实现。
+
 ## 概述
 
 Web Dashboard 是一个基于 React 和 TypeScript 的现代化单页应用程序（SPA），为 Mochi-Link Minecraft 统一管理系统提供直观的网页界面。该应用程序采用组件化架构，使用 React Router 进行路由管理，使用 Redux Toolkit 进行状态管理，并通过 Axios 和原生 WebSocket API 与后端系统通信。

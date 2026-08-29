@@ -60,7 +60,7 @@ describe('Audit Service - Property Tests', () => {
         async (operation, operationData, context) => {
           // **Validates: Requirements 10.1**
           // Mock successful database operations
-          ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+          ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
           ctx.database.get = jest.fn().mockResolvedValue([{
             id: 1,
             user_id: context.userId,
@@ -88,7 +88,7 @@ describe('Audit Service - Property Tests', () => {
           expect(result.createdAt).toBeInstanceOf(Date);
 
           // Verify database was called with correct parameters
-          expect(ctx.database.create).toHaveBeenCalledWith('audit_logs', expect.objectContaining({
+          expect(ctx.database.create).toHaveBeenCalledWith('mochi_audit_logs', expect.objectContaining({
             user_id: context.userId,
             server_id: context.serverId,
             operation,
@@ -109,7 +109,7 @@ describe('Audit Service - Property Tests', () => {
         auditContextArbitrary,
         async (operation, operationData, errorMessage, context) => {
           // **Validates: Requirements 10.1**
-          ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+          ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
           ctx.database.get = jest.fn().mockResolvedValue([{
             id: 1,
             user_id: context.userId,
@@ -152,7 +152,7 @@ describe('Audit Service - Property Tests', () => {
           // **Validates: Requirements 10.1**
           const errorMessage = typeof error === 'string' ? error : error.message;
           
-          ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+          ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
           ctx.database.get = jest.fn().mockResolvedValue([{
             id: 1,
             user_id: context.userId,
@@ -197,7 +197,7 @@ describe('Audit Service - Property Tests', () => {
         async (operation, operationData, result, context) => {
           const errorMessage = result !== 'success' ? 'Test error message' : undefined;
           
-          ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+          ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
           ctx.database.get = jest.fn().mockResolvedValue([{
             id: 1,
             user_id: context.userId,
@@ -243,7 +243,7 @@ describe('Audit Service - Property Tests', () => {
         operationDataArbitrary,
         auditContextArbitrary,
         async (operation, operationData, context) => {
-          ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+          ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
           ctx.database.get = jest.fn().mockResolvedValue([{
             id: 1,
             user_id: context.userId,
@@ -281,7 +281,7 @@ describe('Audit Service - Property Tests', () => {
         }),
         auditContextArbitrary,
         async (serverId, event, details, context) => {
-          ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+          ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
           ctx.database.get = jest.fn().mockResolvedValue([{
             id: 1,
             user_id: context.userId,
@@ -316,7 +316,7 @@ describe('Audit Service - Property Tests', () => {
         async (serverId, operation, operationData, result, context) => {
           const errorMessage = result !== 'success' ? 'Test error' : undefined;
           
-          ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+          ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
           ctx.database.get = jest.fn().mockResolvedValue([{
             id: 1,
             user_id: context.userId,
@@ -354,7 +354,7 @@ describe('Audit Service - Property Tests', () => {
         async (serverId, playerId, operation, operationData, result, context) => {
           const errorMessage = result !== 'success' ? 'Test error' : undefined;
           
-          ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+          ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
           ctx.database.get = jest.fn().mockResolvedValue([{
             id: 1,
             user_id: context.userId,
@@ -429,7 +429,7 @@ describe('Audit Service - Property Tests', () => {
           if (filter.operation) expectedQuery.operation = filter.operation;
 
           expect(ctx.database.get).toHaveBeenCalledWith(
-            'audit_logs',
+            'mochi_audit_logs',
             expectedQuery,
             {
               limit: filter.limit || 100,
@@ -453,7 +453,7 @@ describe('Audit Service - Property Tests', () => {
 
           await auditService.query.getLogsInDateRange(startDate, endDate);
 
-          expect(ctx.database.get).toHaveBeenCalledWith('audit_logs', {
+          expect(ctx.database.get).toHaveBeenCalledWith('mochi_audit_logs', {
             created_at: {
               $gte: startDate,
               $lte: endDate
@@ -608,7 +608,7 @@ describe('Audit Service - Property Tests', () => {
         fc.anything(), // Any possible operation data
         auditContextArbitrary,
         async (operation, operationData, context) => {
-          ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+          ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
           ctx.database.get = jest.fn().mockResolvedValue([{
             id: 1,
             user_id: context.userId,

@@ -76,6 +76,12 @@ export declare class PlayerInfoService extends EventEmitter {
     private queryServerPlayerInfo;
     private queryCrossServerPlayerInfo;
     private aggregatePlayerResults;
+    /**
+     * 身份解析按名称归组：同一名称下的多条记录合并为一个待判定的身份，
+     * 组内出现多个不同 UUID/XUID 即构成冲突（需求 4.3 / 属性 4）。
+     * 旧实现按 uuid/ip/device 签名拆组，同名不同 UUID 的记录被分散，
+     * 冲突永远无法被检测到——已修复。
+     */
     private groupByIdentityMarkers;
     private calculateIdentityConfidence;
     private calculateConfidenceScore;

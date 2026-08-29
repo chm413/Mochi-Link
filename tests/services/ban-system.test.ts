@@ -17,7 +17,7 @@ const createMockContext = (): Context => ({
   })),
   database: {
     get: jest.fn().mockResolvedValue([]),
-    create: jest.fn().mockResolvedValue([{ id: 1 }]),
+    create: jest.fn().mockResolvedValue({ id: 1 }),
     set: jest.fn().mockResolvedValue({ matched: 1 }),
     remove: jest.fn().mockResolvedValue({ matched: 1 })
   }
@@ -29,7 +29,7 @@ describe('Ban System', () => {
 
   beforeEach(() => {
     mockContext = createMockContext();
-    whitelistManager = new WhitelistManager(mockContext);
+    whitelistManager = new WhitelistManager(mockContext, jest.fn(() => null));
     jest.clearAllMocks();
   });
 

@@ -146,7 +146,7 @@ describe('BindingManager', () => {
       });
 
       expect(mockPermission.checkPermission).toHaveBeenCalledWith(userId, 'server123', 'binding.create');
-      expect(mockDatabase.create).toHaveBeenCalledWith('server_bindings', expect.objectContaining({
+      expect(mockDatabase.create).toHaveBeenCalledWith('mochi_server_bindings', expect.objectContaining({
         group_id: 'group123',
         server_id: 'server123',
         binding_type: 'chat',
@@ -187,9 +187,10 @@ describe('BindingManager', () => {
       mockPermission.checkPermission.mockResolvedValue({ granted: true });
       mockDatabase.get.mockResolvedValueOnce([{ id: 'server123' }]); // Server exists
       mockDatabase.get.mockResolvedValueOnce([{ id: 1 }]); // Binding exists
+      mockDatabase.get.mockResolvedValueOnce([]); // Server name lookup (defensive)
 
       await expect(bindingManager.createBinding(userId, bindingOptions))
-        .rejects.toThrow('Binding already exists');
+        .rejects.toThrow('already bound');
     });
   });
 
@@ -232,7 +233,7 @@ describe('BindingManager', () => {
 
       expect(result.config.chat?.enabled).toBe(false);
       expect(result.config.chat?.bidirectional).toBe(false);
-      expect(mockDatabase.set).toHaveBeenCalledWith('server_bindings', bindingId, expect.objectContaining({
+      expect(mockDatabase.set).toHaveBeenCalledWith('mochi_server_bindings', bindingId, expect.objectContaining({
         config: expect.stringContaining('"enabled":false')
       }));
     });
@@ -266,7 +267,7 @@ describe('BindingManager', () => {
 
       await bindingManager.deleteBinding(userId, bindingId);
 
-      expect(mockDatabase.remove).toHaveBeenCalledWith('server_bindings', bindingId);
+      expect(mockDatabase.remove).toHaveBeenCalledWith('mochi_server_bindings', bindingId);
       expect(mockAudit.logger.logServerOperation).toHaveBeenCalledWith(
         'server123',
         'binding.delete',
@@ -391,7 +392,7 @@ describe('BindingManager', () => {
 
       await bindingManager.getGroupServers('group123', 'chat');
 
-      expect(mockDatabase.get).toHaveBeenCalledWith('server_bindings', {
+      expect(mockDatabase.get).toHaveBeenCalledWith('mochi_server_bindings', {
         group_id: 'group123',
         binding_type: 'chat'
       });
@@ -422,7 +423,7 @@ describe('BindingManager', () => {
       const exists = await bindingManager.hasBinding('group123', 'server123');
 
       expect(exists).toBe(true);
-      expect(mockDatabase.get).toHaveBeenCalledWith('server_bindings', {
+      expect(mockDatabase.get).toHaveBeenCalledWith('mochi_server_bindings', {
         group_id: 'group123',
         server_id: 'server123'
       });
@@ -441,7 +442,7 @@ describe('BindingManager', () => {
 
       await bindingManager.hasBinding('group123', 'server123', 'chat');
 
-      expect(mockDatabase.get).toHaveBeenCalledWith('server_bindings', {
+      expect(mockDatabase.get).toHaveBeenCalledWith('mochi_server_bindings', {
         group_id: 'group123',
         server_id: 'server123',
         binding_type: 'chat'

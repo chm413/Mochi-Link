@@ -19,6 +19,7 @@ import {
     WsCapabilities,
 } from './utils/connection-config';
 import { formatLegacyModeWindowNotice, getLegacyModeWindows } from './constants/version-policy';
+import { TableNames } from './database/table-names';
 
 // ============================================================================
 // Helper Functions
@@ -54,9 +55,9 @@ export const Config: Schema<PluginConfig> = Schema.object({
     
     database: Schema.object({
         prefix: Schema.string()
-            .default('mochi_')
-            .pattern(/^[a-zA-Z_][a-zA-Z0-9_]*$/)
-            .description('Database table prefix (alphanumeric and underscore only)')
+            .default('mochi')
+            .pattern(/^[a-zA-Z_][a-zA-Z0-9_]*[._]?$/)
+            .description('Database table prefix; a trailing underscore or dot is accepted and normalized')
     }).description('Database configuration'),
     
     security: Schema.object({
@@ -229,13 +230,17 @@ export function apply(ctx: Context, config: PluginConfig) {
         return mode;
     }
 
+    function createTokenExpiryDate(): Date {
+        const expirySeconds = config.security?.tokenExpiry || 86400;
+        return new Date(Date.now() + expirySeconds * 1000);
+    }
+
     // Initialize on ready
     ctx.on('ready', async () => {
         try {
             logger.info('Starting Mochi-Link plugin...');
             
             // Initialize table names with prefix
-            const { TableNames } = await import('./database/table-names');
             TableNames.initialize(config.database?.prefix || 'mochi');
             logger.info(`Table names initialized with prefix: ${config.database?.prefix || 'mochi'}`);
             
@@ -403,7 +408,7 @@ export function apply(ctx: Context, config: PluginConfig) {
                                     serverId: connection.serverId,
                                     eventType: message.op || message.eventType,
                                     data: message.data || message,
-                                    timestamp: message.timestamp || new Date().toISOString()  // 确保是 ISO 8601 字符串
+                                    timestamp: message.timestamp || Date.now()
                                 });
                                 break;
 
@@ -691,13 +696,12 @@ export function apply(ctx: Context, config: PluginConfig) {
           const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
           
           // 修复问题 #14: 添加令牌过期时间（默认 1 年）
-          const expiresAt = new Date();
-          expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+          const expiresAt = createTokenExpiryDate();
           
           const normalizedConnection = normalizeServerConnectionConfig({}, 'forward');
 
           // 创建服务器记录
-          await ctx.database.create(`${config.database?.prefix || 'mochi'}_servers` as any, {
+          await ctx.database.create(TableNames.servers as any, {
             id,
             name,
             core_type: (options.type || 'java') as 'java' | 'bedrock',
@@ -713,7 +717,7 @@ export function apply(ctx: Context, config: PluginConfig) {
           });
           
           // 创建API令牌（安全修订：明文令牌不落库，仅一次性展示给服主）
-          await ctx.database.create(`${config.database?.prefix || 'mochi'}_api_tokens` as any, {
+          await ctx.database.create(TableNames.apiTokens as any, {
             server_id: id,
             token: '',
             token_hash: tokenHash,
@@ -822,8 +826,7 @@ export function apply(ctx: Context, config: PluginConfig) {
           const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
           
           // 修复问题 #14: 添加令牌过期时间（默认 1 年）
-          const expiresAt = new Date();
-          expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+          const expiresAt = createTokenExpiryDate();
           
           const normalizedConnection = normalizeServerConnectionConfig(
             {
@@ -834,7 +837,7 @@ export function apply(ctx: Context, config: PluginConfig) {
           );
 
           // 创建服务器记录
-          await ctx.database.create(`${config.database?.prefix || 'mochi'}_servers` as any, {
+          await ctx.database.create(TableNames.servers as any, {
             id,
             name,
             core_type: finalType as 'java' | 'bedrock',
@@ -850,7 +853,7 @@ export function apply(ctx: Context, config: PluginConfig) {
           });
           
           // 创建API令牌（安全修订：明文令牌不落库，仅一次性展示给服主）
-          await ctx.database.create(`${config.database?.prefix || 'mochi'}_api_tokens` as any, {
+          await ctx.database.create(TableNames.apiTokens as any, {
             server_id: id,
             token: '',
             token_hash: tokenHash,
@@ -913,7 +916,7 @@ export function apply(ctx: Context, config: PluginConfig) {
                  `  3️⃣ 启动服务器，等待连接建立\n` +
                  `  4️⃣ 使用 mochi.server.list 查看连接状态\n\n` +
                  `💡 提示:\n` +
-                 `  • 使用 mochi.server.token ${id} 可随时查看令牌\n` +
+                 `  • 使用 mochi.server.token ${id} 可查看令牌状态\n` +
                  `  • 使用 mochi.server.token ${id} -r 可重新生成令牌\n` +
                  `  • 请妥善保管令牌，不要泄露`;
         } catch (error) {
@@ -983,10 +986,9 @@ export function apply(ctx: Context, config: PluginConfig) {
       });
     
     // Server token - Level 3 (管理员)
-    ctx.command('mochi.server.token <id>', '查看服务器连接令牌')
+    ctx.command('mochi.server.token <id>', '查看令牌状态或重新生成服务器连接令牌')
       .userFields(['authority'])
       .option('regenerate', '-r 重新生成令牌', { fallback: false })
-      .option('show', '-s 显示完整令牌（不安全）', { fallback: false })
       .before(({ session }) => {
         const authCheck = checkAuthority(session, 3);
         if (!authCheck.allowed) {
@@ -999,10 +1001,9 @@ export function apply(ctx: Context, config: PluginConfig) {
         }
         
         if (!id) {
-          return '用法: mochi.server.token <id> [-r] [-s]\n' +
+          return '用法: mochi.server.token <id> [-r]\n' +
                  '选项:\n' +
                  '  -r  重新生成令牌\n' +
-                 '  -s  显示完整令牌（不安全，仅在必要时使用）\n' +
                  '示例: mochi.server.token survival -r';
         }
         
@@ -1026,11 +1027,10 @@ export function apply(ctx: Context, config: PluginConfig) {
             // 生成新的令牌，添加过期时间（默认 1 年）
             const newToken = crypto.randomBytes(32).toString('hex');
             const tokenHash = crypto.createHash('sha256').update(newToken).digest('hex');
-            const expiresAt = new Date();
-            expiresAt.setFullYear(expiresAt.getFullYear() + 1); // 1 年后过期
+            const expiresAt = createTokenExpiryDate();
             
             // 创建新令牌（安全修订：明文令牌不落库，仅一次性展示给服主）
-            await ctx.database.create(`${config.database?.prefix || 'mochi'}_api_tokens` as any, {
+            await ctx.database.create(TableNames.apiTokens as any, {
               server_id: id,
               token: '',
               token_hash: tokenHash,
@@ -1072,12 +1072,11 @@ export function apply(ctx: Context, config: PluginConfig) {
             // 如果没有令牌，自动生成一个
             const newToken = crypto.randomBytes(32).toString('hex');
             const tokenHash = crypto.createHash('sha256').update(newToken).digest('hex');
-            const expiresAt = new Date();
-            expiresAt.setFullYear(expiresAt.getFullYear() + 1); // 1 年后过期
+            const expiresAt = createTokenExpiryDate();
             
-            await ctx.database.create(`${config.database?.prefix || 'mochi'}_api_tokens` as any, {
+            await ctx.database.create(TableNames.apiTokens as any, {
               server_id: id,
-              token: newToken,
+              token: '',
               token_hash: tokenHash,
               created_at: new Date(),
               expires_at: expiresAt
@@ -1104,12 +1103,9 @@ export function apply(ctx: Context, config: PluginConfig) {
             const statusIcon = isExpired ? '❌' : '✅';
             const statusText = isExpired ? '已过期' : '有效';
             
-            // 隐藏令牌内容，只显示前8位和后4位；哈希模式下明文未存储
-            const maskedToken = options.show
-              ? (t.token || '（明文未存储：出于安全考虑仅保存哈希，如需完整令牌请使用令牌重新生成功能）')
-              : (t.token
-                ? `${t.token.substring(0, 8)}${'*'.repeat(48)}${t.token.substring(60)}`
-                : `${t.tokenHash.substring(0, 8)}${'*'.repeat(48)}${t.tokenHash.substring(56)}（哈希）`);
+            const tokenFingerprint = t.tokenHash
+              ? `sha256:${t.tokenHash.substring(0, 12)}...`
+              : '缺少哈希，请重新生成令牌';
             
             const expiryInfo = t.expiresAt 
               ? `\n  过期时间: ${new Date(t.expiresAt).toLocaleString()} ${statusIcon} ${statusText}`
@@ -1123,21 +1119,16 @@ export function apply(ctx: Context, config: PluginConfig) {
             
             return `令牌 #${i + 1}:\n` +
                    `  ID: ${t.id}\n` +
-                   `  令牌: ${maskedToken}\n` +
+                   `  指纹: ${tokenFingerprint}\n` +
                    `  创建时间: ${new Date(t.createdAt).toLocaleString()}` +
                    expiryInfo + lastUsedInfo + ipWhitelistInfo;
           }).join('\n\n');
           
-          const showWarning = options.show 
-            ? '\n\n⚠️ 警告: 完整令牌已显示，请注意保密！' 
-            : '\n\n🔒 安全提示: 令牌内容已隐藏，使用 -s 选项可显示完整令牌';
-          
           return `🔐 服务器连接令牌:\n` +
                  `  服务器: ${server.name} (${id})\n\n` +
-                 tokenList + showWarning + '\n\n' +
+                 tokenList + '\n\n🔒 安全提示: 明文令牌不存储，无法再次查看。\n\n' +
                  `💡 提示:\n` +
                  `  • 使用 -r 选项可以重新生成令牌\n` +
-                 `  • 使用 -s 选项可以显示完整令牌（不安全）\n` +
                  `  • 令牌过期后需要重新生成`;
         } catch (error) {
           logger.error('Failed to get server token:', error);
@@ -1170,19 +1161,17 @@ export function apply(ctx: Context, config: PluginConfig) {
           }
           
           // 删除服务器及其所有关联数据
-          const prefix = config.database?.prefix || 'mochi';
-          
           // 删除令牌
-          await ctx.database.remove(`${prefix}_api_tokens` as any, { server_id: id });
+          await ctx.database.remove(TableNames.apiTokens as any, { server_id: id });
           
           // 删除ACL
-          await ctx.database.remove(`${prefix}_server_acl` as any, { server_id: id });
+          await ctx.database.remove(TableNames.serverAcl as any, { server_id: id });
           
           // 删除绑定
-          await ctx.database.remove(`${prefix}_group_bindings` as any, { server_id: id });
+          await ctx.database.remove(TableNames.groupBindings as any, { server_id: id });
           
           // 删除服务器
-          await ctx.database.remove(`${prefix}_servers` as any, { id });
+          await ctx.database.remove(TableNames.servers as any, { id });
           
           // Create audit log using service
           if (serviceManager?.audit) {

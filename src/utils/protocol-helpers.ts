@@ -7,39 +7,42 @@
 import { UWBP_VERSION } from '../protocol/messages';
 
 /**
- * Create ISO 8601 timestamp string
+ * Create a canonical U-WBP timestamp
  * 
- * @returns ISO 8601 formatted timestamp string
- * @example "2024-01-01T00:00:00.000Z"
+ * @returns Unix epoch milliseconds
  */
-export function createTimestamp(): string {
-  return new Date().toISOString();
+export function createTimestamp(): number {
+  return Date.now();
 }
 
 /**
- * Convert various timestamp formats to ISO 8601 string
+ * Convert supported timestamp formats to canonical Unix milliseconds
  * 
  * @param timestamp - Unix milliseconds, Date object, or ISO 8601 string
- * @returns ISO 8601 formatted timestamp string
+ * @returns Unix epoch milliseconds
  */
-export function normalizeTimestamp(timestamp: number | Date | string): string {
+export function normalizeTimestamp(timestamp: number | Date | string): number {
   if (typeof timestamp === 'string') {
-    // Already a string, validate and return
     const date = new Date(timestamp);
     if (isNaN(date.getTime())) {
       throw new Error(`Invalid timestamp string: ${timestamp}`);
     }
-    return date.toISOString();
+    return date.getTime();
   }
   
   if (typeof timestamp === 'number') {
-    // Unix milliseconds
-    return new Date(timestamp).toISOString();
+    if (!Number.isFinite(timestamp)) {
+      throw new Error(`Invalid numeric timestamp: ${timestamp}`);
+    }
+    return timestamp;
   }
   
   if (timestamp instanceof Date) {
-    // Date object
-    return timestamp.toISOString();
+    const value = timestamp.getTime();
+    if (isNaN(value)) {
+      throw new Error('Invalid Date timestamp');
+    }
+    return value;
   }
   
   throw new Error(`Unsupported timestamp type: ${typeof timestamp}`);
@@ -69,18 +72,16 @@ export function parseTimestamp(timestamp: string): number {
 }
 
 /**
- * Check if a timestamp is valid ISO 8601 format
+ * Check if a timestamp is a valid canonical Unix millisecond value
  * 
- * @param timestamp - Timestamp string to validate
- * @returns true if valid ISO 8601 format
+ * @param timestamp - Timestamp value to validate
+ * @returns true if it is a finite non-negative integer
  */
-export function isValidTimestamp(timestamp: string): boolean {
-  if (typeof timestamp !== 'string') {
-    return false;
-  }
-  
-  const date = new Date(timestamp);
-  return !isNaN(date.getTime()) && date.toISOString() === timestamp;
+export function isValidTimestamp(timestamp: unknown): timestamp is number {
+  return typeof timestamp === 'number'
+    && Number.isFinite(timestamp)
+    && Number.isInteger(timestamp)
+    && timestamp >= 0;
 }
 
 /**
@@ -140,8 +141,7 @@ export function createMessageId(prefix = 'msg'): string {
  * @returns true if compatible with current protocol version
  */
 export function isCompatibleVersion(version: string): boolean {
-  // Currently only support 2.0.x versions
-  return version.startsWith('2.0');
+  return version === UWBP_VERSION || version === '2.0.0';
 }
 
 /**

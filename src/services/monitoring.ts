@@ -751,7 +751,7 @@ export class MonitoringService {
     this.cleanupInterval = setInterval(() => {
       this.cleanupOldData();
       this.cleanupOldAlerts();
-    }, 60 * 60 * 1000); // Run every hour
+    }, 60 * 60 * 1000).unref?.(); // Run every hour
   }
 
   /**

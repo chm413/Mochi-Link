@@ -11,6 +11,7 @@ export declare class SimpleTokenManager implements TokenManager {
     private tablePrefix;
     private logger;
     constructor(ctx: Context, tablePrefix?: string);
+    private table;
     /**
      * Validate token for a server
      *

@@ -50,7 +50,7 @@ describe('Database Operations', () => {
         };
 
         // Mock database responses
-        ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+        ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
         ctx.database.get = jest.fn().mockResolvedValue([{
           id: 'test-server-1',
           name: 'Test Server 1',
@@ -68,7 +68,7 @@ describe('Database Operations', () => {
 
         const result = await serverOps.createServer(serverConfig);
 
-        expect(ctx.database.create).toHaveBeenCalledWith('minecraft_servers', expect.objectContaining({
+        expect(ctx.database.create).toHaveBeenCalledWith('mochi_servers', expect.objectContaining({
           id: 'test-server-1',
           name: 'Test Server 1',
           core_type: 'Java'
@@ -118,7 +118,7 @@ describe('Database Operations', () => {
 
         const result = await serverOps.getServer('test-server-1');
 
-        expect(ctx.database.get).toHaveBeenCalledWith('minecraft_servers', { id: 'test-server-1' });
+        expect(ctx.database.get).toHaveBeenCalledWith('mochi_servers', { id: 'test-server-1' });
         expect(result).not.toBeNull();
         expect(result!.id).toBe('test-server-1');
         expect(result!.status).toBe('online');
@@ -141,7 +141,7 @@ describe('Database Operations', () => {
         await serverOps.updateServerStatus('test-server-1', 'online', lastSeen);
 
         expect(ctx.database.set).toHaveBeenCalledWith(
-          'minecraft_servers',
+          'mochi_servers',
           { id: 'test-server-1' },
           expect.objectContaining({
             status: 'online',
@@ -158,7 +158,7 @@ describe('Database Operations', () => {
 
         const result = await serverOps.deleteServer('test-server-1');
 
-        expect(ctx.database.remove).toHaveBeenCalledWith('minecraft_servers', { id: 'test-server-1' });
+        expect(ctx.database.remove).toHaveBeenCalledWith('mochi_servers', { id: 'test-server-1' });
         expect(result).toBe(true);
       });
 
@@ -188,7 +188,7 @@ describe('Database Operations', () => {
         const grantedBy = 'owner123';
 
         ctx.database.remove = jest.fn().mockResolvedValue({ matched: 0 });
-        ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+        ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
         ctx.database.get = jest.fn().mockResolvedValue([{
           id: 1,
           user_id: userId,
@@ -202,11 +202,11 @@ describe('Database Operations', () => {
 
         const result = await aclOps.grantPermission(userId, serverId, role, permissions, grantedBy);
 
-        expect(ctx.database.remove).toHaveBeenCalledWith('server_acl', { 
+        expect(ctx.database.remove).toHaveBeenCalledWith('mochi_server_acl', {
           user_id: userId, 
           server_id: serverId 
         });
-        expect(ctx.database.create).toHaveBeenCalledWith('server_acl', expect.objectContaining({
+        expect(ctx.database.create).toHaveBeenCalledWith('mochi_server_acl', expect.objectContaining({
           user_id: userId,
           server_id: serverId,
           role,
@@ -295,7 +295,7 @@ describe('Database Operations', () => {
 
         const result = await aclOps.cleanupExpiredACLs();
 
-        expect(ctx.database.remove).toHaveBeenCalledWith('server_acl', {
+        expect(ctx.database.remove).toHaveBeenCalledWith('mochi_server_acl', {
           expires_at: { $lt: expect.any(Date) }
         });
         expect(result).toBe(3);
@@ -317,7 +317,7 @@ describe('Database Operations', () => {
         const tokenHash = 'hash123';
         const ipWhitelist = ['127.0.0.1', '192.168.1.1'];
 
-        ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+        ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
         ctx.database.get = jest.fn().mockResolvedValue([{
           id: 1,
           server_id: serverId,
@@ -332,13 +332,14 @@ describe('Database Operations', () => {
 
         const result = await tokenOps.createToken(serverId, token, tokenHash, ipWhitelist);
 
-        expect(ctx.database.create).toHaveBeenCalledWith('api_tokens', expect.objectContaining({
+        expect(ctx.database.create).toHaveBeenCalledWith('mochi_api_tokens', expect.objectContaining({
           server_id: serverId,
-          token,
+          token: '',
           token_hash: tokenHash,
           ip_whitelist: JSON.stringify(ipWhitelist)
         }));
         expect(result.serverId).toBe(serverId);
+        expect(result.token).toBe(token);
         expect(result.ipWhitelist).toEqual(ipWhitelist);
       });
     });
@@ -361,7 +362,7 @@ describe('Database Operations', () => {
 
         const result = await tokenOps.getTokenByHash(tokenHash);
 
-        expect(ctx.database.get).toHaveBeenCalledWith('api_tokens', { token_hash: tokenHash });
+        expect(ctx.database.get).toHaveBeenCalledWith('mochi_api_tokens', { token_hash: tokenHash });
         expect(result).not.toBeNull();
         expect(result!.tokenHash).toBe(tokenHash);
       });
@@ -382,7 +383,7 @@ describe('Database Operations', () => {
         await tokenOps.updateTokenLastUsed(1);
 
         expect(ctx.database.set).toHaveBeenCalledWith(
-          'api_tokens',
+          'mochi_api_tokens',
           { id: 1 },
           { last_used: expect.any(Date) }
         );
@@ -405,7 +406,7 @@ describe('Database Operations', () => {
         const operationData = { playerId: 'player123', reason: 'test' };
         const result = 'success';
 
-        ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+        ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
         ctx.database.get = jest.fn().mockResolvedValue([{
           id: 1,
           user_id: userId,
@@ -423,7 +424,7 @@ describe('Database Operations', () => {
           userId, serverId, operation, operationData, result
         );
 
-        expect(ctx.database.create).toHaveBeenCalledWith('audit_logs', expect.objectContaining({
+        expect(ctx.database.create).toHaveBeenCalledWith('mochi_audit_logs', expect.objectContaining({
           user_id: userId,
           server_id: serverId,
           operation,
@@ -461,7 +462,7 @@ describe('Database Operations', () => {
         const result = await auditOps.getAuditLogs(filters);
 
         expect(ctx.database.get).toHaveBeenCalledWith(
-          'audit_logs',
+          'mochi_audit_logs',
           { user_id: 'user123', server_id: 'server123' },
           { limit: 50, offset: 0 }
         );
@@ -476,7 +477,7 @@ describe('Database Operations', () => {
 
         const result = await auditOps.cleanupOldLogs(30);
 
-        expect(ctx.database.remove).toHaveBeenCalledWith('audit_logs', {
+        expect(ctx.database.remove).toHaveBeenCalledWith('mochi_audit_logs', {
           created_at: { $lt: expect.any(Date) }
         });
         expect(result).toBe(10);
@@ -498,7 +499,7 @@ describe('Database Operations', () => {
         const target = 'player123';
         const parameters = { reason: 'test' };
 
-        ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+        ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
         ctx.database.get = jest.fn().mockResolvedValue([{
           id: 1,
           server_id: serverId,
@@ -513,7 +514,7 @@ describe('Database Operations', () => {
 
         const result = await pendingOps.addOperation(serverId, operationType, target, parameters);
 
-        expect(ctx.database.create).toHaveBeenCalledWith('pending_operations', expect.objectContaining({
+        expect(ctx.database.create).toHaveBeenCalledWith('mochi_pending_operations', expect.objectContaining({
           server_id: serverId,
           operation_type: operationType,
           target,
@@ -575,7 +576,7 @@ describe('Database Operations', () => {
         const result = await dbManager.healthCheck();
 
         expect(result).toBe(true);
-        expect(ctx.database.get).toHaveBeenCalledWith('minecraft_servers', {}, ['id']);
+        expect(ctx.database.get).toHaveBeenCalledWith('mochi_servers', {}, ['id']);
       });
 
       it('should return false when database query fails', async () => {

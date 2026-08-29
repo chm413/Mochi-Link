@@ -318,25 +318,23 @@ export class MessageValidator {
   }
 
   private static validateTimestamp(timestamp: string | number, result: ValidationResult): void {
-    // 支持 ISO 8601 字符串格式（推荐）或数字格式（向后兼容）
+    // Canonical format is Unix epoch milliseconds; ISO strings are read-only compatibility.
     let timestampMs: number;
     
     if (typeof timestamp === 'string') {
-      // ISO 8601 格式
       const date = new Date(timestamp);
       if (isNaN(date.getTime())) {
         this.addError(result, 'timestamp', 'Timestamp must be a valid ISO 8601 string', 'INVALID_TIMESTAMP');
         return;
       }
       timestampMs = date.getTime();
+      this.addWarning(result, 'timestamp', 'ISO 8601 timestamps are legacy; use Unix epoch milliseconds', 'DEPRECATED_TIMESTAMP_FORMAT');
     } else if (typeof timestamp === 'number') {
-      // 数字格式（向后兼容）
-      if (timestamp <= 0) {
-        this.addError(result, 'timestamp', 'Timestamp must be a positive number', 'INVALID_TIMESTAMP');
+      if (!Number.isSafeInteger(timestamp) || timestamp <= 0) {
+        this.addError(result, 'timestamp', 'Timestamp must be a positive integer in Unix milliseconds', 'INVALID_TIMESTAMP');
         return;
       }
       timestampMs = timestamp;
-      this.addWarning(result, 'timestamp', 'Numeric timestamp is deprecated, use ISO 8601 string format', 'DEPRECATED_TIMESTAMP_FORMAT');
     } else {
       this.addError(result, 'timestamp', 'Timestamp must be an ISO 8601 string or number', 'INVALID_TIMESTAMP_TYPE');
       return;
@@ -372,7 +370,9 @@ export class MessageValidator {
       return;
     }
 
-    if (version !== UWBP_VERSION) {
+    if (version === '2.0.0') {
+      this.addWarning(result, 'version', 'Version 2.0.0 is a legacy alias; send 2.0', 'DEPRECATED_VERSION_FORMAT');
+    } else if (version !== UWBP_VERSION) {
       this.addWarning(result, 'version', `Version mismatch: expected ${UWBP_VERSION}, got ${version}`, 'VERSION_MISMATCH');
     }
   }

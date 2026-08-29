@@ -18,7 +18,7 @@ const createMockContext = (): Context => ({
   })),
   database: {
     get: jest.fn().mockResolvedValue([]),
-    create: jest.fn().mockResolvedValue([{ id: 1 }]),
+    create: jest.fn().mockResolvedValue({ id: 1 }),
     set: jest.fn().mockResolvedValue({ matched: 1 }),
     remove: jest.fn().mockResolvedValue({ matched: 1 })
   }
@@ -45,7 +45,7 @@ describe('Token Management Property Tests', () => {
         
         // Mock successful database operations
         const mockContext = createMockContext();
-        (mockContext.database.create as jest.Mock).mockResolvedValue([{ id: 1 }]);
+        (mockContext.database.create as jest.Mock).mockResolvedValue({ id: 1 });
         (mockContext.database.get as jest.Mock).mockResolvedValue([{
           id: 1,
           server_id: serverId,

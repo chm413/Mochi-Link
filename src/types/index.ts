@@ -87,6 +87,7 @@ export interface Player {
   edition: 'Java' | 'Bedrock';
   deviceType?: string;
   ipAddress?: string;
+  isPremium?: boolean;    // 是否正版（离线模式/非正版为 false；未定义为未知）
   health?: number;         // 玩家生命值
   level?: number;          // 玩家等级
   gameMode?: string;       // 游戏模式
@@ -138,7 +139,9 @@ export interface UWBPMessage {
   id: string;
   op: string;
   data: any;
-  timestamp?: string;  // ISO 8601 格式字符串
+  // 规范形式为 epoch 毫秒数（number，连接器与运行时代码均使用 Date.now()）；
+  // 出于兼容同时接受 ISO 8601 字符串。验证器见 protocol/validation.ts validateTimestamp。
+  timestamp?: number | string;
   serverId?: string;
   version?: string;
 }
@@ -163,6 +166,7 @@ export interface UWBPEvent extends UWBPMessage {
 export interface UWBPSystemMessage extends UWBPMessage {
   type: 'system';
   systemOp: 'ping' | 'pong' | 'disconnect' | 'handshake' | 'capabilities' | 'error';
+  requestId?: string;
 }
 
 // ============================================================================
@@ -184,7 +188,7 @@ export type EventType =
 export interface BaseEvent {
   type: EventType;
   serverId: string;
-  timestamp: string;  // ISO 8601 格式字符串
+  timestamp: number | string;
   version: string;
 }
 

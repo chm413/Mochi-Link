@@ -13,7 +13,7 @@ export declare function escapeHtml(text: string): string;
  * 修复问题 #16: 验证消息格式模板
  * 确保模板只包含允许的占位符
  */
-export declare function validateMessageFormat(format: string): {
+export declare function validateMessageFormat(format: string, additionalPlaceholders?: string[]): {
     valid: boolean;
     error?: string;
     sanitized?: string;

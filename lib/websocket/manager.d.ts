@@ -39,6 +39,13 @@ interface ConnectionEntry {
     authenticated: boolean;
     capabilities: string[];
 }
+type LifecycleState = 'connecting' | 'authenticated' | 'disconnected' | 'retrying';
+interface ConnectionLifecycle {
+    state: LifecycleState;
+    updatedAt: number;
+    retries: number;
+    lastError?: string;
+}
 export declare class WebSocketConnectionManager extends EventEmitter {
     private config;
     private server?;
@@ -49,6 +56,7 @@ export declare class WebSocketConnectionManager extends EventEmitter {
     private connections;
     private clients;
     private isRunning;
+    private connectionLifecycles;
     constructor(tokenManager: TokenManager, config?: ConnectionManagerConfig, auditService?: any);
     /**
      * Start the connection manager
@@ -63,7 +71,7 @@ export declare class WebSocketConnectionManager extends EventEmitter {
      */
     isActive(): boolean;
     /**
-     * Connect to a server (forward connection mode)
+     * Connect to a server (reverse connection mode, Connector 视角)
      */
     connectToServer(serverConfig: ServerConfig): Promise<WebSocketConnection>;
     /**
@@ -115,6 +123,10 @@ export declare class WebSocketConnectionManager extends EventEmitter {
      */
     getConnectionInfo(serverId: string): any;
     /**
+     * Get lifecycle state for a specific server connection
+     */
+    getConnectionLifecycle(serverId: string): ConnectionLifecycle | null;
+    /**
      * Get reconnection status for a specific server
      */
     getReconnectionStatus(serverId: string): any;
@@ -134,6 +146,9 @@ export declare class WebSocketConnectionManager extends EventEmitter {
     private unregisterConnection;
     private handleIncomingMessage;
     private handleReconnectionRequired;
+    private emitLifecycleEvent;
+    private transitionLifecycle;
+    private recordLifecycleError;
     private buildWebSocketURL;
     private getAuthToken;
 }

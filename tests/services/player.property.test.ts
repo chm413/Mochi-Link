@@ -19,7 +19,7 @@ const createMockContext = (): Context => ({
   })),
   database: {
     get: jest.fn().mockResolvedValue([]),
-    create: jest.fn().mockResolvedValue([{ id: 1 }]),
+    create: jest.fn().mockResolvedValue({ id: 1 }),
     set: jest.fn().mockResolvedValue({ matched: 1 }),
     remove: jest.fn().mockResolvedValue({ matched: 1 })
   }
@@ -111,7 +111,7 @@ describe('Player Information Management Property Tests', () => {
       }),
       async ({ javaPlayer, bedrockPlayer, serverId }) => {
         // Feature: minecraft-unified-management, Property 3: 玩家信息格式统一性
-        const playerService = new PlayerInformationService(createMockContext());
+        const playerService = new PlayerInformationService(createMockContext(), jest.fn(() => null));
         
         // Ensure both players have different editions
         const javaPlayerData = { ...javaPlayer, edition: 'Java' as const };
@@ -209,7 +209,7 @@ describe('Player Information Management Property Tests', () => {
         serverId: serverIdGenerator
       }),
       async ({ player, serverId }) => {
-        const playerService = new PlayerInformationService(createMockContext());
+        const playerService = new PlayerInformationService(createMockContext(), jest.fn(() => null));
         
         // Mock the bridge to return player data
         const mockBridge = {
@@ -248,7 +248,7 @@ describe('Player Information Management Property Tests', () => {
         serverId: serverIdGenerator
       }),
       async ({ players, searchName, serverId }) => {
-        const playerService = new PlayerInformationService(createMockContext());
+        const playerService = new PlayerInformationService(createMockContext(), jest.fn(() => null));
         
         // Mock the bridge to return online players
         const mockBridge = {
@@ -313,7 +313,7 @@ describe('Player Information Management Property Tests', () => {
     await fc.assert(fc.asyncProperty(
       playerGenerator,
       async (player) => {
-        const playerService = new PlayerInformationService(createMockContext());
+        const playerService = new PlayerInformationService(createMockContext(), jest.fn(() => null));
         
         // Test the private method through reflection for property testing
         const calculateConfidence = (playerService as any).calculateIdentityConfidence.bind(playerService);
@@ -353,7 +353,7 @@ describe('Player Information Management Property Tests', () => {
         playerName: playerNameGenerator
       }),
       async ({ javaUuid, bedrockXuid, nonPremiumId, playerName }) => {
-        const playerService = new PlayerInformationService(createMockContext());
+        const playerService = new PlayerInformationService(createMockContext(), jest.fn(() => null));
         const detectPremium = (playerService as any).detectPremiumStatus.bind(playerService);
         
         // Test Java premium player

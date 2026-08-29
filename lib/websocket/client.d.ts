@@ -1,8 +1,8 @@
 /**
  * WebSocket Client Implementation
  *
- * Implements WebSocket client for forward connection mode where
- * Koishi plugin connects to Connector_Bridge as WebSocket client.
+ * Implements WebSocket client for reverse connection mode (Connector perspective) where
+ * Koishi plugin actively connects to Connector_Bridge as WebSocket client.
  */
 import { EventEmitter } from 'events';
 import { WebSocketConnection } from './connection';

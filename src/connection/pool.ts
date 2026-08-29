@@ -420,7 +420,7 @@ export class ConnectionPool extends EventEmitter {
   private startHealthChecking(): void {
     this.healthCheckTimer = setInterval(() => {
       this.performHealthCheck();
-    }, this.config.healthCheckInterval);
+    }, this.config.healthCheckInterval).unref?.();
   }
 
   /**
@@ -506,7 +506,7 @@ export class ConnectionPool extends EventEmitter {
     this.metricsTimer = setInterval(() => {
       this.updatePoolStatistics();
       this.emit('metricsUpdated', this.statistics);
-    }, this.config.metricsInterval);
+    }, this.config.metricsInterval).unref?.();
   }
 
   /**
@@ -699,7 +699,7 @@ export class ResourceManager {
   private startResourceMonitoring(): void {
     this.resourceMonitoringInterval = setInterval(() => {
       this.collectResourceMetrics();
-    }, 30000); // Every 30 seconds
+    }, 30000).unref?.(); // Every 30 seconds
   }
 
   /**

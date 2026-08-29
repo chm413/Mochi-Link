@@ -4,6 +4,8 @@
 
 Web Dashboard（网页仪表板）是为 Mochi-Link（大福连）Minecraft 统一管理系统设计的现代化 React 网页界面。它为管理员和操作员提供直观的实时界面，通过响应式网页应用程序监控和管理 Minecraft 服务器、玩家和系统操作，并与现有的 HTTP API 和 WebSocket 基础设施集成。
 
+> **路线图状态**：仓库当前没有 Dashboard 前端工程，本规格全部属于未实现目标。开始开发前必须先稳定 HTTP/OpenAPI、token scopes 和实时事件契约；不得把本文列出的页面或能力写入当前功能清单。
+
 ## 术语表
 
 - **Web_Dashboard**: 基于 React 的前端网页应用程序

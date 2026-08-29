@@ -17,7 +17,7 @@ export function createMockContext(): Context {
     })),
     database: {
       get: jest.fn().mockResolvedValue([]),
-      create: jest.fn().mockResolvedValue([{ id: 1 }]),
+      create: jest.fn().mockResolvedValue({ id: 1 }),
       set: jest.fn().mockResolvedValue({ matched: 1, modified: 1 }),
       upsert: jest.fn().mockResolvedValue({ matched: 1, modified: 1 }),
       remove: jest.fn().mockResolvedValue({ matched: 1 }),

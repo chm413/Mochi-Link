@@ -182,7 +182,7 @@ export class BindingManager {
       const existingServer = await this.ctx.database.get(TableNames.minecraftServers as any, { 
         id: existingBinding.server_id 
       });
-      const serverName = existingServer.length > 0 ? existingServer[0].name : existingBinding.server_id;
+      const serverName = (existingServer?.length ?? 0) > 0 ? existingServer[0].name : existingBinding.server_id;
       
       throw new MochiLinkError(
         `This group is already bound to server "${serverName}" (${existingBinding.server_id}). ` +

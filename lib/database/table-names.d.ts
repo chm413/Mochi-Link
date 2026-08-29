@@ -3,6 +3,8 @@
  *
  * Centralized table name management with prefix support
  */
+export declare function normalizeTablePrefix(prefix?: string): string;
+export declare function buildTableName(prefix: string | undefined, baseName: string): string;
 export declare class TableNames {
     private static prefix;
     /**

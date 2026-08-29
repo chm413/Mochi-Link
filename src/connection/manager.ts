@@ -6,7 +6,7 @@
  */
 
 import { EventEmitter } from 'events';
-import { Context } from 'koishi';
+import { Context, Logger } from 'koishi';
 import { 
   ConnectionAdapter,
   ConnectionInfo,
@@ -74,10 +74,12 @@ export class ConnectionModeManager extends EventEmitter {
   private config: Required<ConnectionManagerConfig>;
   private connections = new Map<string, ConnectionEntry>();
   private ctx: Context;
+  private logger: Logger;
 
   constructor(ctx: Context, config: ConnectionManagerConfig = {}) {
     super();
     this.ctx = ctx;
+    this.logger = ctx.logger('mochi-link:connection');
     
     this.config = {
       maxRetryAttempts: 5,
@@ -462,7 +464,7 @@ export class ConnectionModeManager extends EventEmitter {
           this.scheduleReconnect(serverId);
         }
       }
-    }, this.config.healthCheckInterval);
+    }, this.config.healthCheckInterval).unref?.();
   }
 
   // ============================================================================
@@ -622,7 +624,7 @@ export class ConnectionModeManager extends EventEmitter {
    * Cleanup all connections
    */
   async cleanup(): Promise<void> {
-    const logger = this.ctx.logger('mochi-link:connection');
+    const logger = this.logger;
     logger.info('Cleaning up connection manager');
 
     const disconnectPromises = Array.from(this.connections.keys()).map(serverId =>

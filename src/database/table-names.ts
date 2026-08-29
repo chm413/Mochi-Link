@@ -4,26 +4,30 @@
  * Centralized table name management with prefix support
  */
 
+export function normalizeTablePrefix(prefix: string = 'mochi'): string {
+  return prefix.trim().replace(/[._]+$/g, '');
+}
+
+export function buildTableName(prefix: string | undefined, baseName: string): string {
+  const normalizedPrefix = normalizeTablePrefix(prefix || '');
+  return normalizedPrefix ? `${normalizedPrefix}_${baseName}` : baseName;
+}
+
 export class TableNames {
   private static prefix: string = 'mochi';
 
   /**
    * Initialize table name prefix
    */
-  static initialize(prefix?: string): void {
-    if (prefix) {
-      this.prefix = prefix.replace(/\.$/, '').replace(/_$/, '');
-    }
+  static initialize(prefix: string = 'mochi'): void {
+    this.prefix = normalizeTablePrefix(prefix);
   }
 
   /**
    * Get table name with prefix
    */
   private static getTableName(baseName: string): string {
-    if (!this.prefix || this.prefix === '') {
-      return baseName;
-    }
-    return `${this.prefix}_${baseName}`;
+    return buildTableName(this.prefix, baseName);
   }
 
   // Table name getters

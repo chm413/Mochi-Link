@@ -478,8 +478,8 @@ export class EventService {
     const floodEvent: BaseEvent = {
       type: 'alert.playerFlood' as EventType,
       serverId: aggregation.serverId,
-      timestamp: new Date().toISOString(),
-      version: '2.0.0'
+      timestamp: Date.now(),
+      version: '2.0'
     };
 
     // Add flood event to queue
@@ -665,7 +665,7 @@ export class EventService {
   private startProcessing(): void {
     this.processingInterval = setInterval(() => {
       this.processEventQueue();
-    }, 100); // Process every 100ms
+    }, 100).unref?.(); // Process every 100ms
   }
 
   /**
@@ -675,7 +675,7 @@ export class EventService {
     this.cleanupInterval = setInterval(() => {
       this.cleanupInactiveSubscriptions();
       this.cleanupOldAggregations();
-    }, 60000); // Cleanup every minute
+    }, 60000).unref?.(); // Cleanup every minute
   }
 
   /**

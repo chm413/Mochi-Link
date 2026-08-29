@@ -46,7 +46,7 @@ describe('Audit Service', () => {
         };
 
         // Mock database response
-        ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+        ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
         ctx.database.get = jest.fn().mockResolvedValue([{
           id: 1,
           user_id: context.userId,
@@ -62,7 +62,7 @@ describe('Audit Service', () => {
 
         const result = await auditLogger.logSuccess(operation, operationData, context);
 
-        expect(ctx.database.create).toHaveBeenCalledWith('audit_logs', expect.objectContaining({
+        expect(ctx.database.create).toHaveBeenCalledWith('mochi_audit_logs', expect.objectContaining({
           user_id: context.userId,
           server_id: context.serverId,
           operation,
@@ -83,7 +83,7 @@ describe('Audit Service', () => {
         const errorMessage = 'Player not found';
         const context: AuditContext = { userId: 'user123', serverId: 'server123' };
 
-        ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+        ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
         ctx.database.get = jest.fn().mockResolvedValue([{
           id: 1,
           user_id: context.userId,
@@ -111,7 +111,7 @@ describe('Audit Service', () => {
         const error = new Error('Connection timeout');
         const context: AuditContext = { serverId: 'server123' };
 
-        ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+        ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
         ctx.database.get = jest.fn().mockResolvedValue([{
           id: 1,
           user_id: null,
@@ -137,7 +137,7 @@ describe('Audit Service', () => {
         const errorString = 'Connection failed';
         const context: AuditContext = { serverId: 'server123' };
 
-        ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+        ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
         ctx.database.get = jest.fn().mockResolvedValue([{
           id: 1,
           user_id: null,
@@ -164,7 +164,7 @@ describe('Audit Service', () => {
         const reason = 'invalid_token';
         const context: AuditContext = { ipAddress: '192.168.1.1' };
 
-        ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+        ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
         ctx.database.get = jest.fn().mockResolvedValue([{
           id: 1,
           user_id: null,
@@ -192,7 +192,7 @@ describe('Audit Service', () => {
         const serverId = 'server123';
         const operation = 'player.kick';
 
-        ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+        ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
         ctx.database.get = jest.fn().mockResolvedValue([{
           id: 1,
           user_id: userId,
@@ -220,7 +220,7 @@ describe('Audit Service', () => {
         const event = 'connect';
         const details = { connectionMode: 'plugin', duration: 1500 };
 
-        ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+        ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
         ctx.database.get = jest.fn().mockResolvedValue([{
           id: 1,
           user_id: null,
@@ -249,7 +249,7 @@ describe('Audit Service', () => {
         const operationData = { graceful: true, timeout: 30 };
         const context: AuditContext = { userId: 'admin123' };
 
-        ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+        ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
         ctx.database.get = jest.fn().mockResolvedValue([{
           id: 1,
           user_id: context.userId,
@@ -281,7 +281,7 @@ describe('Audit Service', () => {
         const operationData = { reason: 'griefing' };
         const context: AuditContext = { userId: 'mod123' };
 
-        ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+        ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
         ctx.database.get = jest.fn().mockResolvedValue([{
           id: 1,
           user_id: context.userId,
@@ -339,7 +339,7 @@ describe('Audit Service', () => {
 
         const result = await queryService.queryLogs(filter);
 
-        expect(ctx.database.get).toHaveBeenCalledWith('audit_logs', {
+        expect(ctx.database.get).toHaveBeenCalledWith('mochi_audit_logs', {
           user_id: filter.userId,
           server_id: filter.serverId,
           operation: filter.operation
@@ -356,7 +356,7 @@ describe('Audit Service', () => {
 
         const result = await queryService.queryLogs();
 
-        expect(ctx.database.get).toHaveBeenCalledWith('audit_logs', {}, {
+        expect(ctx.database.get).toHaveBeenCalledWith('mochi_audit_logs', {}, {
           limit: 100,
           offset: 0
         });
@@ -384,7 +384,7 @@ describe('Audit Service', () => {
 
         const result = await queryService.getLogById(logId);
 
-        expect(ctx.database.get).toHaveBeenCalledWith('audit_logs', { id: logId });
+        expect(ctx.database.get).toHaveBeenCalledWith('mochi_audit_logs', { id: logId });
         expect(result).not.toBeNull();
         expect(result!.id).toBe(logId);
       });
@@ -404,7 +404,7 @@ describe('Audit Service', () => {
 
         await queryService.getRecentLogs();
 
-        expect(ctx.database.get).toHaveBeenCalledWith('audit_logs', {}, {
+        expect(ctx.database.get).toHaveBeenCalledWith('mochi_audit_logs', {}, {
           limit: 100,
           offset: 0
         });
@@ -416,7 +416,7 @@ describe('Audit Service', () => {
 
         await queryService.getRecentLogs(limit);
 
-        expect(ctx.database.get).toHaveBeenCalledWith('audit_logs', {}, {
+        expect(ctx.database.get).toHaveBeenCalledWith('mochi_audit_logs', {}, {
           limit,
           offset: 0
         });
@@ -430,7 +430,7 @@ describe('Audit Service', () => {
 
         await queryService.getUserLogs(userId);
 
-        expect(ctx.database.get).toHaveBeenCalledWith('audit_logs', {
+        expect(ctx.database.get).toHaveBeenCalledWith('mochi_audit_logs', {
           user_id: userId
         }, {
           limit: 100,
@@ -446,7 +446,7 @@ describe('Audit Service', () => {
 
         await queryService.getServerLogs(serverId);
 
-        expect(ctx.database.get).toHaveBeenCalledWith('audit_logs', {
+        expect(ctx.database.get).toHaveBeenCalledWith('mochi_audit_logs', {
           server_id: serverId
         }, {
           limit: 100,
@@ -463,7 +463,7 @@ describe('Audit Service', () => {
 
         await queryService.getLogsInDateRange(startDate, endDate);
 
-        expect(ctx.database.get).toHaveBeenCalledWith('audit_logs', {
+        expect(ctx.database.get).toHaveBeenCalledWith('mochi_audit_logs', {
           created_at: {
             $gte: startDate,
             $lte: endDate
@@ -799,7 +799,7 @@ describe('Audit Service', () => {
     describe('getHealthStatus', () => {
       it('should return healthy status when all operations work', async () => {
         // Mock successful write
-        ctx.database.create = jest.fn().mockResolvedValue([{ id: 1 }]);
+        ctx.database.create = jest.fn().mockResolvedValue({ id: 1 });
         ctx.database.get = jest.fn()
           .mockResolvedValueOnce([{ // for write test
             id: 1,

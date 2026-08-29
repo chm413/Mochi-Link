@@ -22,7 +22,7 @@ import {
 // Protocol Constants
 // ============================================================================
 
-export const UWBP_VERSION = '2.0.0';
+export const UWBP_VERSION = '2.0';
 export const PROTOCOL_NAME = 'U-WBP';
 
 // ============================================================================
@@ -126,7 +126,7 @@ export class MessageFactory {
       id: options.id || this.generateId(),
       op,
       data,
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
       serverId: options.serverId,
       version: UWBP_VERSION,
       timeout: options.timeout
@@ -151,7 +151,7 @@ export class MessageFactory {
       id: this.generateId(),
       op,
       data,
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
       serverId: options.serverId,
       version: UWBP_VERSION,
       success: options.success ?? true,
@@ -176,7 +176,7 @@ export class MessageFactory {
       id: this.generateId(),
       op,
       data,
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
       serverId: options.serverId,
       version: UWBP_VERSION,
       eventType: options.eventType || op
@@ -198,7 +198,7 @@ export class MessageFactory {
       id: this.generateId(),
       op,
       data,
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
       serverId: options.serverId,
       version: UWBP_VERSION,
       systemOp: op

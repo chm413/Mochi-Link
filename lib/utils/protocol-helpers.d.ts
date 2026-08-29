@@ -4,19 +4,18 @@
  * Provides utility functions for U-WBP v2 protocol compliance
  */
 /**
- * Create ISO 8601 timestamp string
+ * Create a canonical U-WBP timestamp
  *
- * @returns ISO 8601 formatted timestamp string
- * @example "2024-01-01T00:00:00.000Z"
+ * @returns Unix epoch milliseconds
  */
-export declare function createTimestamp(): string;
+export declare function createTimestamp(): number;
 /**
- * Convert various timestamp formats to ISO 8601 string
+ * Convert supported timestamp formats to canonical Unix milliseconds
  *
  * @param timestamp - Unix milliseconds, Date object, or ISO 8601 string
- * @returns ISO 8601 formatted timestamp string
+ * @returns Unix epoch milliseconds
  */
-export declare function normalizeTimestamp(timestamp: number | Date | string): string;
+export declare function normalizeTimestamp(timestamp: number | Date | string): number;
 /**
  * Get the current protocol version
  *
@@ -31,12 +30,12 @@ export declare function getProtocolVersion(): string;
  */
 export declare function parseTimestamp(timestamp: string): number;
 /**
- * Check if a timestamp is valid ISO 8601 format
+ * Check if a timestamp is a valid canonical Unix millisecond value
  *
- * @param timestamp - Timestamp string to validate
- * @returns true if valid ISO 8601 format
+ * @param timestamp - Timestamp value to validate
+ * @returns true if it is a finite non-negative integer
  */
-export declare function isValidTimestamp(timestamp: string): boolean;
+export declare function isValidTimestamp(timestamp: unknown): timestamp is number;
 /**
  * Calculate time difference in milliseconds
  *
