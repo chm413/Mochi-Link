@@ -16,6 +16,9 @@ export interface AuthenticationChallenge {
 export interface AuthenticationResponse {
     serverId: string;
     token: string;
+    /** Challenge nonce echoed back by the client */
+    challenge?: string;
+    /** HMAC of (challenge + timestamp) keyed by the token */
     challengeResponse: string;
     timestamp: string | number;
 }

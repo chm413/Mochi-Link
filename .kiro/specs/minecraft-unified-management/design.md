@@ -79,9 +79,10 @@ sequenceDiagram
     
     Note over K,S: 反向连接模式  
     B->>K: WebSocket 连接请求
-    K->>B: 握手响应
-    B->>K: 认证信息 + 能力声明
+    K->>B: 握手响应 + 认证挑战（challenge nonce）
+    B->>K: serverId + 令牌 + 回传 nonce + HMAC 应答
     K->>B: 认证成功
+    B->>K: 能力声明（认证成功后才被采信）
     
     Note over K,S: 正常通信
     K->>B: 管理命令
@@ -324,6 +325,11 @@ interface ExecuteCommandResponse {
 
 ### 数据库表结构
 
+> **实现约定**：以下 DDL 为概念模型（MySQL 方言），仅用于表达字段语义与索引意图。
+> 实际建表通过 Koishi `ctx.model.extend` 完成（见 `src/database/models.ts`），
+> 不得使用 `AUTO_INCREMENT` / `ON UPDATE CURRENT_TIMESTAMP` 等 MySQL 专有特性，
+> 以保证 sqlite / mysql / postgres 兼容。表名统一带前缀（默认 `mochi_`）。
+
 #### 1. minecraft_servers 表
 ```sql
 CREATE TABLE minecraft_servers (
@@ -371,8 +377,7 @@ CREATE TABLE server_acl (
 CREATE TABLE api_tokens (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   server_id VARCHAR(64) NOT NULL,      -- 服务器 ID
-  token VARCHAR(128) NOT NULL UNIQUE,  -- 认证令牌
-  token_hash VARCHAR(256) NOT NULL,    -- 令牌哈希
+  token_hash VARCHAR(256) NOT NULL UNIQUE,  -- 令牌哈希（SHA-256，唯一认证依据）
   ip_whitelist JSON,                   -- IP 白名单
   encryption_config JSON,             -- 加密配置
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -384,6 +389,11 @@ CREATE TABLE api_tokens (
   INDEX idx_token_hash (token_hash)
 );
 ```
+
+> **安全设计约束（2026-08 修订）**：数据库中**只存令牌哈希，不存明文**。明文令牌仅在生成时一次性展示给服主。
+> 历史版本曾同时设计 `token`（明文）与 `token_hash` 两列，该设计使哈希失去意义（读库即得有效凭据），
+> 已废弃。所有认证路径（HTTP 与 WebSocket）必须统一走"SHA-256 哈希查库"。
+> 注：DDL 为概念模型，实际建表使用 Koishi `ctx.model.extend` 定义，以兼容 sqlite/mysql/postgres。
 
 #### 4. audit_logs 表
 ```sql
@@ -452,20 +462,25 @@ CREATE TABLE player_cache (
   display_name VARCHAR(32),            -- 显示名称
   last_server_id VARCHAR(64),          -- 最后在线服务器
   last_seen TIMESTAMP,                 -- 最后在线时间
-  identity_confidence FLOAT DEFAULT 1.0, -- 身份匹配可信度
+  identity_confidence FLOAT,           -- 身份匹配可信度（无默认值，由匹配算法显式赋值；UUID/XUID 精确匹配 = 1.0，仅名称匹配 < 0.5）
   identity_markers JSON,               -- 身份标识符
   is_premium BOOLEAN,                  -- 是否正版
   device_type VARCHAR(32),             -- 设备类型
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   
-  INDEX idx_uuid (uuid),
-  INDEX idx_xuid (xuid),
+  UNIQUE KEY uk_uuid (uuid),           -- 一个 UUID 恒对应一行（改名复用该行）
+  UNIQUE KEY uk_xuid (xuid),           -- XUID 同理
   INDEX idx_name (name),
   INDEX idx_last_server (last_server_id),
   INDEX idx_last_seen (last_seen)
 );
 ```
+
+> **身份合并规则**：以 uuid / xuid 为唯一锚点；名称不参与唯一性判定（不同玩家可短暂重名，
+> 同一玩家可改名）。IP 仅作为辅助信号记录于 identity_markers，不得触发身份合并。
+> **注意**：uk_uuid/uk_xuid 在 uuid/xuid 为 NULL 时由数据库允许多行（NULL 不参与唯一约束），
+> 纯离线名称缓存行是允许的，但其 identity_confidence 必须为低值。
 
 ### 数据模型接口
 
@@ -612,6 +627,95 @@ interface PlayerIdentity {
 ### 属性 14：自动重连指数退避
 *对于任何*WebSocket 连接断开事件，系统应实现指数退避模式的自动重连，重连间隔应按指数增长直到连接恢复或达到最大重试次数
 **验证：需求 12.1**
+
+重连达到最大次数后的终态：标记服务器为 `error` 状态、发出告警事件、停止自动重连；此后仅由人工操作（重新注册令牌/手动重连命令）触发再次连接。禁止无限重试。
+
+## 协议与安全补遗（2026-08 修订）
+
+以下内容为初版设计的遗漏项，属于 U-WBP v2 规范的组成部分，实现与测试必须遵循。
+
+### A. 挑战-应答认证消息格式
+
+初版设计未定义挑战-应答的消息结构，导致实现中出现"应答字段被同时用作 nonce 索引与 HMAC 值"的死逻辑。规范如下：
+
+```
+1) K → B: { type: 'request', id: 'c-1', op: 'auth.challenge',
+            data: { serverId, challenge: '<32字节随机hex>', timestamp } }
+2) B → K: { type: 'response', id: 'c-1', op: 'auth.challenge',
+            data: {
+              serverId,
+              challenge: '<原样回传 nonce，用于服务端检索挑战>',   ← 必填
+              token: '<API 令牌>',
+              challengeResponse: 'HMAC-SHA256(key=token, msg=nonce + timestamp)',
+              timestamp
+            } }
+```
+
+- 服务端以 `data.challenge`（nonce）检索挑战记录，以 `data.challengeResponse` 做 HMAC 验证；
+  两者是**不同字段**，不得混用。
+- 挑战一次性使用：验证成功或失败后立即删除，防重放。
+- HMAC 比较必须使用常量时间比较（`crypto.timingSafeEqual`）。
+- 已知局限：该模式下 `token` 字段仍在链路明文传输（作为 HMAC 密钥来源），挑战-应答
+  仅证明"响应者持有令牌"，不提供传输机密性；机密性由加密协商（需求 9.3）承担。
+- 简化模式（无挑战）：客户端直接发送 `{ serverId, token }`，服务端以令牌哈希查库验证。
+
+### B. 版本协商
+
+握手第一条消息必须携带 `protocol: 'U-WBP'` 与 `version: 2`。服务端不支持的版本必须
+立即返回错误码 `PROTOCOL_VERSION` 并断开，不得以降级方式继续。
+
+### C. 错误码注册表
+
+所有 response 消息的 `error.code` 必须取自下表，禁止实现自定义未注册错误码：
+
+| 错误码 | 含义 | 备注 |
+|--------|------|------|
+| AUTH_FAILED | 认证失败（含服务器不存在/令牌错误/过期） | 对外不得细分原因，防 serverId 枚举 |
+| AUTH_EXPIRED | 令牌过期 | 仅在已认证上下文过期时使用 |
+| CHALLENGE_INVALID | 挑战不存在/过期/不匹配 | |
+| PROTOCOL_VERSION | 协议版本不支持 | 附带支持的版本列表 |
+| BAD_REQUEST | 消息格式不合法（缺 type/id/op/data） | |
+| UNKNOWN_OP | 操作名未注册 | |
+| PERMISSION_DENIED | 已认证但无权执行该操作 | |
+| SERVER_UNAVAILABLE | 目标服务器离线/不可达 | |
+| RATE_LIMITED | 触发限流 | 附带 retryAfter 毫秒数 |
+| INTERNAL_ERROR | 服务端内部错误 | 不得泄露堆栈 |
+
+### D. 心跳规范
+
+- 操作名：`system.ping` / `system.pong`（pong 必须回传 ping 的 `id`）。
+- 参数：`interval`（发送间隔，默认 30000ms）、`timeout`（单次超时，默认 10000ms）、
+  `maxMissed`（连续丢失上限，默认 3）。
+- 判定：连续 `maxMissed` 次 ping 未收到 pong → 主动断开 → 触发重连流程。
+- 心跳消息不得计入速率限制。
+
+### E. Folia 线程模型约束（Java 连接器）
+
+Folia 无全局主线程，任何 Bukkit API 调用必须经调度器：
+
+- 不依赖实体/位置的操作 → `Bukkit.getGlobalRegionScheduler()` 或 `foliaScheduler` 的全局任务；
+- 依赖实体（玩家）的操作 → `entity.getScheduler().run(...)`；
+- 依赖位置/区块的操作 → `Bukkit.getRegionScheduler().run(...)`，并传入 Location；
+- **禁止** `Bukkit.getScheduler()` 与 `BukkitScheduler`（Folia 下抛异常）；
+- **禁止**在异步线程直接调用 Bukkit API 或访问实体（包括 `getDisplayName()` 等
+  Component 相关调用——历史上多次崩溃的根因）；
+- 事件监听回调运行在区域线程，回调内不得执行阻塞 IO，需转发到调度器或异步任务。
+
+Paper/Fabric/Forge 连接器沿用单主线程模型，但公共代码必须以"调度器抽象"形式提供
+（如 `ServerExecutor.runOnMain(Runnable)`），Folia 实现为区域调度，其余实现为主线程调度，
+避免连接器间复制粘贴分叉。
+
+### F. API 令牌权限范围（scopes）
+
+api_tokens 增加 `scopes` 字段（JSON 数组）。取值：
+
+- `read`：服务器/玩家/监控只读查询
+- `command`：控制台命令执行
+- `manage`：白名单/封禁/踢人等管理操作
+- `admin`：服务器配置与令牌管理
+
+未声明 scopes 的令牌默认无操作权限。HTTP 中间件与 WebSocket 能力声明均从 scopes 派生，
+不得硬编码。
 
 ## 错误处理
 

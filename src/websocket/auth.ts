@@ -6,7 +6,7 @@
  * and connection security.
  */
 
-import { createHash, randomBytes, createHmac } from 'crypto';
+import { createHash, randomBytes, createHmac, timingSafeEqual } from 'crypto';
 import { EventEmitter } from 'events';
 import { 
   APIToken, 
@@ -30,6 +30,9 @@ export interface AuthenticationChallenge {
 export interface AuthenticationResponse {
   serverId: string;
   token: string;
+  /** Challenge nonce echoed back by the client */
+  challenge?: string;
+  /** HMAC of (challenge + timestamp) keyed by the token */
   challengeResponse: string;
   timestamp: string | number;  // 支持两种格式
 }
@@ -142,8 +145,10 @@ export class AuthenticationManager extends EventEmitter {
     clientIP?: string
   ): Promise<AuthenticationResult> {
     try {
-      // Find and validate challenge
-      const challenge = this.activeChallenges.get(response.challengeResponse);
+      // Find and validate challenge. The client echoes the nonce in
+      // `challenge`; `challengeResponse` carries the HMAC proof.
+      const challengeKey = response.challenge || response.challengeResponse;
+      const challenge = this.activeChallenges.get(challengeKey);
       if (!challenge) {
         return {
           success: false,
@@ -199,23 +204,31 @@ export class AuthenticationManager extends EventEmitter {
         };
       }
 
-      // Verify challenge response
+      // Verify challenge response (constant-time comparison)
       const expectedResponse = this.generateChallengeResponse(
         challenge.challenge,
         response.token,
         challenge.timestamp
       );
 
-      if (response.challengeResponse !== expectedResponse) {
+      const providedResponse = String(response.challengeResponse || '');
+      const responseMatches = providedResponse.length === expectedResponse.length &&
+        timingSafeEqual(
+          Buffer.from(providedResponse, 'utf8'),
+          Buffer.from(expectedResponse, 'utf8')
+        );
+
+      // Challenge is single-use: consume it regardless of outcome
+      this.activeChallenges.delete(challengeKey);
+
+      if (!responseMatches) {
+        this.emit('authenticationError', response.serverId, new Error('Invalid challenge response'));
         return {
           success: false,
           serverId: response.serverId,
           error: 'Invalid challenge response'
         };
       }
-
-      // Clean up used challenge
-      this.activeChallenges.delete(response.challengeResponse);
 
       // Update token last used
       await this.tokenManager.updateTokenLastUsed(token.id);

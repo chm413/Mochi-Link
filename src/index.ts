@@ -712,10 +712,10 @@ export function apply(ctx: Context, config: PluginConfig) {
             updated_at: new Date()
           });
           
-          // 创建API令牌
+          // 创建API令牌（安全修订：明文令牌不落库，仅一次性展示给服主）
           await ctx.database.create(`${config.database?.prefix || 'mochi'}_api_tokens` as any, {
             server_id: id,
-            token: token,
+            token: '',
             token_hash: tokenHash,
             created_at: new Date(),
             expires_at: expiresAt
@@ -849,10 +849,10 @@ export function apply(ctx: Context, config: PluginConfig) {
             updated_at: new Date()
           });
           
-          // 创建API令牌
+          // 创建API令牌（安全修订：明文令牌不落库，仅一次性展示给服主）
           await ctx.database.create(`${config.database?.prefix || 'mochi'}_api_tokens` as any, {
             server_id: id,
-            token: token,
+            token: '',
             token_hash: tokenHash,
             created_at: new Date(),
             expires_at: expiresAt
@@ -1029,10 +1029,10 @@ export function apply(ctx: Context, config: PluginConfig) {
             const expiresAt = new Date();
             expiresAt.setFullYear(expiresAt.getFullYear() + 1); // 1 年后过期
             
-            // 创建新令牌
+            // 创建新令牌（安全修订：明文令牌不落库，仅一次性展示给服主）
             await ctx.database.create(`${config.database?.prefix || 'mochi'}_api_tokens` as any, {
               server_id: id,
-              token: newToken,
+              token: '',
               token_hash: tokenHash,
               created_at: new Date(),
               expires_at: expiresAt
@@ -1104,10 +1104,12 @@ export function apply(ctx: Context, config: PluginConfig) {
             const statusIcon = isExpired ? '❌' : '✅';
             const statusText = isExpired ? '已过期' : '有效';
             
-            // 隐藏令牌内容，只显示前8位和后4位
-            const maskedToken = options.show 
-              ? t.token 
-              : `${t.token.substring(0, 8)}${'*'.repeat(48)}${t.token.substring(60)}`;
+            // 隐藏令牌内容，只显示前8位和后4位；哈希模式下明文未存储
+            const maskedToken = options.show
+              ? (t.token || '（明文未存储：出于安全考虑仅保存哈希，如需完整令牌请使用令牌重新生成功能）')
+              : (t.token
+                ? `${t.token.substring(0, 8)}${'*'.repeat(48)}${t.token.substring(60)}`
+                : `${t.tokenHash.substring(0, 8)}${'*'.repeat(48)}${t.tokenHash.substring(56)}（哈希）`);
             
             const expiryInfo = t.expiresAt 
               ? `\n  过期时间: ${new Date(t.expiresAt).toLocaleString()} ${statusIcon} ${statusText}`
