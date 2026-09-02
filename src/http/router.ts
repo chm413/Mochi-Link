@@ -622,17 +622,33 @@ export class APIRouter {
       }
 
       const status = await this.serviceManager.serverManager.getServerStatus(serverId);
-      
+
+      if (!status) {
+        return this.createErrorResponse('NOT_FOUND', 'Server status not found', req.context.requestId);
+      }
+
+      // Prefer live connector metrics when a bridge is available; the status
+      // cache only carries tps/playerCount/memoryUsage, not cpuUsage/ping.
+      let liveMetrics: any = null;
+      const bridge = this.serviceManager.serverManager.getBridge?.(serverId);
+      if (bridge && bridge.isConnectedToBridge?.()) {
+        try {
+          liveMetrics = await bridge.getPerformanceMetrics();
+        } catch {
+          liveMetrics = null;
+        }
+      }
+
       const metrics = {
         timestamp: Date.now(),
         serverId,
-        tps: status.tps || 0,
-        playerCount: status.playerCount || 0,
-        memoryUsage: status.memoryUsage || { used: 0, max: 0, percentage: 0 },
-        cpuUsage: status.cpuUsage || 0,
-        ping: status.ping || 0,
-        uptime: status.uptime || 0,
-        status: status.status || 'unknown'
+        tps: liveMetrics?.tps ?? status.tps ?? 0,
+        playerCount: liveMetrics?.playerCount ?? status.playerCount ?? 0,
+        memoryUsage: liveMetrics?.memoryUsage ?? status.memoryUsage ?? { used: 0, max: 0, percentage: 0 },
+        cpuUsage: liveMetrics?.cpuUsage ?? 0,
+        ping: liveMetrics?.ping ?? 0,
+        uptime: status.uptime ?? 0,
+        status: status.status ?? 'unknown'
       };
 
       return this.createSuccessResponse(metrics, req.context.requestId);

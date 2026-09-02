@@ -133,6 +133,38 @@ describe('Database Operations', () => {
       });
     });
 
+    describe('updateServer', () => {
+      it('should preserve immutable database fields', async () => {
+        ctx.database.set = jest.fn().mockResolvedValue({ matched: 1, modified: 1 });
+        ctx.database.get = jest.fn().mockResolvedValue([{
+          id: 'test-server-1',
+          name: 'Test Server 1',
+          core_type: 'Java',
+          core_name: 'Paper',
+          core_version: '1.21.1',
+          connection_mode: 'plugin',
+          connection_config: JSON.stringify({ plugin: { host: '127.0.0.1', port: 8080, ssl: false } }),
+          status: 'online',
+          owner_id: 'user123',
+          tags: JSON.stringify(['test']),
+          created_at: new Date('2023-01-01'),
+          updated_at: new Date()
+        }]);
+
+        await serverOps.updateServer('test-server-1', {
+          id: 'replacement-id',
+          createdAt: new Date('2026-01-01'),
+          coreVersion: '1.21.1'
+        } as Partial<ServerConfig>);
+
+        const databaseUpdate = (ctx.database.set as jest.Mock).mock.calls[0][2];
+        expect(databaseUpdate.core_version).toBe('1.21.1');
+        expect(databaseUpdate).not.toHaveProperty('id');
+        expect(databaseUpdate).not.toHaveProperty('created_at');
+        expect(databaseUpdate).not.toHaveProperty('tags');
+      });
+    });
+
     describe('updateServerStatus', () => {
       it('should update server status and last seen time', async () => {
         const lastSeen = new Date();

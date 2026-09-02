@@ -5,6 +5,7 @@ import com.mochilink.connector.connection.ConnectionManager;
 import com.mochilink.connector.protocol.UWBPv2Protocol;
 
 import org.bukkit.entity.Player;
+import org.bukkit.Statistic;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -15,6 +16,7 @@ import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerAdvancementDoneEvent;
 import org.bukkit.event.server.ServerLoadEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -57,11 +59,9 @@ public class ServerEventHandler implements Listener {
         Player player = event.getPlayer();
         
         Map<String, Object> eventData = new HashMap<>();
-        eventData.put("join_message", event.getJoinMessage());
-        eventData.put("first_join", !player.hasPlayedBefore());
-        eventData.put("player_count", plugin.getServer().getOnlinePlayers().size());
-        eventData.put("player_name", player.getName());
-        eventData.put("player_uuid", player.getUniqueId().toString());
+        eventData.put("joinMessage", event.getJoinMessage());
+        eventData.put("firstJoin", !player.hasPlayedBefore());
+        eventData.put("playerCount", plugin.getServer().getOnlinePlayers().size());
         
         // Check if event data matches subscription filters
         if (!plugin.getSubscriptionManager().matchesFilters("player.join", eventData)) {
@@ -92,11 +92,12 @@ public class ServerEventHandler implements Listener {
         Player player = event.getPlayer();
         
         Map<String, Object> eventData = new HashMap<>();
-        eventData.put("quit_message", event.getQuitMessage());
-        eventData.put("play_time", System.currentTimeMillis() - player.getFirstPlayed());
-        eventData.put("player_count", plugin.getServer().getOnlinePlayers().size() - 1);
-        eventData.put("player_name", player.getName());
-        eventData.put("player_uuid", player.getUniqueId().toString());
+        eventData.put("quitMessage", event.getQuitMessage());
+        eventData.put("playTime", getPlayTimeMillis(player));
+        eventData.put("playerCount", Math.max(0, plugin.getServer().getOnlinePlayers().size() - 1));
+        eventData.put("playerId", player.getUniqueId().toString());
+        eventData.put("playerName", player.getName());
+        eventData.put("reason", "quit");
         
         // Check filters
         if (!plugin.getSubscriptionManager().matchesFilters("player.leave", eventData)) {
@@ -130,8 +131,8 @@ public class ServerEventHandler implements Listener {
         eventData.put("message", event.getMessage());
         eventData.put("format", event.getFormat());
         eventData.put("cancelled", event.isCancelled());
-        eventData.put("player_name", player.getName());
-        eventData.put("player_uuid", player.getUniqueId().toString());
+        eventData.put("playerId", player.getUniqueId().toString());
+        eventData.put("playerName", player.getName());
         
         // Check filters
         if (!plugin.getSubscriptionManager().matchesFilters("player.chat", eventData)) {
@@ -162,21 +163,25 @@ public class ServerEventHandler implements Listener {
         Player player = event.getEntity();
         
         Map<String, Object> eventData = new HashMap<>();
-        eventData.put("death_message", event.getDeathMessage());
-        eventData.put("keep_inventory", event.getKeepInventory());
-        eventData.put("keep_level", event.getKeepLevel());
-        eventData.put("dropped_exp", event.getDroppedExp());
-        eventData.put("player_name", player.getName());
-        eventData.put("player_uuid", player.getUniqueId().toString());
+        eventData.put("deathMessage", event.getDeathMessage());
+        eventData.put("keepInventory", event.getKeepInventory());
+        eventData.put("keepLevel", event.getKeepLevel());
+        eventData.put("droppedExp", event.getDroppedExp());
+        eventData.put("playerId", player.getUniqueId().toString());
+        eventData.put("playerName", player.getName());
+        EntityDamageEvent lastDamage = player.getLastDamageCause();
+        eventData.put("cause", lastDamage == null
+            ? "unknown"
+            : lastDamage.getCause().name().toLowerCase());
         
         // Add killer information if available
         if (player.getKiller() != null) {
             eventData.put("killer", player.getKiller().getName());
-            eventData.put("killer_uuid", player.getKiller().getUniqueId().toString());
+            eventData.put("killerId", player.getKiller().getUniqueId().toString());
         }
         
         // Add location information
-        eventData.put("death_location", Map.of(
+        eventData.put("location", Map.of(
             "world", player.getWorld().getName(),
             "x", player.getLocation().getX(),
             "y", player.getLocation().getY(),
@@ -213,8 +218,8 @@ public class ServerEventHandler implements Listener {
         
         Map<String, Object> eventData = new HashMap<>();
         eventData.put("advancement", event.getAdvancement().getKey().toString());
-        eventData.put("player_name", player.getName());
-        eventData.put("player_uuid", player.getUniqueId().toString());
+        eventData.put("playerId", player.getUniqueId().toString());
+        eventData.put("playerName", player.getName());
         
         // Check filters
         if (!plugin.getSubscriptionManager().matchesFilters("player.advancement", eventData)) {
@@ -238,26 +243,30 @@ public class ServerEventHandler implements Listener {
             return;
         }
         
-        // Check subscription
-        if (!plugin.getSubscriptionManager().hasSubscription("player.kick")) {
+        // A kick is represented by the canonical player.leave event.
+        if (!plugin.getSubscriptionManager().hasSubscription("player.leave")) {
             return;
         }
         
         Player player = event.getPlayer();
         
         Map<String, Object> eventData = new HashMap<>();
-        eventData.put("kick_reason", event.getReason());
-        eventData.put("leave_message", event.getLeaveMessage());
+        eventData.put("kickReason", event.getReason());
+        eventData.put("leaveMessage", event.getLeaveMessage());
         eventData.put("cancelled", event.isCancelled());
-        eventData.put("player_name", player.getName());
-        eventData.put("player_uuid", player.getUniqueId().toString());
+        eventData.put("playerId", player.getUniqueId().toString());
+        eventData.put("playerName", player.getName());
+        eventData.put("reason", "kick");
         
         // Check filters
-        if (!plugin.getSubscriptionManager().matchesFilters("player.kick", eventData)) {
+        if (!plugin.getSubscriptionManager().matchesFilters("player.leave", eventData)) {
             return;
         }
         
-        sendPlayerEvent("player.kick", player, eventData);
+        // U-WBP has no player.kick event; represent a kick as a leave with a
+        // canonical reason while retaining the source event in the payload.
+        eventData.put("sourceEvent", "player.kick");
+        sendPlayerEvent("player.leave", player, eventData);
         
         if (plugin.getPluginConfig().isLogEvents()) {
             logger.info(String.format("Player kicked: %s - %s", player.getName(), event.getReason()));
@@ -270,19 +279,22 @@ public class ServerEventHandler implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onServerLoad(ServerLoadEvent event) {
         // Check subscription
-        if (!plugin.getSubscriptionManager().hasSubscription("server.load")) {
+        if (!plugin.getSubscriptionManager().hasSubscription("server.status")) {
             return;
         }
         
         Map<String, Object> eventData = new HashMap<>();
-        eventData.put("load_type", event.getType().toString());
+        eventData.put("loadType", event.getType().toString());
         
         // Check filters
-        if (!plugin.getSubscriptionManager().matchesFilters("server.load", eventData)) {
+        if (!plugin.getSubscriptionManager().matchesFilters("server.status", eventData)) {
             return;
         }
         
-        sendServerEvent("server.load", eventData);
+        // U-WBP has no server.load event; publish the canonical status event.
+        eventData.put("sourceEvent", "server.load");
+        eventData.put("status", "online");
+        sendServerEvent("server.status", eventData);
         
         if (plugin.getPluginConfig().isLogEvents()) {
             logger.info("Server load event: " + event.getType());
@@ -310,6 +322,15 @@ public class ServerEventHandler implements Listener {
             
         } catch (Exception e) {
             logger.warning("Failed to send player event: " + e.getMessage());
+        }
+    }
+
+    /** Bukkit exposes total played ticks; convert the documented value to milliseconds. */
+    private long getPlayTimeMillis(Player player) {
+        try {
+            return Math.max(0L, (long) player.getStatistic(Statistic.PLAY_ONE_MINUTE) * 50L);
+        } catch (RuntimeException ignored) {
+            return 0L;
         }
     }
     

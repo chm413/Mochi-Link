@@ -25,6 +25,8 @@ class PMMPPerformanceMonitor {
     
     private bool $running = false;
     private ?\pocketmine\scheduler\TaskHandler $taskHandler = null;
+    private ?float $lastCpuTimeMicros = null;
+    private ?float $lastCpuSampleTime = null;
     
     public function __construct(MochiLinkPMMPPlugin $plugin, PMMPConnectionManager $connectionManager) {
         $this->plugin = $plugin;
@@ -67,6 +69,8 @@ class PMMPPerformanceMonitor {
         }
         
         $this->running = false;
+        $this->lastCpuTimeMicros = null;
+        $this->lastCpuSampleTime = null;
         $this->plugin->getLogger()->info("Performance monitoring stopped");
     }
     
@@ -92,16 +96,17 @@ class PMMPPerformanceMonitor {
         $memoryUsed = memory_get_usage(true);
         $memoryMax = $this->parseMemoryLimit(ini_get('memory_limit'));
         
+        $free = $memoryMax > 0 ? max(0, $memoryMax - $memoryUsed) : 0;
         return [
             'serverId' => $this->plugin->getPluginConfig()->getServerId(),
             'timestamp' => (int)(microtime(true) * 1000),
-            'tps' => $this->server->getTicksPerSecond(),
+            'tps' => (float) $this->server->getTicksPerSecond(),
             'cpuUsage' => $this->getCpuUsage(),
             'memoryUsage' => [
                 'used' => $memoryUsed,
                 'max' => $memoryMax,
-                'free' => $memoryMax - $memoryUsed,
-                'percentage' => ($memoryUsed / $memoryMax) * 100
+                'free' => $free,
+                'percentage' => $memoryMax > 0 ? ($memoryUsed / $memoryMax) * 100 : 0.0
             ],
             'playerCount' => count($this->server->getOnlinePlayers()),
             'ping' => $this->getAveragePing(),
@@ -109,14 +114,36 @@ class PMMPPerformanceMonitor {
         ];
     }
     
-    /**
-     * Get CPU usage (approximation)
-     */
+    /** Get process CPU usage since the previous metrics sample. */
     private function getCpuUsage(): float {
-        // Note: PHP doesn't have a built-in way to get CPU usage
-        // This is a placeholder that returns 0
-        // For production, consider using system commands or extensions
-        return 0.0;
+        if (!function_exists('getrusage')) {
+            return 0.0;
+        }
+
+        $usage = getrusage();
+        if (!is_array($usage)) {
+            return 0.0;
+        }
+
+        $cpuTimeMicros =
+            ((float) ($usage['ru_utime.tv_sec'] ?? 0) * 1_000_000) +
+            (float) ($usage['ru_utime.tv_usec'] ?? 0) +
+            ((float) ($usage['ru_stime.tv_sec'] ?? 0) * 1_000_000) +
+            (float) ($usage['ru_stime.tv_usec'] ?? 0);
+        $sampleTime = microtime(true);
+
+        if ($this->lastCpuTimeMicros === null || $this->lastCpuSampleTime === null) {
+            $this->lastCpuTimeMicros = $cpuTimeMicros;
+            $this->lastCpuSampleTime = $sampleTime;
+            return 0.0;
+        }
+
+        $cpuDelta = max(0.0, $cpuTimeMicros - $this->lastCpuTimeMicros);
+        $wallDeltaMicros = max(1.0, ($sampleTime - $this->lastCpuSampleTime) * 1_000_000);
+        $this->lastCpuTimeMicros = $cpuTimeMicros;
+        $this->lastCpuSampleTime = $sampleTime;
+
+        return round(min(100.0, ($cpuDelta / $wallDeltaMicros) * 100.0), 2);
     }
     
     /**
@@ -159,6 +186,9 @@ class PMMPPerformanceMonitor {
      */
     private function parseMemoryLimit(string $limit): int {
         $limit = trim($limit);
+        if ($limit === '' || $limit === '-1') {
+            return 0;
+        }
         $last = strtolower($limit[strlen($limit) - 1]);
         $value = (int)$limit;
         

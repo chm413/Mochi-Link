@@ -91,6 +91,11 @@ export class ServerOperations {
       updatedAt: new Date()
     });
 
+    // The route/query identifies the record. Never allow a request body or an
+    // internal partial update to move the primary key or rewrite creation time.
+    delete dbUpdates.id;
+    delete dbUpdates.created_at;
+
     await this.ctx.database.set(TableNames.minecraftServers as any, { id: serverId }, dbUpdates);
     
     const updated = await this.getServer(serverId);

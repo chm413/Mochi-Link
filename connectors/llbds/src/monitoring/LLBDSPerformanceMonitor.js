@@ -1,15 +1,4 @@
 "use strict";
-var __assign = (this && this.__assign) || function () {
-    __assign = Object.assign || function(t) {
-        for (var s, i = 1, n = arguments.length; i < n; i++) {
-            s = arguments[i];
-            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
-                t[p] = s[p];
-        }
-        return t;
-    };
-    return __assign.apply(this, arguments);
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LLBDSPerformanceMonitor = void 0;
 /**
@@ -21,8 +10,8 @@ exports.LLBDSPerformanceMonitor = void 0;
  * @author chm413
  * @version 1.0.0
  */
-var LLBDSPerformanceMonitor = /** @class */ (function () {
-    function LLBDSPerformanceMonitor(intervalMs) {
+class LLBDSPerformanceMonitor {
+    constructor(intervalMs) {
         this.isMonitoring = false;
         this.monitoringInterval = null;
         this.intervalMs = 30000; // 30 seconds
@@ -35,8 +24,7 @@ var LLBDSPerformanceMonitor = /** @class */ (function () {
     /**
      * Start performance monitoring
      */
-    LLBDSPerformanceMonitor.prototype.start = function () {
-        var _this = this;
+    start() {
         if (this.isMonitoring) {
             return;
         }
@@ -44,16 +32,16 @@ var LLBDSPerformanceMonitor = /** @class */ (function () {
         // Collect initial data
         this.collectPerformanceData();
         // Start periodic collection
-        this.monitoringInterval = setInterval(function () {
-            _this.collectPerformanceData();
+        this.monitoringInterval = setInterval(() => {
+            this.collectPerformanceData();
         }, this.intervalMs);
         logger.info('LLBDS performance monitoring started');
         logger.info('LLBDS 性能监控已启动');
-    };
+    }
     /**
      * Stop performance monitoring
      */
-    LLBDSPerformanceMonitor.prototype.stop = function () {
+    stop() {
         if (!this.isMonitoring) {
             return;
         }
@@ -64,29 +52,28 @@ var LLBDSPerformanceMonitor = /** @class */ (function () {
         }
         logger.info('LLBDS performance monitoring stopped');
         logger.info('LLBDS 性能监控已停止');
-    };
+    }
     /**
      * Collect current performance data
      */
-    LLBDSPerformanceMonitor.prototype.collectPerformanceData = function () {
-        var _a;
+    collectPerformanceData() {
         try {
-            var now = Date.now();
+            const now = Date.now();
             // Server basic info
-            var serverInfo = this.collectServerInfo();
+            const serverInfo = this.collectServerInfo();
             // Player info
-            var playerInfo = this.collectPlayerInfo();
+            const playerInfo = this.collectPlayerInfo();
             // System info
-            var systemInfo = this.collectSystemInfo();
+            const systemInfo = this.collectSystemInfo();
             // Performance metrics
-            var performanceMetrics = this.collectPerformanceMetrics();
+            const performanceMetrics = this.collectPerformanceMetrics();
             this.performanceData = {
                 timestamp: now,
                 server: serverInfo,
                 players: playerInfo,
                 system: systemInfo,
                 performance: performanceMetrics,
-                uptime: ((_a = process.uptime) === null || _a === void 0 ? void 0 : _a.call(process)) || 0
+                uptime: process.uptime?.() || 0
             };
             this.lastUpdate = now;
             logger.debug('Performance data collected successfully');
@@ -94,67 +81,76 @@ var LLBDSPerformanceMonitor = /** @class */ (function () {
         catch (error) {
             logger.error('Failed to collect performance data:', error);
         }
-    };
+    }
     /**
      * Collect server information
      */
-    LLBDSPerformanceMonitor.prototype.collectServerInfo = function () {
-        var _a, _b, _c, _d, _e;
+    collectServerInfo() {
         try {
+            const runtimeMc = typeof mc !== 'undefined' ? mc : undefined;
+            const tps = this.toFiniteNumber(runtimeMc?.getTPS?.());
+            const maxPlayers = this.toFiniteNumber(runtimeMc?.getMaxPlayers?.());
             return {
-                version: ((_a = mc === null || mc === void 0 ? void 0 : mc.getBDSVersion) === null || _a === void 0 ? void 0 : _a.call(mc)) || 'Unknown',
-                online: true,
-                tps: ((_b = mc === null || mc === void 0 ? void 0 : mc.getTPS) === null || _b === void 0 ? void 0 : _b.call(mc)) || 20.0,
-                maxPlayers: ((_c = mc === null || mc === void 0 ? void 0 : mc.getMaxPlayers) === null || _c === void 0 ? void 0 : _c.call(mc)) || 20,
-                currentPlayers: ((_e = (_d = mc === null || mc === void 0 ? void 0 : mc.getOnlinePlayers) === null || _d === void 0 ? void 0 : _d.call(mc)) === null || _e === void 0 ? void 0 : _e.length) || 0,
-                gamemode: 'survival', // LLBDS doesn't provide direct access to default gamemode
-                difficulty: 'normal', // LLBDS doesn't provide direct access to difficulty
-                worldName: 'Bedrock level' // Default LLBDS world name
+                version: String(runtimeMc?.getBDSVersion?.() ?? 'unknown'),
+                online: runtimeMc !== undefined,
+                tps,
+                maxPlayers,
+                currentPlayers: runtimeMc?.getOnlinePlayers?.()?.length ?? 0
             };
         }
         catch (error) {
             logger.error('Failed to collect server info:', error);
             return {
-                version: 'Unknown',
+                version: 'unknown',
                 online: false,
                 tps: 0,
                 maxPlayers: 0,
                 currentPlayers: 0
             };
         }
-    };
+    }
     /**
      * Collect player information
      */
-    LLBDSPerformanceMonitor.prototype.collectPlayerInfo = function () {
-        var _a, _b;
+    collectPlayerInfo() {
         try {
-            var onlinePlayers = ((_a = mc === null || mc === void 0 ? void 0 : mc.getOnlinePlayers) === null || _a === void 0 ? void 0 : _a.call(mc)) || [];
-            var players = onlinePlayers.map(function (player) {
-                var _a, _b, _c, _d;
-                return ({
-                    name: player.name || player.realName || 'Unknown',
-                    xuid: player.xuid || '',
-                    uuid: player.uuid || '',
-                    ip: player.ip || '',
-                    device: player.deviceTypeName || 'Unknown',
-                    ping: player.avgPing || 0,
-                    gamemode: player.gameMode || 'survival',
-                    dimension: ((_a = player.pos) === null || _a === void 0 ? void 0 : _a.dimid) || 0,
+            const runtimeMc = typeof mc !== 'undefined' ? mc : undefined;
+            const onlinePlayers = runtimeMc?.getOnlinePlayers?.() || [];
+            const players = onlinePlayers
+                .map((player) => {
+                const name = String(player.name ?? player.realName ?? '').trim();
+                if (!name)
+                    return null;
+                return {
+                    name,
+                    xuid: String(player.xuid ?? ''),
+                    uuid: String(player.uuid ?? ''),
+                    ip: String(player.ip ?? ''),
+                    ping: this.toFiniteNumber(player.avgPing),
+                    dimension: this.toFiniteNumber(player.pos?.dimid),
                     position: {
-                        x: Math.round(((_b = player.pos) === null || _b === void 0 ? void 0 : _b.x) || 0),
-                        y: Math.round(((_c = player.pos) === null || _c === void 0 ? void 0 : _c.y) || 0),
-                        z: Math.round(((_d = player.pos) === null || _d === void 0 ? void 0 : _d.z) || 0)
+                        x: this.toFiniteNumber(player.pos?.x),
+                        y: this.toFiniteNumber(player.pos?.y),
+                        z: this.toFiniteNumber(player.pos?.z)
                     },
-                    health: player.health || 20,
-                    hunger: player.hunger || 20,
-                    experience: player.xpLevel || 0,
-                    joinTime: player.joinTime || Date.now()
-                });
-            });
+                    health: this.toFiniteNumber(player.health),
+                    hunger: this.toFiniteNumber(player.hunger),
+                    experience: this.toFiniteNumber(player.xpLevel),
+                    ...(player.deviceTypeName !== undefined
+                        ? { device: String(player.deviceTypeName) }
+                        : {}),
+                    ...(player.gameMode !== undefined
+                        ? { gamemode: String(player.gameMode) }
+                        : {}),
+                    ...(player.joinTime !== undefined
+                        ? { joinTime: this.toFiniteNumber(player.joinTime) }
+                        : {})
+                };
+            })
+                .filter((player) => player !== null);
             return {
                 online: players.length,
-                max: ((_b = mc === null || mc === void 0 ? void 0 : mc.getMaxPlayers) === null || _b === void 0 ? void 0 : _b.call(mc)) || 20,
+                max: this.toFiniteNumber(runtimeMc?.getMaxPlayers?.()),
                 list: players,
                 byDevice: this.groupPlayersByDevice(players),
                 byGamemode: this.groupPlayersByGamemode(players)
@@ -164,20 +160,19 @@ var LLBDSPerformanceMonitor = /** @class */ (function () {
             logger.error('Failed to collect player info:', error);
             return {
                 online: 0,
-                max: 20,
+                max: 0,
                 list: [],
                 byDevice: {},
                 byGamemode: {}
             };
         }
-    };
+    }
     /**
      * Collect system information
      */
-    LLBDSPerformanceMonitor.prototype.collectSystemInfo = function () {
-        var _a, _b, _c, _d, _e;
+    collectSystemInfo() {
         try {
-            var memoryUsage = ((_a = process.memoryUsage) === null || _a === void 0 ? void 0 : _a.call(process)) || {};
+            const memoryUsage = process.memoryUsage?.() || {};
             return {
                 memory: {
                     used: Math.round((memoryUsage.heapUsed || 0) / 1024 / 1024), // MB
@@ -188,7 +183,7 @@ var LLBDSPerformanceMonitor = /** @class */ (function () {
                 },
                 cpu: {
                     usage: this.getCPUUsage(),
-                    cores: ((_d = (_c = (_b = require('os')) === null || _b === void 0 ? void 0 : _b.cpus) === null || _c === void 0 ? void 0 : _c.call(_b)) === null || _d === void 0 ? void 0 : _d.length) || 1
+                    cores: require('os')?.cpus?.()?.length || 1
                 },
                 disk: {
                     used: 0, // LLBDS doesn't provide direct disk usage
@@ -201,7 +196,7 @@ var LLBDSPerformanceMonitor = /** @class */ (function () {
                     packetsIn: 0,
                     packetsOut: 0
                 },
-                uptime: ((_e = process.uptime) === null || _e === void 0 ? void 0 : _e.call(process)) || 0,
+                uptime: process.uptime?.() || 0,
                 platform: process.platform || 'unknown',
                 nodeVersion: process.version || 'unknown'
             };
@@ -216,22 +211,24 @@ var LLBDSPerformanceMonitor = /** @class */ (function () {
                 uptime: 0
             };
         }
-    };
+    }
     /**
      * Collect performance metrics
      */
-    LLBDSPerformanceMonitor.prototype.collectPerformanceMetrics = function () {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+    collectPerformanceMetrics() {
         try {
+            const runtimeMc = typeof mc !== 'undefined' ? mc : undefined;
+            const tps = this.toFiniteNumber(runtimeMc?.getTPS?.());
+            const mspt = this.toFiniteNumber(runtimeMc?.getAvgMSPT?.());
             return {
-                tps: ((_a = mc === null || mc === void 0 ? void 0 : mc.getTPS) === null || _a === void 0 ? void 0 : _a.call(mc)) || 20.0,
-                mspt: ((_b = mc === null || mc === void 0 ? void 0 : mc.getAvgMSPT) === null || _b === void 0 ? void 0 : _b.call(mc)) || 50.0, // Milliseconds per tick
-                ticksPerSecond: ((_c = mc === null || mc === void 0 ? void 0 : mc.getTPS) === null || _c === void 0 ? void 0 : _c.call(mc)) || 20.0,
-                averageTickTime: ((_d = mc === null || mc === void 0 ? void 0 : mc.getAvgMSPT) === null || _d === void 0 ? void 0 : _d.call(mc)) || 50.0,
+                tps,
+                mspt,
+                ticksPerSecond: tps,
+                averageTickTime: mspt,
                 memoryUsage: {
-                    heap: ((_f = (_e = process.memoryUsage) === null || _e === void 0 ? void 0 : _e.call(process)) === null || _f === void 0 ? void 0 : _f.heapUsed) || 0,
-                    external: ((_h = (_g = process.memoryUsage) === null || _g === void 0 ? void 0 : _g.call(process)) === null || _h === void 0 ? void 0 : _h.external) || 0,
-                    rss: ((_k = (_j = process.memoryUsage) === null || _j === void 0 ? void 0 : _j.call(process)) === null || _k === void 0 ? void 0 : _k.rss) || 0
+                    heap: process.memoryUsage?.()?.heapUsed || 0,
+                    external: process.memoryUsage?.()?.external || 0,
+                    rss: process.memoryUsage?.()?.rss || 0
                 },
                 gcStats: {
                     collections: 0, // Not available in LLBDS
@@ -255,18 +252,17 @@ var LLBDSPerformanceMonitor = /** @class */ (function () {
                 eventLoop: { lag: 0, utilization: 0 }
             };
         }
-    };
+    }
     /**
      * Get CPU usage (approximation)
      */
-    LLBDSPerformanceMonitor.prototype.getCPUUsage = function () {
-        var _a;
+    getCPUUsage() {
         try {
             // Simple CPU usage approximation based on process CPU time
-            var cpuUsage = (_a = process.cpuUsage) === null || _a === void 0 ? void 0 : _a.call(process);
+            const cpuUsage = process.cpuUsage?.();
             if (cpuUsage) {
-                var totalTime = cpuUsage.user + cpuUsage.system;
-                var elapsedTime = process.uptime() * 1000000; // Convert to microseconds
+                const totalTime = cpuUsage.user + cpuUsage.system;
+                const elapsedTime = process.uptime() * 1000000; // Convert to microseconds
                 return Math.min(100, Math.round((totalTime / elapsedTime) * 100));
             }
             return 0;
@@ -274,69 +270,73 @@ var LLBDSPerformanceMonitor = /** @class */ (function () {
         catch (error) {
             return 0;
         }
-    };
+    }
+    toFiniteNumber(value) {
+        const number = Number(value);
+        return Number.isFinite(number) ? number : 0;
+    }
     /**
      * Group players by device type
      */
-    LLBDSPerformanceMonitor.prototype.groupPlayersByDevice = function (players) {
-        var deviceCounts = {};
-        players.forEach(function (player) {
-            var device = player.device || 'Unknown';
+    groupPlayersByDevice(players) {
+        const deviceCounts = {};
+        players.forEach(player => {
+            const device = player.device || 'unreported';
             deviceCounts[device] = (deviceCounts[device] || 0) + 1;
         });
         return deviceCounts;
-    };
+    }
     /**
      * Group players by gamemode
      */
-    LLBDSPerformanceMonitor.prototype.groupPlayersByGamemode = function (players) {
-        var gamemodeCounts = {};
-        players.forEach(function (player) {
-            var gamemode = player.gamemode || 'survival';
+    groupPlayersByGamemode(players) {
+        const gamemodeCounts = {};
+        players.forEach(player => {
+            const gamemode = player.gamemode || 'unreported';
             gamemodeCounts[gamemode] = (gamemodeCounts[gamemode] || 0) + 1;
         });
         return gamemodeCounts;
-    };
+    }
     /**
      * Get current performance data
      */
-    LLBDSPerformanceMonitor.prototype.getPerformanceData = function () {
-        return __assign({}, this.performanceData);
-    };
+    getPerformanceData() {
+        return { ...this.performanceData };
+    }
     /**
      * Get last update timestamp
      */
-    LLBDSPerformanceMonitor.prototype.getLastUpdate = function () {
+    getLastUpdate() {
         return this.lastUpdate;
-    };
+    }
     /**
      * Check if monitoring is active
      */
-    LLBDSPerformanceMonitor.prototype.isActive = function () {
+    isActive() {
         return this.isMonitoring;
-    };
+    }
     /**
      * Set monitoring interval
      */
-    LLBDSPerformanceMonitor.prototype.setInterval = function (intervalMs) {
+    setInterval(intervalMs) {
         this.intervalMs = intervalMs;
         if (this.isMonitoring) {
             this.stop();
             this.start();
         }
-    };
+    }
     /**
      * Get monitoring interval
      */
-    LLBDSPerformanceMonitor.prototype.getInterval = function () {
+    getInterval() {
         return this.intervalMs;
-    };
+    }
     /**
      * Force immediate data collection
      */
-    LLBDSPerformanceMonitor.prototype.forceUpdate = function () {
+    forceUpdate() {
         this.collectPerformanceData();
-    };
-    return LLBDSPerformanceMonitor;
-}());
+    }
+}
 exports.LLBDSPerformanceMonitor = LLBDSPerformanceMonitor;
+//# sourceMappingURL=LLBDSPerformanceMonitor.js.map

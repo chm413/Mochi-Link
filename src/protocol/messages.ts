@@ -24,6 +24,11 @@ import {
 
 export const UWBP_VERSION = '2.0';
 export const PROTOCOL_NAME = 'U-WBP';
+export const UWBP_COMPATIBLE_VERSIONS = ['2.0', '2.0.0'] as const;
+
+export function isCompatibleUWBPVersion(value: unknown): boolean {
+  return typeof value === 'string' && (UWBP_COMPATIBLE_VERSIONS as readonly string[]).includes(value);
+}
 
 // ============================================================================
 // Operation Types
@@ -60,6 +65,10 @@ export type RequestOperation =
   | 'command.execute'
   | 'command.suggest'
   | 'command.batch'
+
+  // Event subscription operations
+  | 'event.subscribe'
+  | 'event.unsubscribe'
   
   // Permission operations
   | 'permission.grant'
@@ -92,6 +101,7 @@ export type EventOperation =
   // Alert events
   | 'alert.tpsLow'
   | 'alert.memoryHigh'
+  | 'alert.cpuHigh'
   | 'alert.playerFlood'
   | 'alert.diskSpace'
   | 'alert.connectionLost';
@@ -146,11 +156,17 @@ export class MessageFactory {
       serverId?: string;
     } = {}
   ): UWBPResponse {
+    const responseData = options.success === false
+      ? data && typeof data === 'object' && !Array.isArray(data)
+        ? { ...data, code: typeof data.code === 'string' && data.code ? data.code : 'INTERNAL_ERROR' }
+        : { code: 'INTERNAL_ERROR', details: data }
+      : data;
+
     return {
       type: 'response',
       id: this.generateId(),
       op,
-      data,
+      data: responseData,
       timestamp: Date.now(),
       serverId: options.serverId,
       version: UWBP_VERSION,
@@ -191,6 +207,7 @@ export class MessageFactory {
     data: any = {},
     options: {
       serverId?: string;
+      requestId?: string;
     } = {}
   ): UWBPSystemMessage {
     return {
@@ -201,7 +218,8 @@ export class MessageFactory {
       timestamp: Date.now(),
       serverId: options.serverId,
       version: UWBP_VERSION,
-      systemOp: op
+      systemOp: op,
+      requestId: options.requestId
     };
   }
 
@@ -212,7 +230,7 @@ export class MessageFactory {
     requestId: string,
     op: string,
     error: string,
-    code?: string,
+    code = 'INTERNAL_ERROR',
     details?: any
   ): UWBPResponse {
     return this.createResponse(requestId, op, { code, details }, {
@@ -240,6 +258,7 @@ export interface ServerInfoData {
 
 export interface ServerStatusData {
   status: 'online' | 'offline' | 'starting' | 'stopping' | 'error';
+  online: boolean;
   uptime?: number;
   playerCount?: number;
   maxPlayers?: number;
@@ -376,12 +395,25 @@ export interface AlertEventData {
 // System message data types
 export interface HandshakeData {
   protocolVersion: string;
-  serverType: 'koishi' | 'connector';
+  serverType: string;
   serverId?: string;
-  capabilities: string[];
+  serverName?: string;
+  capabilities?: string[];
   authentication?: {
     token: string;
-    method: 'token' | 'certificate';
+    method: 'token' | 'challenge';
+  };
+  challenge?: string;
+  challengeTimestamp?: number;
+  challengeExpiresAt?: number;
+  challengeResponse?: string;
+  success?: boolean;
+  error?: string;
+  serverInfo?: {
+    name?: string;
+    version?: string;
+    coreType?: 'Java' | 'Bedrock';
+    coreName?: string;
   };
 }
 

@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.lang.management.ManagementFactory;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -81,6 +82,15 @@ public class MessageHandler {
                 case UWBPv2Protocol.MESSAGE_TYPE_AUTH:
                     handleAuthMessage(message);
                     break;
+
+                case UWBPv2Protocol.MESSAGE_TYPE_SYSTEM:
+                    handleSystemMessage(message);
+                    break;
+
+                case "response":
+                    // Responses belong to the request initiated by this
+                    // connector. They are consumed by the connection layer.
+                    break;
                     
                 default:
                     logger.warning("Unknown message type: " + message.getType());
@@ -118,7 +128,8 @@ public class MessageHandler {
                 handlePlayerList(message);
                 break;
                 
-            case "player.info":
+            case "player.info": // legacy alias
+            case "player.getInfo":
                 handlePlayerInfo(message);
                 break;
                 
@@ -130,7 +141,8 @@ public class MessageHandler {
                 handlePlayerMessage(message);
                 break;
                 
-            case "whitelist.list":
+            case "whitelist.list": // legacy alias
+            case "whitelist.get":
                 handleWhitelistList(message);
                 break;
                 
@@ -142,19 +154,26 @@ public class MessageHandler {
                 handleWhitelistRemove(message);
                 break;
                 
-            case "server.info":
+            case "server.info": // legacy alias
+            case "server.getInfo":
                 handleServerInfo(message);
                 break;
                 
-            case "server.status":
+            case "server.status": // legacy event/alias
+            case "server.getStatus":
                 handleServerStatus(message);
+                break;
+
+            case "server.getMetrics":
+                handleServerMetrics(message);
                 break;
                 
             case "server.restart":
                 handleServerRestart(message);
                 break;
                 
-            case "server.stop":
+            case "server.stop": // legacy alias
+            case "server.shutdown":
                 handleServerStop(message);
                 break;
                 
@@ -168,7 +187,7 @@ public class MessageHandler {
                 
             default:
                 logger.warning("Unknown operation: " + op);
-                sendCommandResponse(requestId, false, "", "Unknown operation: " + op);
+                sendErrorResponse(requestId, op, "Unsupported operation: " + op, "UNSUPPORTED_OPERATION");
                 break;
         }
     }
@@ -237,6 +256,10 @@ public class MessageHandler {
                 
                 playerObj.addProperty("ping", player.getPing());
                 playerObj.addProperty("isOp", player.isOp());
+                playerObj.add("permissions", gson.toJsonTree(player.getEffectivePermissions().stream()
+                    .map(permission -> permission.getPermission())
+                    .toArray(String[]::new)));
+                playerObj.addProperty("edition", "Java");
                 playerObj.addProperty("health", player.getHealth());
                 playerObj.addProperty("foodLevel", player.getFoodLevel());
                 playerObj.addProperty("gameMode", player.getGameMode().name());
@@ -265,20 +288,34 @@ public class MessageHandler {
      */
     private void handlePlayerInfo(ProtocolMessage message) {
         String requestId = message.getId();
+        String responseOp = operationOf(message, "player.getInfo");
         String playerId = message.getDataString("playerId");
-        
-        // Validate playerId
-        ValidationResult<String> playerIdResult = InputValidator.validatePlayerId(playerId);
-        if (!playerIdResult.isValid()) {
-            sendErrorResponse(requestId, "player.info", playerIdResult.getError());
-            return;
+        if (playerId == null) {
+            playerId = message.getDataString("playerName");
         }
         
         try {
-            org.bukkit.entity.Player player = plugin.getServer().getPlayer(java.util.UUID.fromString(playerIdResult.getValue()));
+            if (playerId == null || playerId.trim().isEmpty()) {
+                sendErrorResponse(requestId, responseOp, "Missing playerId or playerName");
+                return;
+            }
+
+            // U-WBP accepts either a UUID/XUID-style identifier or the online
+            // player name as the lookup key.
+            org.bukkit.entity.Player player;
+            try {
+                player = plugin.getServer().getPlayer(java.util.UUID.fromString(playerId));
+            } catch (IllegalArgumentException ignored) {
+                ValidationResult<String> nameResult = InputValidator.validatePlayerName(playerId);
+                if (!nameResult.isValid()) {
+                    sendErrorResponse(requestId, responseOp, nameResult.getError());
+                    return;
+                }
+                player = plugin.getServer().getPlayer(nameResult.getValue());
+            }
             
             if (player == null) {
-                sendErrorResponse(requestId, "player.info", "Player not found");
+                sendErrorResponse(requestId, responseOp, "Player not found");
                 return;
             }
             
@@ -296,6 +333,10 @@ public class MessageHandler {
             
             playerInfo.addProperty("ping", player.getPing());
             playerInfo.addProperty("isOp", player.isOp());
+            playerInfo.add("permissions", gson.toJsonTree(player.getEffectivePermissions().stream()
+                .map(permission -> permission.getPermission())
+                .toArray(String[]::new)));
+            playerInfo.addProperty("edition", "Java");
             playerInfo.addProperty("health", player.getHealth());
             playerInfo.addProperty("maxHealth", player.getMaxHealth());
             playerInfo.addProperty("foodLevel", player.getFoodLevel());
@@ -311,13 +352,13 @@ public class MessageHandler {
             responseData.add("player", playerInfo);
             
             String response = protocol.createResponseMessage(
-                requestId, "player.info", responseData.toString()
+                requestId, responseOp, responseData.toString()
             );
             plugin.getConnectionManager().sendMessage(response);
             
         } catch (Exception e) {
             logger.log(Level.WARNING, "Failed to get player info", e);
-            sendErrorResponse(requestId, "player.info", e.getMessage());
+            sendErrorResponse(requestId, responseOp, e.getMessage());
         }
     }
     
@@ -376,30 +417,36 @@ public class MessageHandler {
      */
     private void handleWhitelistList(ProtocolMessage message) {
         String requestId = message.getId();
+        String responseOp = operationOf(message, "whitelist.get");
         
         try {
             JsonArray whitelistArray = new JsonArray();
+            JsonArray playerNames = new JsonArray();
             
             for (org.bukkit.OfflinePlayer player : plugin.getServer().getWhitelistedPlayers()) {
                 JsonObject playerObj = new JsonObject();
                 playerObj.addProperty("id", player.getUniqueId().toString());
                 playerObj.addProperty("name", player.getName());
                 whitelistArray.add(playerObj);
+                playerNames.add(player.getName() != null
+                    ? player.getName()
+                    : player.getUniqueId().toString());
             }
             
             JsonObject responseData = new JsonObject();
             responseData.add("whitelist", whitelistArray);
+            responseData.add("players", playerNames);
             responseData.addProperty("enabled", plugin.getServer().hasWhitelist());
             responseData.addProperty("count", whitelistArray.size());
             
             String response = protocol.createResponseMessage(
-                requestId, "whitelist.list", responseData.toString()
+                requestId, responseOp, responseData.toString()
             );
             plugin.getConnectionManager().sendMessage(response);
             
         } catch (Exception e) {
             logger.log(Level.WARNING, "Failed to get whitelist", e);
-            sendErrorResponse(requestId, "whitelist.list", e.getMessage());
+            sendErrorResponse(requestId, responseOp, e.getMessage());
         }
     }
     
@@ -524,6 +571,7 @@ public class MessageHandler {
      */
     private void handleServerInfo(ProtocolMessage message) {
         String requestId = message.getId();
+        String responseOp = operationOf(message, "server.getInfo");
         
         try {
             JsonObject serverInfo = new JsonObject();
@@ -540,29 +588,46 @@ public class MessageHandler {
             serverInfo.addProperty("motd", plugin.getServer().getMotd());
             serverInfo.addProperty("whitelistEnabled", plugin.getServer().hasWhitelist());
             serverInfo.addProperty("onlineMode", plugin.getServer().getOnlineMode());
+            serverInfo.addProperty("status", "online");
+            serverInfo.addProperty("online", true);
+
+            // Include the fields required by ServerInfoData so the management
+            // bridge does not need to synthesize metrics or world values.
+            serverInfo.addProperty("uptime", getUptimeMillis());
+            serverInfo.addProperty("tps", getCurrentTps());
+            Runtime infoRuntime = Runtime.getRuntime();
+            long infoUsedMemory = infoRuntime.totalMemory() - infoRuntime.freeMemory();
+            long infoMaxMemory = infoRuntime.maxMemory();
+            JsonObject infoMemory = new JsonObject();
+            infoMemory.addProperty("used", infoUsedMemory);
+            infoMemory.addProperty("max", infoMaxMemory);
+            infoMemory.addProperty("free", Math.max(0L, infoMaxMemory - infoUsedMemory));
+            infoMemory.addProperty("percentage", infoMaxMemory > 0
+                ? (double) infoUsedMemory / infoMaxMemory * 100.0 : 0.0);
+            serverInfo.add("memoryUsage", infoMemory);
             
             JsonArray worldsArray = new JsonArray();
             for (org.bukkit.World world : plugin.getServer().getWorlds()) {
                 JsonObject worldObj = new JsonObject();
                 worldObj.addProperty("name", world.getName());
-                worldObj.addProperty("environment", world.getEnvironment().name());
-                worldObj.addProperty("difficulty", world.getDifficulty().name());
+                worldObj.addProperty("dimension", dimensionOf(world.getEnvironment().name()));
                 worldObj.addProperty("playerCount", world.getPlayers().size());
+                worldObj.addProperty("loadedChunks", world.getLoadedChunks().length);
                 worldsArray.add(worldObj);
             }
-            serverInfo.add("worlds", worldsArray);
+            serverInfo.add("worldInfo", worldsArray);
             
             JsonObject responseData = new JsonObject();
             responseData.add("info", serverInfo);
             
             String response = protocol.createResponseMessage(
-                requestId, "server.info", responseData.toString()
+                requestId, responseOp, responseData.toString()
             );
             plugin.getConnectionManager().sendMessage(response);
             
         } catch (Exception e) {
             logger.log(Level.WARNING, "Failed to get server info", e);
-            sendErrorResponse(requestId, "server.info", e.getMessage());
+            sendErrorResponse(requestId, responseOp, e.getMessage());
         }
     }
     
@@ -571,40 +636,36 @@ public class MessageHandler {
      */
     private void handleServerStatus(ProtocolMessage message) {
         String requestId = message.getId();
+        String responseOp = operationOf(message, "server.getStatus");
         
         try {
-            JsonObject statusData = new JsonObject();
-            statusData.addProperty("status", "online");
-            // Note: Server uptime not available in standard Bukkit API
-            statusData.addProperty("timestamp", System.currentTimeMillis());
-            
-            JsonObject playersData = new JsonObject();
-            playersData.addProperty("online", plugin.getServer().getOnlinePlayers().size());
-            playersData.addProperty("max", plugin.getServer().getMaxPlayers());
-            statusData.add("players", playersData);
-            
-            JsonObject performanceData = new JsonObject();
-            performanceData.addProperty("tps", plugin.getServer().getTPS()[0]); // 1 minute TPS
-            
-            Runtime runtime = Runtime.getRuntime();
-            long usedMemory = (runtime.totalMemory() - runtime.freeMemory()) / 1024 / 1024;
-            long maxMemory = runtime.maxMemory() / 1024 / 1024;
-            performanceData.addProperty("memoryUsage", usedMemory);
-            performanceData.addProperty("memoryMax", maxMemory);
-            performanceData.addProperty("memoryPercent", (double) usedMemory / maxMemory * 100);
-            statusData.add("performance", performanceData);
-            
             JsonObject responseData = new JsonObject();
-            responseData.add("status", statusData);
+            responseData.addProperty("status", "online");
+            responseData.addProperty("online", true);
+            responseData.addProperty("uptime", getUptimeMillis());
+            responseData.addProperty("playerCount", plugin.getServer().getOnlinePlayers().size());
+            responseData.addProperty("maxPlayers", plugin.getServer().getMaxPlayers());
+            responseData.addProperty("tps", getCurrentTps());
+
+            Runtime runtime = Runtime.getRuntime();
+            long usedMemory = runtime.totalMemory() - runtime.freeMemory();
+            long maxMemory = runtime.maxMemory();
+            JsonObject memoryUsage = new JsonObject();
+            memoryUsage.addProperty("used", usedMemory);
+            memoryUsage.addProperty("max", maxMemory);
+            memoryUsage.addProperty("free", Math.max(0L, maxMemory - usedMemory));
+            memoryUsage.addProperty("percentage", maxMemory > 0
+                ? (double) usedMemory / maxMemory * 100.0 : 0.0);
+            responseData.add("memoryUsage", memoryUsage);
             
             String response = protocol.createResponseMessage(
-                requestId, "server.status", responseData.toString()
+                requestId, responseOp, responseData.toString()
             );
             plugin.getConnectionManager().sendMessage(response);
             
         } catch (Exception e) {
             logger.log(Level.WARNING, "Failed to get server status", e);
-            sendErrorResponse(requestId, "server.status", e.getMessage());
+            sendErrorResponse(requestId, responseOp, e.getMessage());
         }
     }
     
@@ -751,17 +812,20 @@ public class MessageHandler {
      * Execute command and send response
      */
     private void executeCommand(String commandId, String command) {
+        long startTime = System.currentTimeMillis();
         try {
             // Execute command
             ConsoleCommandSender console = Bukkit.getConsoleSender();
             boolean success = Bukkit.dispatchCommand(console, command);
             
-            // Get output (this is simplified - in a real implementation you'd need to capture console output)
-            String output = "Command executed";
+            // Bukkit does not expose a portable console-output capture API.
+            // Return an empty output list rather than claiming text was produced.
+            String output = "";
             String error = success ? null : "Command execution failed";
             
             // Send response
-            sendCommandResponse(commandId, success, output, error);
+            sendCommandResponse(commandId, success, output, error,
+                System.currentTimeMillis() - startTime);
             
             // Log command execution
             if (plugin.getPluginConfig().isLogCommands()) {
@@ -770,7 +834,8 @@ public class MessageHandler {
             
         } catch (Exception e) {
             logger.log(Level.WARNING, "Command execution failed", e);
-            sendCommandResponse(commandId, false, "", e.getMessage());
+            sendCommandResponse(commandId, false, "", e.getMessage(),
+                System.currentTimeMillis() - startTime);
         }
     }
     
@@ -778,8 +843,50 @@ public class MessageHandler {
      * Send command response
      */
     private void sendCommandResponse(String commandId, boolean success, String output, String error) {
+        sendCommandResponse(commandId, success, output, error, 0L);
+    }
+
+    /** Handle the canonical metrics operation with a metrics-shaped payload. */
+    private void handleServerMetrics(ProtocolMessage message) {
+        String requestId = message.getId();
+        String responseOp = operationOf(message, "server.getMetrics");
+
         try {
-            String response = protocol.createCommandResponseMessage(commandId, success, output, error);
+            Runtime runtime = Runtime.getRuntime();
+            long usedMemory = runtime.totalMemory() - runtime.freeMemory();
+            long maxMemory = runtime.maxMemory();
+            double percentage = maxMemory > 0 ? (double) usedMemory / maxMemory * 100.0 : 0.0;
+
+            JsonObject metrics = new JsonObject();
+            metrics.addProperty("serverId", plugin.getPluginConfig().getServerId());
+            metrics.addProperty("timestamp", System.currentTimeMillis());
+            metrics.addProperty("tps", getCurrentTps());
+            metrics.addProperty("cpuUsage", 0.0); // Bukkit exposes no portable CPU metric.
+            metrics.addProperty("playerCount", plugin.getServer().getOnlinePlayers().size());
+            metrics.addProperty("ping", 0);
+
+            JsonObject memory = new JsonObject();
+            memory.addProperty("used", usedMemory);
+            memory.addProperty("max", maxMemory);
+            memory.addProperty("free", Math.max(0L, maxMemory - usedMemory));
+            memory.addProperty("percentage", percentage);
+            metrics.add("memoryUsage", memory);
+
+            JsonObject responseData = new JsonObject();
+            responseData.add("metrics", metrics);
+            plugin.getConnectionManager().sendMessage(protocol.createResponseMessage(
+                requestId, responseOp, responseData.toString()));
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Failed to get server metrics", e);
+            sendErrorResponse(requestId, responseOp, e.getMessage());
+        }
+    }
+
+    private void sendCommandResponse(String commandId, boolean success, String output,
+                                     String error, long executionTime) {
+        try {
+            String response = protocol.createCommandResponseMessage(
+                commandId, success, output, error, executionTime);
             plugin.getConnectionManager().sendMessage(response);
         } catch (Exception e) {
             logger.log(Level.WARNING, "Failed to send command response", e);
@@ -790,10 +897,15 @@ public class MessageHandler {
      * Send error response
      */
     private void sendErrorResponse(String requestId, String op, String errorMessage) {
+        sendErrorResponse(requestId, op, errorMessage, "OPERATION_FAILED");
+    }
+
+    private void sendErrorResponse(String requestId, String op, String errorMessage, String code) {
         try {
             JsonObject responseData = new JsonObject();
             responseData.addProperty("success", false);
             responseData.addProperty("error", errorMessage);
+            responseData.addProperty("code", code == null || code.isEmpty() ? "OPERATION_FAILED" : code);
             
             String response = protocol.createResponseMessage(
                 requestId,
@@ -837,6 +949,77 @@ public class MessageHandler {
                 break;
         }
     }
+
+    /** JVM uptime is the only portable uptime exposed by the Bukkit API. */
+    private long getUptimeMillis() {
+        return Math.max(0L, ManagementFactory.getRuntimeMXBean().getUptime());
+    }
+
+    private double getCurrentTps() {
+        try {
+            Object value = plugin.getServer().getClass().getMethod("getTPS").invoke(plugin.getServer());
+            if (value instanceof double[] && ((double[]) value).length > 0) {
+                return Math.max(0.0, Math.min(20.0, ((double[]) value)[0]));
+            }
+        } catch (ReflectiveOperationException ignored) {
+            // Spigot does not expose TPS through the Bukkit Server interface.
+        }
+        return 0.0;
+    }
+
+    private String dimensionOf(String environment) {
+        switch (environment) {
+            case "NETHER": return "nether";
+            case "THE_END": return "end";
+            case "NORMAL": return "overworld";
+            default: return environment.toLowerCase();
+        }
+    }
+
+    /** Handle canonical system operations emitted by the Koishi endpoint. */
+    private void handleSystemMessage(ProtocolMessage message) {
+        String systemOp = message.getSystemOp() != null ? message.getSystemOp() : message.getOp();
+        if (systemOp == null) {
+            return;
+        }
+
+        switch (systemOp) {
+            case "ping": {
+                JsonObject data = new JsonObject();
+                data.addProperty("serverId", plugin.getPluginConfig().getServerId());
+                data.addProperty("timestamp", System.currentTimeMillis());
+                String pong = protocol.createSystemMessage(
+                    "pong", data, plugin.getPluginConfig().getServerId(), message.getId());
+                plugin.getConnectionManager().sendMessage(pong);
+                break;
+            }
+            case "handshake":
+                // Token-in-query connections are authenticated before the first
+                // application message. A challenge is handled by the normal
+                // auth helper when a deployment explicitly uses that flow.
+                if (message.getData().has("challenge")) {
+                    long challengeTimestamp = message.getData().has("challengeTimestamp")
+                        ? message.getData().get("challengeTimestamp").getAsLong()
+                        : message.getTimestamp();
+                    String auth = protocol.createChallengeAuthenticationMessage(
+                        plugin.getPluginConfig().getApiToken(),
+                        plugin.getPluginConfig().getServerId(),
+                        message.getData().get("challenge").getAsString(),
+                        challengeTimestamp,
+                        message.getId());
+                    plugin.getConnectionManager().sendMessage(auth);
+                }
+                break;
+            case "disconnect":
+                plugin.getConnectionManager().disconnect();
+                break;
+            case "pong":
+                break;
+            default:
+                logger.warning("Unknown system operation: " + systemOp);
+                break;
+        }
+    }
     
     /**
      * Handle heartbeat message
@@ -863,7 +1046,10 @@ public class MessageHandler {
             logger.info("Authentication successful: " + authMessage);
             
             // Send initial server status
-            String statusMessage = protocol.createServerEventMessage("server_ready", null);
+            Map<String, Object> statusData = new HashMap<>();
+            statusData.put("status", "online");
+            statusData.put("reason", "authentication_succeeded");
+            String statusMessage = protocol.createServerEventMessage("server.status", statusData);
             plugin.getConnectionManager().sendMessage(statusMessage);
             
         } else {
@@ -880,6 +1066,11 @@ public class MessageHandler {
     private String generateSubscriptionId() {
         return "sub_" + System.currentTimeMillis() + "_" + 
                Long.toHexString(Double.doubleToLongBits(Math.random()));
+    }
+
+    private String operationOf(ProtocolMessage message, String fallback) {
+        return message.getOp() == null || message.getOp().trim().isEmpty()
+            ? fallback : message.getOp();
     }
     
     /**
@@ -940,7 +1131,7 @@ public class MessageHandler {
      */
     private void handleServerRestart(ProtocolMessage message) {
         String requestId = message.getId();
-        int delay = message.getDataInt("delay", 10); // Default 10 seconds delay
+        int delay = Math.max(0, Math.min(3600, message.getDataInt("delay", 10)));
         
         try {
             // Send response first
@@ -966,8 +1157,9 @@ public class MessageHandler {
                     plugin.getServer().spigot().restart();
                 } catch (Exception e) {
                     logger.log(Level.SEVERE, "Failed to restart server", e);
-                    // Fallback to stop if restart is not supported
-                    plugin.getServer().shutdown();
+                    // Do not turn a failed restart into an unexpected shutdown.
+                    sendErrorResponse(requestId, "server.restart",
+                        "Server restart is not supported by this core", "UNSUPPORTED_OPERATION");
                 }
             }, delay * 20L); // Convert seconds to ticks
             
@@ -982,7 +1174,8 @@ public class MessageHandler {
      */
     private void handleServerStop(ProtocolMessage message) {
         String requestId = message.getId();
-        int delay = message.getDataInt("delay", 10); // Default 10 seconds delay
+        int delay = Math.max(0, Math.min(3600, message.getDataInt("delay", 10)));
+        String responseOp = operationOf(message, "server.shutdown");
         
         try {
             // Send response first
@@ -992,7 +1185,7 @@ public class MessageHandler {
             responseData.addProperty("message", "Server will stop in " + delay + " seconds");
             
             String response = protocol.createResponseMessage(
-                requestId, "server.stop", responseData.toString()
+                requestId, responseOp, responseData.toString()
             );
             plugin.getConnectionManager().sendMessage(response);
             
@@ -1009,7 +1202,7 @@ public class MessageHandler {
             
         } catch (Exception e) {
             logger.log(Level.WARNING, "Failed to stop server", e);
-            sendErrorResponse(requestId, "server.stop", e.getMessage());
+            sendErrorResponse(requestId, responseOp, e.getMessage());
         }
     }
 }

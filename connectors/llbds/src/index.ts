@@ -3,6 +3,31 @@ import { LSEBridge } from './bridge/LSEBridge';
 import { LLBDSEventHandler } from './handlers/LLBDSEventHandler';
 import { LLBDSCommandHandler } from './handlers/LLBDSCommandHandler';
 
+type FetchLike = (url: string, init?: Record<string, any>) => Promise<any>;
+
+async function getFetch(): Promise<FetchLike> {
+    const nativeFetch = (globalThis as any).fetch;
+    if (typeof nativeFetch === 'function') {
+        return nativeFetch.bind(globalThis) as FetchLike;
+    }
+    const dynamicImport = new Function('specifier', 'return import(specifier)') as
+        (specifier: string) => Promise<{ default: FetchLike }>;
+    return (await dynamicImport('node-fetch')).default;
+}
+
+async function fetchWithTimeout(url: string, init: Record<string, any> = {}, timeout = 5000): Promise<any> {
+    const fetch = await getFetch();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+        const requestInit = { ...init };
+        delete requestInit.timeout;
+        return await fetch(url, { ...requestInit, signal: controller.signal });
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 /**
  * Mochi-Link Connector Plugin for LLBDS (LiteLoaderBDS) with LSE
  * 
@@ -33,7 +58,9 @@ function main(): void {
     try {
         // Initialize lightweight LSE plugin
         pluginInstance = new MochiLinkLLBDSPlugin();
-        pluginInstance.initialize();
+        void pluginInstance.initialize().catch((error) => {
+            logger.error(`Failed to initialize ${PLUGIN_NAME} LSE Bridge:`, error);
+        });
         
         logger.info(`${PLUGIN_NAME} v${PLUGIN_VERSION} LSE Bridge initialized!`);
         logger.info(`大福连 LLBDS LSE 桥接器 v${PLUGIN_VERSION} 已初始化！`);
@@ -142,7 +169,9 @@ export class MochiLinkLLBDSPlugin {
                 const { spawn } = require('child_process');
                 const path = require('path');
                 
-                const servicePath = path.join(__dirname, '../external-service.js');
+                // The service is compiled to dist/. Resolve from both the
+                // source-side LSE entry point and the compiled entry point.
+                const servicePath = path.resolve(__dirname, '../dist/external-service.js');
                 const serviceProcess = spawn('node', [servicePath], {
                     detached: true,
                     stdio: 'ignore',
@@ -177,10 +206,8 @@ export class MochiLinkLLBDSPlugin {
      */
     private async checkExternalService(): Promise<boolean> {
         try {
-            const fetch = require('node-fetch');
-            const response = await fetch(`http://localhost:${this.httpPort + 1}/health`, {
-                timeout: 5000
-            });
+            const response = await fetchWithTimeout(
+                `http://localhost:${this.config.getExternalServicePort()}/health`, {}, 5000);
             return response.ok;
         } catch (error) {
             return false;
@@ -204,11 +231,9 @@ export class MochiLinkLLBDSPlugin {
             
             // Notify external service to stop
             try {
-                const fetch = require('node-fetch');
-                await fetch(`http://localhost:${this.httpPort + 1}/shutdown`, {
-                    method: 'POST',
-                    timeout: 5000
-                });
+                await fetchWithTimeout(
+                    `http://localhost:${this.config.getExternalServicePort()}/shutdown`,
+                    { method: 'POST' }, 5000);
             } catch (error) {
                 // Ignore errors during shutdown
             }

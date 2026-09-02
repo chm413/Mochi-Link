@@ -7,7 +7,10 @@ namespace com\mochilink\connector\pmmp\handlers;
 use com\mochilink\connector\pmmp\MochiLinkPMMPPlugin;
 use com\mochilink\connector\pmmp\connection\PMMPConnectionManager;
 use com\mochilink\connector\pmmp\protocol\UWBPMessage;
+use pocketmine\console\ConsoleCommandSender;
+use pocketmine\lang\Translatable;
 use pocketmine\Server;
+use pocketmine\utils\TextFormat;
 
 /**
  * PMMP Command Handler
@@ -43,7 +46,12 @@ class PMMPCommandHandler {
         try {
             switch ($op) {
                 case 'server.getStatus':
+                case 'server.status':
                     $this->handleGetStatus($message);
+                    break;
+
+                case 'server.getMetrics':
+                    $this->handleGetMetrics($message);
                     break;
                     
                 case 'server.getInfo':
@@ -55,6 +63,7 @@ class PMMPCommandHandler {
                     break;
                     
                 case 'server.stop':
+                case 'server.shutdown':
                     $this->handleServerStop($message);
                     break;
                     
@@ -63,6 +72,7 @@ class PMMPCommandHandler {
                     break;
                     
                 case 'player.info':
+                case 'player.getInfo':
                     $this->handlePlayerInfo($message);
                     break;
                     
@@ -102,26 +112,46 @@ class PMMPCommandHandler {
      * Handle server status request
      */
     private function handleGetStatus(UWBPMessage $message): void {
+        $memory = $this->getMemoryInfo();
         $response = UWBPMessage::createResponse(
-            $message->getId(),
-            'server.getStatus',
+                $message->getId(),
+            $message->getOp(),
             [
                 'status' => 'online',
-                'uptime' => time() - $this->server->getStartTime(),
+                'online' => true,
+                'uptime' => $this->getUptimeMillis(),
                 'playerCount' => count($this->server->getOnlinePlayers()),
                 'maxPlayers' => $this->server->getMaxPlayers(),
                 'tps' => $this->server->getTicksPerSecond(),
-                'memoryUsage' => [
-                    'used' => memory_get_usage(true),
-                    'max' => ini_get('memory_limit'),
-                    'percentage' => (memory_get_usage(true) / $this->parseMemoryLimit(ini_get('memory_limit'))) * 100
-                ]
+                'memoryUsage' => $memory
             ],
             true,
             null,
             $this->plugin->getPluginConfig()->getServerId()
         );
         
+        $this->connectionManager->send($response);
+    }
+
+    /** Return the canonical performance metrics payload. */
+    private function handleGetMetrics(UWBPMessage $message): void {
+        $metrics = [
+            'serverId' => $this->plugin->getPluginConfig()->getServerId(),
+            'timestamp' => (int) (microtime(true) * 1000),
+            'tps' => (float) $this->server->getTicksPerSecond(),
+            'cpuUsage' => 0.0,
+            'memoryUsage' => $this->getMemoryInfo(),
+            'playerCount' => count($this->server->getOnlinePlayers()),
+            'ping' => $this->getAveragePing()
+        ];
+        $response = UWBPMessage::createResponse(
+            $message->getId(),
+            'server.getMetrics',
+            ['metrics' => $metrics],
+            true,
+            null,
+            $this->plugin->getPluginConfig()->getServerId()
+        );
         $this->connectionManager->send($response);
     }
     
@@ -139,9 +169,13 @@ class PMMPCommandHandler {
                     'version' => $this->server->getVersion(),
                     'coreType' => 'Bedrock',
                     'coreName' => 'PMMP',
+                    'status' => 'online',
+                    'online' => true,
                     'maxPlayers' => $this->server->getMaxPlayers(),
                     'onlinePlayers' => count($this->server->getOnlinePlayers()),
-                    'uptime' => time() - $this->server->getStartTime(),
+                    'uptime' => $this->getUptimeMillis(),
+                    'tps' => (float) $this->server->getTicksPerSecond(),
+                    'memoryUsage' => $this->getMemoryInfo(),
                     'worldInfo' => $this->getWorldInfo()
                 ]
             ],
@@ -168,10 +202,13 @@ class PMMPCommandHandler {
                 'position' => [
                     'x' => $player->getPosition()->getX(),
                     'y' => $player->getPosition()->getY(),
-                    'z' => $player->getPosition()->getZ()
+                    'z' => $player->getPosition()->getZ(),
+                    'yaw' => $player->getLocation()->getYaw(),
+                    'pitch' => $player->getLocation()->getPitch()
                 ],
-                'ping' => $player->getNetworkSession()->getPing(),
+                'ping' => max(0, (int) ($player->getNetworkSession()->getPing() ?? 0)),
                 'isOp' => $player->hasPermission('pocketmine.command.op'),
+                'permissions' => $this->getPermissions($player),
                 'edition' => 'Bedrock'
             ];
         }
@@ -205,7 +242,7 @@ class PMMPCommandHandler {
             return;
         }
         
-        $player = $this->server->getPlayerByRawUUID($playerId);
+        $player = $this->findPlayer((string) $playerId);
         if ($player === null) {
             $this->sendErrorResponse($message, 'Player not found');
             return;
@@ -238,7 +275,7 @@ class PMMPCommandHandler {
             return;
         }
         
-        $player = $this->server->getPlayerByRawUUID($playerId);
+        $player = $this->findPlayer((string) $playerId);
         if ($player === null) {
             $this->sendErrorResponse($message, 'Player not found');
             return;
@@ -270,8 +307,22 @@ class PMMPCommandHandler {
             return;
         }
         
+        $sender = new class($this->server, $this->server->getLanguage()) extends ConsoleCommandSender {
+            private array $output = [];
+
+            public function sendMessage(Translatable|string $message): void {
+                if ($message instanceof Translatable) {
+                    $message = $this->getLanguage()->translate($message);
+                }
+                foreach (explode("\n", trim($message)) as $line) {
+                    if ($line !== '') $this->output[] = TextFormat::clean($line);
+                }
+            }
+
+            public function getOutput(): array { return $this->output; }
+        };
         $startTime = microtime(true);
-        $success = $this->server->dispatchCommand($this->server->getCommandSender(), $command);
+        $success = $this->server->dispatchCommand($sender, (string) $command);
         $executionTime = (microtime(true) - $startTime) * 1000;
         
         $response = UWBPMessage::createResponse(
@@ -279,7 +330,7 @@ class PMMPCommandHandler {
             'command.execute',
             [
                 'success' => $success,
-                'output' => ['Command executed'],
+                'output' => $sender->getOutput(),
                 'executionTime' => $executionTime
             ],
             $success,
@@ -294,8 +345,7 @@ class PMMPCommandHandler {
      * Handle whitelist get request
      */
     private function handleWhitelistGet(UWBPMessage $message): void {
-        $whitelist = $this->server->getWhitelisted();
-        $players = array_map(fn($entry) => $entry->getName(), $whitelist);
+        $players = array_map('strval', $this->server->getWhitelisted()->getAll(true));
         
         $response = UWBPMessage::createResponse(
             $message->getId(),
@@ -324,7 +374,7 @@ class PMMPCommandHandler {
             return;
         }
         
-        $this->server->getWhitelisted()->add($playerName);
+        $this->server->addWhitelist((string) $playerName);
         
         $response = UWBPMessage::createResponse(
             $message->getId(),
@@ -350,7 +400,7 @@ class PMMPCommandHandler {
             return;
         }
         
-        $this->server->getWhitelisted()->remove($playerName);
+        $this->server->removeWhitelist((string) $playerName);
         
         $response = UWBPMessage::createResponse(
             $message->getId(),
@@ -367,12 +417,15 @@ class PMMPCommandHandler {
     /**
      * Send error response
      */
-    private function sendErrorResponse(UWBPMessage $message, string $error): void {
-        $response = UWBPMessage::createResponse(
+    private function sendErrorResponse(
+        UWBPMessage $message,
+        string $error,
+        string $code = 'OPERATION_FAILED'
+    ): void {
+        $response = UWBPMessage::createError(
             $message->getId(),
             $message->getOp(),
-            [],
-            false,
+            $code,
             $error,
             $this->plugin->getPluginConfig()->getServerId()
         );
@@ -389,7 +442,7 @@ class PMMPCommandHandler {
         foreach ($this->server->getWorldManager()->getWorlds() as $world) {
             $worlds[] = [
                 'name' => $world->getFolderName(),
-                'dimension' => $world->getProvider()->getWorldData()->getName(),
+                'dimension' => $this->getDimensionName($world->getFolderName()),
                 'playerCount' => count($world->getPlayers()),
                 'loadedChunks' => count($world->getLoadedChunks())
             ];
@@ -403,6 +456,9 @@ class PMMPCommandHandler {
      */
     private function parseMemoryLimit(string $limit): int {
         $limit = trim($limit);
+        if ($limit === '' || $limit === '-1') {
+            return 0;
+        }
         $last = strtolower($limit[strlen($limit) - 1]);
         $value = (int)$limit;
         
@@ -426,7 +482,7 @@ class PMMPCommandHandler {
             return;
         }
         
-        $player = $this->server->getPlayerByRawUUID($playerId);
+        $player = $this->findPlayer((string) $playerId);
         if ($player === null) {
             $this->sendErrorResponse($message, 'Player not found');
             return;
@@ -442,8 +498,9 @@ class PMMPCommandHandler {
                 'y' => $player->getPosition()->getY(),
                 'z' => $player->getPosition()->getZ()
             ],
-            'ping' => $player->getNetworkSession()->getPing(),
+            'ping' => max(0, (int) ($player->getNetworkSession()->getPing() ?? 0)),
             'isOp' => $player->hasPermission('pocketmine.command.op'),
+            'permissions' => $this->getPermissions($player),
             'health' => $player->getHealth(),
             'maxHealth' => $player->getMaxHealth(),
             'foodLevel' => $player->getHungerManager()->getFood(),
@@ -460,7 +517,7 @@ class PMMPCommandHandler {
         
         $response = UWBPMessage::createResponse(
             $message->getId(),
-            'player.info',
+            $message->getOp(),
             ['player' => $playerInfo],
             true,
             null,
@@ -469,48 +526,72 @@ class PMMPCommandHandler {
         
         $this->connectionManager->send($response);
     }
+
+    private function findPlayer(string $identifier) {
+        foreach ($this->server->getOnlinePlayers() as $onlinePlayer) {
+            if ($onlinePlayer->getUniqueId()->toString() === $identifier) {
+                return $onlinePlayer;
+            }
+        }
+        return $this->server->getPlayerExact($identifier);
+    }
+
+    private function getUptimeMillis(): int {
+        return max(0, (int) ((microtime(true) - $this->server->getStartTime()) * 1000));
+    }
+
+    private function getAveragePing(): int {
+        $players = $this->server->getOnlinePlayers();
+        if (count($players) === 0) return 0;
+        $total = 0;
+        foreach ($players as $player) {
+            $total += (int) $player->getNetworkSession()->getPing();
+        }
+        return (int) ($total / count($players));
+    }
+
+    private function getPermissions($player): array {
+        if (!method_exists($player, 'getEffectivePermissions')) return [];
+        $permissions = [];
+        foreach ($player->getEffectivePermissions() as $name => $info) {
+            if (method_exists($info, 'getValue') && !$info->getValue()) continue;
+            $permissions[] = method_exists($info, 'getPermission')
+                ? (string) $info->getPermission()
+                : (string) $name;
+        }
+        sort($permissions);
+        return $permissions;
+    }
+
+    private function getDimensionName(string $worldName): string {
+        $normalized = strtolower($worldName);
+        if (str_contains($normalized, 'nether')) return 'nether';
+        if (str_contains($normalized, 'end')) return 'end';
+        return 'overworld';
+    }
+
+    private function getMemoryInfo(): array {
+        $used = memory_get_usage(true);
+        $max = $this->parseMemoryLimit((string) ini_get('memory_limit'));
+        $free = $max > 0 ? max(0, $max - $used) : 0;
+        return [
+            'used' => $used,
+            'max' => $max,
+            'free' => $free,
+            'percentage' => $max > 0 ? ($used / $max) * 100 : 0.0
+        ];
+    }
     
     /**
      * Handle server restart request
      */
     private function handleServerRestart(UWBPMessage $message): void {
-        $data = $message->getData();
-        $delay = $data['delay'] ?? 10;
-        
-        $response = UWBPMessage::createResponse(
-            $message->getId(),
-            'server.restart',
-            [
-                'success' => true,
-                'delay' => $delay,
-                'message' => "Server will restart in {$delay} seconds"
-            ],
-            true,
-            null,
-            $this->plugin->getPluginConfig()->getServerId()
+        $this->sendErrorResponse(
+            $message,
+            'PMMP cannot restart its own process; use an external supervisor',
+            'UNSUPPORTED_OPERATION'
         );
-        
-        $this->connectionManager->send($response);
-        
-        // Broadcast to all players
-        $broadcastMessage = "§c[Mochi-Link] Server will restart in {$delay} seconds!";
-        $this->server->broadcastMessage($broadcastMessage);
-        
-        // Schedule restart
-        $this->plugin->getScheduler()->scheduleDelayedTask(
-            new class($this->server) extends \pocketmine\scheduler\Task {
-                private $server;
-                
-                public function __construct($server) {
-                    $this->server = $server;
-                }
-                
-                public function onRun(): void {
-                    $this->server->shutdown();
-                }
-            },
-            $delay * 20
-        );
+        return;
     }
     
     /**
@@ -518,11 +599,12 @@ class PMMPCommandHandler {
      */
     private function handleServerStop(UWBPMessage $message): void {
         $data = $message->getData();
-        $delay = $data['delay'] ?? 10;
+        $delay = max(0, min(3600, (int) ($data['delay'] ?? 10)));
+        $responseOp = $message->getOp() === 'server.stop' ? 'server.stop' : 'server.shutdown';
         
         $response = UWBPMessage::createResponse(
             $message->getId(),
-            'server.stop',
+            $responseOp,
             [
                 'success' => true,
                 'delay' => $delay,

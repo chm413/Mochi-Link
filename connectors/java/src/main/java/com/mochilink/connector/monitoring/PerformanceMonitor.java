@@ -2,6 +2,7 @@ package com.mochilink.connector.monitoring;
 
 import com.mochilink.connector.MochiLinkPlugin;
 import com.mochilink.connector.connection.ConnectionManager;
+import com.mochilink.connector.protocol.UWBPv2Protocol;
 
 import org.bukkit.Bukkit;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -30,9 +31,6 @@ public class PerformanceMonitor {
     private boolean isRunning = false;
     
     // Performance tracking
-    private long lastTickTime = System.currentTimeMillis();
-    private double currentTPS = 20.0;
-    
     public PerformanceMonitor(MochiLinkPlugin plugin, ConnectionManager connectionManager) {
         this.plugin = plugin;
         this.connectionManager = connectionManager;
@@ -55,7 +53,7 @@ public class PerformanceMonitor {
             public void run() {
                 collectAndSendMetrics();
             }
-        }.runTaskTimerAsynchronously(plugin, 20L, interval * 20L);
+        }.runTaskTimer(plugin, 20L, interval * 20L);
         
         isRunning = true;
         logger.info("Performance monitoring started with interval: " + interval + " seconds");
@@ -84,10 +82,28 @@ public class PerformanceMonitor {
         
         try {
             Map<String, Object> metrics = collectMetrics();
-            
-            // For now, just log the metrics collection
-            // In a full implementation, this would send via the protocol
-            logger.info("Performance metrics collected: " + metrics.size() + " metrics");
+
+            UWBPv2Protocol protocol = connectionManager.getProtocol();
+            if (protocol == null) {
+                logger.warning("Cannot publish performance metrics: protocol is unavailable");
+                return;
+            }
+
+            Map<String, Object> canonical = new HashMap<>();
+            canonical.put("serverId", plugin.getPluginConfig().getServerId());
+            canonical.put("timestamp", System.currentTimeMillis());
+            canonical.put("tps", getCurrentTPS());
+            canonical.put("cpuUsage", getCpuUsage());
+            canonical.put("memoryUsage", toCanonicalMemory(getMemoryStats()));
+            canonical.put("playerCount", Bukkit.getOnlinePlayers().size());
+            // Bukkit does not expose a portable server ping; zero is the
+            // explicit unavailable value, not a measured latency.
+            canonical.put("ping", 0);
+
+            Map<String, Object> eventData = new HashMap<>();
+            eventData.put("metrics", canonical);
+            connectionManager.sendMessage(protocol.createServerEventMessage("server.metrics", eventData));
+            logger.fine("Performance metrics published: " + metrics.size() + " source fields");
             
         } catch (Exception e) {
             logger.warning("Failed to collect/send performance metrics: " + e.getMessage());
@@ -130,6 +146,32 @@ public class PerformanceMonitor {
         
         return metrics;
     }
+
+    private Map<String, Object> toCanonicalMemory(Map<String, Object> source) {
+        Number used = asNumber(source.get("used_mb"));
+        Number max = asNumber(source.get("max_mb"));
+        Number free = asNumber(source.get("free_mb"));
+        Number percentage = asNumber(source.get("usage_percent"));
+        Map<String, Object> memory = new HashMap<>();
+        // U-WBP MemoryInfo values are bytes. The detailed internal map keeps
+        // MB for backwards-compatible logs, so convert at the protocol edge.
+        memory.put("used", used.longValue() * 1024L * 1024L);
+        memory.put("max", max.longValue() * 1024L * 1024L);
+        memory.put("free", free.longValue() * 1024L * 1024L);
+        memory.put("percentage", percentage.doubleValue());
+        return memory;
+    }
+
+    private Number asNumber(Object value) {
+        return value instanceof Number ? (Number) value : 0;
+    }
+
+    private double getCpuUsage() {
+        double load = ManagementFactory.getOperatingSystemMXBean().getSystemLoadAverage();
+        if (Double.isNaN(load) || load < 0) return 0.0;
+        int processors = Math.max(1, Runtime.getRuntime().availableProcessors());
+        return Math.max(0.0, Math.min(100.0, load / processors * 100.0));
+    }
     
     /**
      * Get current TPS (approximation)
@@ -142,16 +184,7 @@ public class PerformanceMonitor {
             double[] tps = (double[]) minecraftServer.getClass().getField("recentTps").get(minecraftServer);
             return Math.min(20.0, tps[0]);
         } catch (Exception e) {
-            // Fallback calculation
-            long currentTime = System.currentTimeMillis();
-            long timeDiff = currentTime - lastTickTime;
-            lastTickTime = currentTime;
-            
-            if (timeDiff > 0) {
-                currentTPS = Math.min(20.0, 1000.0 / timeDiff * 20.0);
-            }
-            
-            return currentTPS;
+            return 0.0;
         }
     }
     

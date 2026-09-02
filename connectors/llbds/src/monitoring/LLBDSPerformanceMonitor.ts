@@ -104,20 +104,20 @@ export class LLBDSPerformanceMonitor {
      */
     private collectServerInfo(): any {
         try {
+            const runtimeMc = typeof mc !== 'undefined' ? mc : undefined;
+            const tps = this.toFiniteNumber(runtimeMc?.getTPS?.());
+            const maxPlayers = this.toFiniteNumber(runtimeMc?.getMaxPlayers?.());
             return {
-                version: mc?.getBDSVersion?.() || 'Unknown',
-                online: true,
-                tps: mc?.getTPS?.() || 20.0,
-                maxPlayers: mc?.getMaxPlayers?.() || 20,
-                currentPlayers: mc?.getOnlinePlayers?.()?.length || 0,
-                gamemode: 'survival', // LLBDS doesn't provide direct access to default gamemode
-                difficulty: 'normal', // LLBDS doesn't provide direct access to difficulty
-                worldName: 'Bedrock level' // Default LLBDS world name
+                version: String(runtimeMc?.getBDSVersion?.() ?? 'unknown'),
+                online: runtimeMc !== undefined,
+                tps,
+                maxPlayers,
+                currentPlayers: runtimeMc?.getOnlinePlayers?.()?.length ?? 0
             };
         } catch (error) {
             logger.error('Failed to collect server info:', error);
             return {
-                version: 'Unknown',
+                version: 'unknown',
                 online: false,
                 tps: 0,
                 maxPlayers: 0,
@@ -131,31 +131,44 @@ export class LLBDSPerformanceMonitor {
      */
     private collectPlayerInfo(): any {
         try {
-            const onlinePlayers = mc?.getOnlinePlayers?.() || [];
+            const runtimeMc = typeof mc !== 'undefined' ? mc : undefined;
+            const onlinePlayers = runtimeMc?.getOnlinePlayers?.() || [];
             
-            const players = onlinePlayers.map((player: any) => ({
-                name: player.name || player.realName || 'Unknown',
-                xuid: player.xuid || '',
-                uuid: player.uuid || '',
-                ip: player.ip || '',
-                device: player.deviceTypeName || 'Unknown',
-                ping: player.avgPing || 0,
-                gamemode: player.gameMode || 'survival',
-                dimension: player.pos?.dimid || 0,
-                position: {
-                    x: Math.round(player.pos?.x || 0),
-                    y: Math.round(player.pos?.y || 0),
-                    z: Math.round(player.pos?.z || 0)
-                },
-                health: player.health || 20,
-                hunger: player.hunger || 20,
-                experience: player.xpLevel || 0,
-                joinTime: player.joinTime || Date.now()
-            }));
+            const players = onlinePlayers
+                .map((player: any) => {
+                    const name = String(player.name ?? player.realName ?? '').trim();
+                    if (!name) return null;
+                    return {
+                        name,
+                        xuid: String(player.xuid ?? ''),
+                        uuid: String(player.uuid ?? ''),
+                        ip: String(player.ip ?? ''),
+                        ping: this.toFiniteNumber(player.avgPing),
+                        dimension: this.toFiniteNumber(player.pos?.dimid),
+                        position: {
+                            x: this.toFiniteNumber(player.pos?.x),
+                            y: this.toFiniteNumber(player.pos?.y),
+                            z: this.toFiniteNumber(player.pos?.z)
+                        },
+                        health: this.toFiniteNumber(player.health),
+                        hunger: this.toFiniteNumber(player.hunger),
+                        experience: this.toFiniteNumber(player.xpLevel),
+                        ...(player.deviceTypeName !== undefined
+                            ? { device: String(player.deviceTypeName) }
+                            : {}),
+                        ...(player.gameMode !== undefined
+                            ? { gamemode: String(player.gameMode) }
+                            : {}),
+                        ...(player.joinTime !== undefined
+                            ? { joinTime: this.toFiniteNumber(player.joinTime) }
+                            : {})
+                    };
+                })
+                .filter((player: any) => player !== null);
             
             return {
                 online: players.length,
-                max: mc?.getMaxPlayers?.() || 20,
+                max: this.toFiniteNumber(runtimeMc?.getMaxPlayers?.()),
                 list: players,
                 byDevice: this.groupPlayersByDevice(players),
                 byGamemode: this.groupPlayersByGamemode(players)
@@ -165,7 +178,7 @@ export class LLBDSPerformanceMonitor {
             logger.error('Failed to collect player info:', error);
             return {
                 online: 0,
-                max: 20,
+                max: 0,
                 list: [],
                 byDevice: {},
                 byGamemode: {}
@@ -225,11 +238,14 @@ export class LLBDSPerformanceMonitor {
      */
     private collectPerformanceMetrics(): any {
         try {
+            const runtimeMc = typeof mc !== 'undefined' ? mc : undefined;
+            const tps = this.toFiniteNumber(runtimeMc?.getTPS?.());
+            const mspt = this.toFiniteNumber(runtimeMc?.getAvgMSPT?.());
             return {
-                tps: mc?.getTPS?.() || 20.0,
-                mspt: mc?.getAvgMSPT?.() || 50.0, // Milliseconds per tick
-                ticksPerSecond: mc?.getTPS?.() || 20.0,
-                averageTickTime: mc?.getAvgMSPT?.() || 50.0,
+                tps,
+                mspt,
+                ticksPerSecond: tps,
+                averageTickTime: mspt,
                 memoryUsage: {
                     heap: process.memoryUsage?.()?.heapUsed || 0,
                     external: process.memoryUsage?.()?.external || 0,
@@ -276,6 +292,11 @@ export class LLBDSPerformanceMonitor {
             return 0;
         }
     }
+
+    private toFiniteNumber(value: unknown): number {
+        const number = Number(value);
+        return Number.isFinite(number) ? number : 0;
+    }
     
     /**
      * Group players by device type
@@ -284,7 +305,7 @@ export class LLBDSPerformanceMonitor {
         const deviceCounts: Record<string, number> = {};
         
         players.forEach(player => {
-            const device = player.device || 'Unknown';
+            const device = player.device || 'unreported';
             deviceCounts[device] = (deviceCounts[device] || 0) + 1;
         });
         
@@ -298,7 +319,7 @@ export class LLBDSPerformanceMonitor {
         const gamemodeCounts: Record<string, number> = {};
         
         players.forEach(player => {
-            const gamemode = player.gamemode || 'survival';
+            const gamemode = player.gamemode || 'unreported';
             gamemodeCounts[gamemode] = (gamemodeCounts[gamemode] || 0) + 1;
         });
         

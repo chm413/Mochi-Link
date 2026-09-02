@@ -181,7 +181,7 @@ export class MessageRouter {
   /**
    * Route a message to the appropriate handler
    */
-  async route(message: UWBPMessage, connection: Connection): Promise<UWBPResponse | void> {
+  async route(message: UWBPMessage, connection: Connection): Promise<UWBPResponse | UWBPSystemMessage | void> {
     const context: RoutingContext = {
       message,
       connection,
@@ -211,8 +211,7 @@ export class MessageRouter {
           break;
         
         case 'system':
-          await this.routeSystemMessage(message as UWBPSystemMessage, context);
-          break;
+          return await this.routeSystemMessage(message as UWBPSystemMessage, context);
         
         default:
           throw new ProtocolError(`Unknown message type: ${message.type}`, message.id);

@@ -50,8 +50,10 @@ const serverIdArbitrary = fc.stringOf(
 const requestOperationArbitrary = fc.constantFrom<RequestOperation>(
   'server.getInfo', 'server.getStatus', 'server.getMetrics', 'server.shutdown', 'server.restart',
   'server.reload', 'server.save', 'player.list', 'player.getInfo', 'player.kick', 'player.ban',
-  'player.unban', 'player.message', 'player.teleport', 'whitelist.get', 'whitelist.add',
+  'player.unban', 'player.banlist', 'player.message', 'player.teleport', 'whitelist.get', 'whitelist.add',
   'whitelist.remove', 'whitelist.enable', 'whitelist.disable', 'command.execute', 'command.suggest',
+  'command.batch', 'permission.grant', 'permission.revoke', 'permission.update', 'permission.query', 'permission.list',
+  'event.subscribe', 'event.unsubscribe',
   'world.list', 'world.getInfo', 'world.setTime', 'world.setWeather', 'world.broadcast'
 );
 
@@ -70,6 +72,16 @@ const systemOperationArbitrary = fc.constantFrom<SystemOperation>(
  */
 const createValidDataForOperation = (operation: string): fc.Arbitrary<any> => {
   switch (operation) {
+    case 'server.getStatus':
+      return fc.tuple(
+        fc.constantFrom('online', 'offline', 'starting', 'stopping', 'error'),
+        fc.option(fc.integer({ min: 0, max: 86400000 }))
+      ).map(([status, uptime]) => ({
+        status,
+        online: status === 'online',
+        uptime
+      }));
+
     // Operations that require playerId
     case 'player.kick':
     case 'player.ban':
@@ -383,7 +395,8 @@ describe('Property 12: Protocol Message Format Standardization', () => {
           
           // Feature: minecraft-unified-management, Property 12: 协议消息格式标准化
           const message = MessageFactory.createSystemMessage(operation, data, {
-            serverId: serverId || undefined
+            serverId: serverId || undefined,
+            requestId: operation === 'pong' ? '1787980800000-pingpong1' : undefined
           });
 
           // Verify basic U-WBP v2 structure
@@ -447,7 +460,10 @@ describe('Property 12: Protocol Message Format Standardization', () => {
               originalMessage = MessageFactory.createEvent(messageSpec.op as EventOperation, data, { serverId: serverId || undefined });
               break;
             case 'system':
-              originalMessage = MessageFactory.createSystemMessage(messageSpec.op as SystemOperation, data, { serverId: serverId || undefined });
+              originalMessage = MessageFactory.createSystemMessage(messageSpec.op as SystemOperation, data, {
+                serverId: serverId || undefined,
+                requestId: messageSpec.op === 'pong' ? '1787980800000-pingpong1' : undefined
+              });
               break;
             default:
               // This should never happen due to the generator, but TypeScript needs it
@@ -528,7 +544,10 @@ describe('Property 12: Protocol Message Format Standardization', () => {
               message = MessageFactory.createEvent(messageSpec.op as EventOperation, data, { serverId: serverId || undefined });
               break;
             case 'system':
-              message = MessageFactory.createSystemMessage(messageSpec.op as SystemOperation, data, { serverId: serverId || undefined });
+              message = MessageFactory.createSystemMessage(messageSpec.op as SystemOperation, data, {
+                serverId: serverId || undefined,
+                requestId: messageSpec.op === 'pong' ? '1787980800000-pingpong1' : undefined
+              });
               break;
           }
 

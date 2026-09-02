@@ -58,6 +58,12 @@ export declare abstract class BaseConnectorBridge extends EventEmitter {
      */
     getCapabilities(): BridgeCapability[];
     /**
+     * Trim the capability set to the intersection with declared capabilities
+     * (PROTOCOL §9).  When the declared list is empty the defaults are kept
+     * so that legacy connectors that omit X-Capabilities are not broken.
+     */
+    applyDeclaredCapabilities(declared: string[]): void;
+    /**
      * Check if the bridge is connected
      */
     isConnectedToBridge(): boolean;

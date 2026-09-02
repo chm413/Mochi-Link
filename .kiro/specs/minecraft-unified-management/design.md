@@ -74,18 +74,16 @@ sequenceDiagram
     participant S as MC 服务器
     
     Note over K,S: accept_inbound_ws（旧别名 forward）
-    B->>K: WebSocket 连接请求
+    B->>K: WebSocket 连接请求（serverId/token/capabilities 请求头）
     K->>B: 握手响应 + 认证挑战
     B->>K: serverId + token/挑战应答
-    K->>B: 认证成功
-    B->>K: 能力声明（认证后）
+    K->>B: 认证成功并采信规范化能力交集
 
     Note over K,S: dial_outbound_ws（旧别名 reverse）
     K->>B: WebSocket 连接请求
     B->>K: 握手响应
     B->>K: serverId + token/挑战应答
-    K->>B: 认证成功
-    B->>K: 能力声明（认证成功后才被采信）
+    K->>B: 认证成功并采信规范化能力交集
     
     Note over K,S: 正常通信
     K->>B: 管理命令
@@ -645,17 +643,22 @@ interface PlayerIdentity {
 初版设计未定义挑战-应答的消息结构，导致实现中出现"应答字段被同时用作 nonce 索引与 HMAC 值"的死逻辑。规范如下：
 
 ```
-1) K → B: { type: 'request', id: 'c-1', op: 'auth.challenge',
-            timestamp: 1787980800000,
-            data: { serverId, challenge: '<32字节随机hex>' } }
-2) B → K: { type: 'response', id: 'r-1', requestId: 'c-1', op: 'auth.challenge',
-            timestamp: 1787980800100,
-            data: {
-              serverId,
-              challenge: '<原样回传 nonce，用于服务端检索挑战>',   ← 必填
-              token: '<API 令牌>',
-              challengeResponse: 'HMAC-SHA256(key=token, msg=nonce + request.timestamp)'
-            } }
+1) K → B: { type: 'system', id: 'c-1', op: 'handshake', systemOp: 'handshake',
+            timestamp: 1787980800000, version: '2.0', serverId,
+            data: { protocolVersion: '2.0', serverType: 'koishi',
+                    authenticationRequired: true,
+                    challenge: '<32字节随机hex>',
+                    challengeTimestamp: 1787980800000,
+                    challengeExpiresAt: 1787980830000 } }
+2) B → K: { type: 'system', id: 'r-1', requestId: 'c-1',
+            op: 'handshake', systemOp: 'handshake',
+            timestamp: 1787980800100, version: '2.0', serverId,
+            data: { serverId,
+                    authentication: { token: '<API令牌>', method: 'challenge' },
+                    challenge: '<原样回传nonce>',
+                    challengeTimestamp: 1787980800000,
+                    challengeResponse:
+                      'HMAC-SHA256(key=token, msg=challenge:token:challengeTimestamp)' } }
 ```
 
 - 服务端以 `data.challenge`（nonce）检索挑战记录，以 `data.challengeResponse` 做 HMAC 验证；
@@ -664,17 +667,20 @@ interface PlayerIdentity {
 - HMAC 比较必须使用常量时间比较（`crypto.timingSafeEqual`）。
 - 已知局限：该模式下 `token` 字段仍在链路传输（作为 HMAC 密钥来源），挑战-应答
   仅证明"响应者持有令牌"，不提供传输机密性；连接必须使用 WSS/TLS。
-- 简化模式（无挑战）：客户端直接发送 `{ serverId, token }`，服务端以令牌哈希查库验证。
+- 默认简化模式：WebSocket upgrade 使用 `X-Auth-Token` 或 `Authorization: Bearer`；token
+  不得放入新客户端 URL。查询参数只保留旧客户端兼容。Connector 同时通过
+  `X-Capabilities` 发送逗号分隔声明；Koishi 仅在 token 验证成功后采信。
 
 ### B. 版本协商
 
-握手第一条消息必须携带 `protocol: 'U-WBP'` 与 `version: '2.0'`。历史值 `2.0.0`
-可作为同一 2.0 协议线兼容读取；其他不支持版本必须立即返回错误码 `PROTOCOL_VERSION`
-并断开，不得以未协商的降级方式继续。所有新消息的 `timestamp` 使用 Unix epoch 毫秒整数。
+所有消息外壳携带 `version: '2.0'`，握手数据携带 `protocolVersion: '2.0'`；不另设
+`protocol` 字段。历史值 `2.0.0` 可作为同一 2.0 协议线兼容读取。所有新消息的
+`timestamp` 使用 Unix epoch 毫秒整数。
 
 ### C. 错误码注册表
 
-所有 response 消息的 `error.code` 必须取自下表，禁止实现自定义未注册错误码：
+所有失败 response 使用顶层 `success: false`、顶层 `error` 和 `data.code`。`data.code`
+必须取自下表，禁止实现自定义未注册错误码：
 
 | 错误码 | 含义 | 备注 |
 |--------|------|------|
@@ -683,7 +689,8 @@ interface PlayerIdentity {
 | CHALLENGE_INVALID | 挑战不存在/过期/不匹配 | |
 | PROTOCOL_VERSION | 协议版本不支持 | 附带支持的版本列表 |
 | BAD_REQUEST | 消息格式不合法（缺 type/id/op/data） | |
-| UNKNOWN_OP | 操作名未注册 | |
+| UNSUPPORTED_OPERATION | 操作名未注册或当前 Connector 不支持 | |
+| OPERATION_FAILED | 已支持操作执行失败 | |
 | PERMISSION_DENIED | 已认证但无权执行该操作 | |
 | SERVER_UNAVAILABLE | 目标服务器离线/不可达 | |
 | RATE_LIMITED | 触发限流 | 附带 retryAfter 毫秒数 |

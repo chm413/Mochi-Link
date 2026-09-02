@@ -26,7 +26,7 @@ export interface ServerACL {
     id: number;
     user_id: string;
     server_id: string;
-    role: 'owner' | 'admin' | 'operator' | 'viewer';
+    role: 'owner' | 'admin' | 'sm' | 'pm' | 'moderator' | 'viewer';
     permissions: string;
     granted_by: string;
     granted_at: Date;

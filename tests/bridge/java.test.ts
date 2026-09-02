@@ -70,7 +70,7 @@ describe('JavaConnectorBridge', () => {
       expect(capabilities).toContain('ban_management');
       expect(capabilities).toContain('operator_management');
       expect(capabilities).toContain('server_control');
-      expect(capabilities).toContain('plugin_integration'); // Paper supports plugins
+      expect(capabilities).not.toContain('plugin_integration');
     });
 
     it('should have correct bridge info', () => {
@@ -80,6 +80,21 @@ describe('JavaConnectorBridge', () => {
       expect(info.coreType).toBe('Java');
       expect(info.coreName).toBe('Paper');
       expect(info.coreVersion).toBe('1.20.1');
+    });
+
+    it('intersects protocol capabilities with the authenticated declaration', () => {
+      const protocolAdapter = {
+        ...mockConnectionAdapter,
+        sendRequest: jest.fn(),
+        capabilities: ['command_execution', 'event_streaming', 'not-supported']
+      };
+      const protocolBridge = new JavaConnectorBridge(config, protocolAdapter);
+
+      expect(protocolBridge.getCapabilities()).toEqual([
+        'command_execution',
+        'event_streaming'
+      ]);
+      expect(protocolBridge.hasCapability('server_control')).toBe(false);
     });
   });
 

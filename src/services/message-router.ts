@@ -144,9 +144,7 @@ export class MessageRouter extends EventEmitter {
       // 修复问题 #3: 统一时间戳格式为 ISO 8601 字符串
       const normalizedEvent: ServerEvent = {
         ...event,
-        timestamp: typeof event.timestamp === 'number' 
-          ? new Date(event.timestamp).toISOString() 
-          : event.timestamp
+        timestamp: event.timestamp
       };
 
       // Get event bindings for this server
@@ -558,9 +556,7 @@ export class MessageRouter extends EventEmitter {
     // 修复问题 #3: 确保时间戳格式正确
     const normalizedEvent: ServerEvent = {
       ...event,
-      timestamp: typeof event.timestamp === 'number' 
-        ? new Date(event.timestamp).toISOString() 
-        : event.timestamp
+      timestamp: event.timestamp
     };
     await this.routeServerEvent(normalizedEvent);
   }

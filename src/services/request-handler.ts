@@ -279,159 +279,105 @@ export class RequestHandler {
     request: UWBPRequest,
     connection: Connection
   ): Promise<UWBPResponse> {
-    // 修复虚假实现：从数据库获取服务器信息，并尝试从连接器获取实时信息
-    const server = await this.services.server.getServer(connection.serverId);
-    if (!server) {
+    const liveServer = await this.services.server.getServer(connection.serverId);
+    if (!liveServer) {
+      return MessageFactory.createError(request.id, request.op, 'Server not found', 'SERVER_NOT_FOUND');
+    }
+    const liveBridge = this.services.server.getBridge(connection.serverId);
+    if (!liveBridge || !liveBridge.isConnectedToBridge()) {
+      return MessageFactory.createError(request.id, request.op, 'Connector is not connected', 'CONNECTOR_UNAVAILABLE');
+    }
+    try {
+      const info = await liveBridge.getServerInfo();
+      return MessageFactory.createResponse(request.id, request.op, { info }, {
+        success: true,
+        serverId: connection.serverId
+      });
+    } catch (error) {
       return MessageFactory.createError(
         request.id,
         request.op,
-        'Server not found',
-        'SERVER_NOT_FOUND'
+        error instanceof Error ? error.message : String(error),
+        'CONNECTOR_REQUEST_FAILED'
       );
     }
-    
-    // 尝试从连接器获取实时信息（如果连接器支持）
-    try {
-      const bridge = this.services.server.getBridge(connection.serverId);
-      if (bridge && bridge.isConnectedToBridge()) {
-        // 发送请求到连接器获取实时信息
-        const infoRequest = {
-          type: 'request' as const,
-          id: `info-${Date.now()}`,
-          op: 'server.getInfo' as any,
-          data: {},
-          serverId: connection.serverId,
-          timestamp: Date.now(),
-          version: '2.0'
-        };
-        
-        await connection.send(infoRequest);
-        
-        // 注意：这里应该等待响应，但为了不阻塞，我们返回数据库中的信息
-        // 实时信息会通过事件更新
-      }
-    } catch (error) {
-      this.logger.warn(`Failed to request real-time info from connector: ${error}`);
-    }
-    
-    return MessageFactory.createResponse(request.id, request.op, { 
-      info: {
-        id: server.id,
-        name: server.name,
-        coreType: server.coreType,
-        coreName: server.coreName,
-        coreVersion: server.coreVersion || 'unknown',
-        status: server.status,
-        maxPlayers: server.maxPlayers,
-        onlineMode: server.onlineMode,
-        difficulty: server.difficulty,
-        pvpEnabled: server.pvpEnabled
-      }
-    }, {
-      success: true,
-      serverId: connection.serverId
-    });
+
   }
 
   private async handleServerGetStatus(
     request: UWBPRequest,
     connection: Connection
   ): Promise<UWBPResponse> {
-    // 修复虚假实现：从数据库获取状态，并尝试从连接器获取实时状态
-    const server = await this.services.server.getServer(connection.serverId);
-    if (!server) {
+    const liveServer = await this.services.server.getServer(connection.serverId);
+    if (!liveServer) {
+      return MessageFactory.createError(request.id, request.op, 'Server not found', 'SERVER_NOT_FOUND');
+    }
+    const liveBridge = this.services.server.getBridge(connection.serverId);
+    if (!liveBridge || !liveBridge.isConnectedToBridge()) {
+      return MessageFactory.createError(request.id, request.op, 'Connector is not connected', 'CONNECTOR_UNAVAILABLE');
+    }
+    try {
+      const info = await liveBridge.getServerInfo();
+      const reportedStatus = info.status ?? (info.online === true ? 'online' : 'offline');
+      const online = reportedStatus === 'online' && info.online !== false;
+      const status = online
+        ? 'online'
+        : reportedStatus === 'online'
+          ? 'offline'
+          : reportedStatus;
+      return MessageFactory.createResponse(request.id, request.op, {
+        status,
+        online,
+        uptime: info.uptime,
+        playerCount: info.onlinePlayers,
+        maxPlayers: info.maxPlayers,
+        tps: info.tps,
+        memoryUsage: info.memoryUsage,
+        worldInfo: info.worldInfo,
+        version: info.version,
+        lastSeen: Date.now()
+      }, {
+        success: true,
+        serverId: connection.serverId
+      });
+    } catch (error) {
       return MessageFactory.createError(
         request.id,
         request.op,
-        'Server not found',
-        'SERVER_NOT_FOUND'
+        error instanceof Error ? error.message : String(error),
+        'CONNECTOR_REQUEST_FAILED'
       );
     }
-    
-    // 尝试从连接器获取实时状态
-    try {
-      const bridge = this.services.server.getBridge(connection.serverId);
-      if (bridge && bridge.isConnectedToBridge()) {
-        const statusRequest = {
-          type: 'request' as const,
-          id: `status-${Date.now()}`,
-          op: 'server.getStatus' as any,
-          data: {},
-          serverId: connection.serverId,
-          timestamp: Date.now(),
-          version: '2.0'
-        };
-        
-        await connection.send(statusRequest);
-      }
-    } catch (error) {
-      this.logger.warn(`Failed to request real-time status from connector: ${error}`);
-    }
-    
-    return MessageFactory.createResponse(request.id, request.op, {
-      status: server.status,
-      online: server.status === 'online',
-      lastSeen: server.lastSeen
-    }, {
-      success: true,
-      serverId: connection.serverId
-    });
+
   }
 
   private async handleServerGetMetrics(
     request: UWBPRequest,
     connection: Connection
   ): Promise<UWBPResponse> {
-    // 修复虚假实现：尝试从连接器获取实时指标
-    try {
-      const bridge = this.services.server.getBridge(connection.serverId);
-      if (bridge && bridge.isConnectedToBridge()) {
-        // 发送请求到连接器获取实时指标
-        const metricsRequest = {
-          type: 'request' as const,
-          id: `metrics-${Date.now()}`,
-          op: 'server.getMetrics' as any,
-          data: {},
-          serverId: connection.serverId,
-          timestamp: Date.now(),
-          version: '2.0'
-        };
-        
-        await connection.send(metricsRequest);
-        
-        // 返回占位数据，实际数据会通过响应或事件更新
-        return MessageFactory.createResponse(request.id, request.op, { 
-          metrics: {
-            tps: 20.0,
-            cpuUsage: 0,
-            memoryUsage: 0,
-            memoryMax: 0,
-            playerCount: 0,
-            note: 'Real-time metrics requested from connector'
-          }
-        }, {
-          success: true,
-          serverId: connection.serverId
-        });
-      }
-    } catch (error) {
-      this.logger.warn(`Failed to request metrics from connector: ${error}`);
+    const liveServer = await this.services.server.getServer(connection.serverId);
+    if (!liveServer) {
+      return MessageFactory.createError(request.id, request.op, 'Server not found', 'SERVER_NOT_FOUND');
     }
-    
-    // 如果连接器不可用，返回默认值
-    return MessageFactory.createResponse(request.id, request.op, { 
-      metrics: {
-        tps: 0,
-        cpuUsage: 0,
-        memoryUsage: 0,
-        memoryMax: 0,
-        playerCount: 0,
-        note: 'Connector not available, showing default values'
-      }
-    }, {
-      success: true,
-      serverId: connection.serverId
-    });
+    const liveBridge = this.services.server.getBridge(connection.serverId);
+    if (!liveBridge || !liveBridge.isConnectedToBridge()) {
+      return MessageFactory.createError(request.id, request.op, 'Connector is not connected', 'CONNECTOR_UNAVAILABLE');
+    }
+    try {
+      const metrics = await liveBridge.getPerformanceMetrics();
+      return MessageFactory.createResponse(request.id, request.op, { metrics }, {
+        success: true,
+        serverId: connection.serverId
+      });
+    } catch (error) {
+      return MessageFactory.createError(
+        request.id,
+        request.op,
+        error instanceof Error ? error.message : String(error),
+        'CONNECTOR_REQUEST_FAILED'
+      );
+    }
+
   }
 
   private async handleServerSave(
@@ -848,6 +794,27 @@ export class RequestHandler {
     }
   }
 
+  /**
+   * Reject permission operations that target a server other than the one the
+   * connection is authenticated for. Prevents a connector from modifying or
+   * reading the ACL of unrelated servers.
+   */
+  private rejectCrossServerPermission(
+    request: UWBPRequest,
+    connection: Connection,
+    serverId: string
+  ): UWBPResponse | null {
+    if (serverId !== connection.serverId) {
+      return MessageFactory.createError(
+        request.id,
+        request.op,
+        'Permission operations must target the authenticated server',
+        'SERVER_ID_MISMATCH'
+      );
+    }
+    return null;
+  }
+
   private async handlePermissionGrant(
     request: UWBPRequest,
     connection: Connection
@@ -861,6 +828,11 @@ export class RequestHandler {
         'userId, serverId, and role are required',
         'INVALID_PARAMETERS'
       );
+    }
+
+    const crossServer = this.rejectCrossServerPermission(request, connection, serverId);
+    if (crossServer) {
+      return crossServer;
     }
 
     try {
@@ -921,6 +893,11 @@ export class RequestHandler {
       );
     }
 
+    const crossServer = this.rejectCrossServerPermission(request, connection, serverId);
+    if (crossServer) {
+      return crossServer;
+    }
+
     try {
       // 修复 TODO: 从连接元数据获取操作者 ID
       const removedBy = (connection as any).userId || (connection as any).authenticatedUser || 'system';
@@ -967,6 +944,11 @@ export class RequestHandler {
         'userId, serverId, and role are required',
         'INVALID_PARAMETERS'
       );
+    }
+
+    const crossServer = this.rejectCrossServerPermission(request, connection, serverId);
+    if (crossServer) {
+      return crossServer;
     }
 
     try {
@@ -1024,6 +1006,11 @@ export class RequestHandler {
         'serverId is required',
         'INVALID_PARAMETERS'
       );
+    }
+
+    const crossServer = this.rejectCrossServerPermission(request, connection, serverId);
+    if (crossServer) {
+      return crossServer;
     }
 
     try {
@@ -1087,6 +1074,11 @@ export class RequestHandler {
         'serverId is required',
         'INVALID_PARAMETERS'
       );
+    }
+
+    const crossServer = this.rejectCrossServerPermission(request, connection, serverId);
+    if (crossServer) {
+      return crossServer;
     }
 
     try {

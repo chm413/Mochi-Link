@@ -130,7 +130,8 @@ export class MonitoringService {
     private ctx: Context,
     private auditService: AuditService,
     private eventService: EventService,
-    config?: Partial<MonitoringConfig>
+    config?: Partial<MonitoringConfig>,
+    private bridgeGetter?: (serverId: string) => any
   ) {
     this.logger = ctx.logger('mochi-link:monitoring');
     
@@ -332,61 +333,22 @@ export class MonitoringService {
    * Request server info from connector
    */
   private async requestServerInfo(connection: Connection): Promise<ServerInfo> {
-    // This would send a request to the connector bridge
-    // For now, we'll simulate the response
-    return {
-      serverId: connection.serverId,
-      name: `Server ${connection.serverId}`,
-      version: '1.20.1',
-      coreType: 'Java',
-      coreName: 'Paper',
-      maxPlayers: 20,
-      onlinePlayers: Math.floor(Math.random() * 20),
-      uptime: Date.now() - (Math.random() * 86400000), // Random uptime up to 24h
-      tps: 20.0 - (Math.random() * 5), // Random TPS between 15-20
-      memoryUsage: {
-        used: Math.floor(Math.random() * 4000),
-        max: 4096,
-        free: 0,
-        percentage: 0
-      },
-      worldInfo: [
-        {
-          name: 'world',
-          dimension: 'overworld',
-          playerCount: Math.floor(Math.random() * 10),
-          loadedChunks: Math.floor(Math.random() * 1000)
-        }
-      ]
-    };
+    const bridge = this.bridgeGetter?.(connection.serverId) ?? (connection as any).bridge;
+    if (!bridge || !bridge.isConnectedToBridge?.()) {
+      throw new Error(`Connector is unavailable for ${connection.serverId}`);
+    }
+    return bridge.getServerInfo();
   }
 
   /**
    * Request performance metrics from connector
    */
   private async requestPerformanceMetrics(connection: Connection): Promise<PerformanceMetrics> {
-    // This would send a request to the connector bridge
-    // For now, we'll simulate the response
-    return {
-      serverId: connection.serverId,
-      timestamp: Date.now(),
-      tps: 20.0 - (Math.random() * 5),
-      cpuUsage: Math.random() * 100,
-      memoryUsage: {
-        used: Math.floor(Math.random() * 4000),
-        max: 4096,
-        free: 0,
-        percentage: 0
-      },
-      playerCount: Math.floor(Math.random() * 20),
-      ping: Math.floor(Math.random() * 100),
-      diskUsage: {
-        used: Math.floor(Math.random() * 50000),
-        total: 100000,
-        free: 0,
-        percentage: 0
-      }
-    };
+    const bridge = this.bridgeGetter?.(connection.serverId) ?? (connection as any).bridge;
+    if (!bridge || !bridge.isConnectedToBridge?.()) {
+      throw new Error(`Connector is unavailable for ${connection.serverId}`);
+    }
+    return bridge.getPerformanceMetrics();
   }
 
   /**
@@ -541,7 +503,7 @@ export class MonitoringService {
     // CPU high alert
     if (report.cpuUsage > this.config.alertThresholds.cpuHigh) {
       alerts.push({
-        type: 'alert.memoryHigh', // Reusing memory high for CPU (would need separate type)
+        type: 'alert.cpuHigh',
         severity: report.cpuUsage > 95 ? 'critical' : 'high',
         message: `High CPU usage: ${report.cpuUsage.toFixed(1)}%`,
         data: { cpuUsage: report.cpuUsage, threshold: this.config.alertThresholds.cpuHigh }
@@ -597,8 +559,9 @@ export class MonitoringService {
     const alertEvent: BaseEvent = {
       type,
       serverId,
-      timestamp: new Date(alert.timestamp).toISOString(),
-      version: '1.0'
+      timestamp: alert.timestamp,
+      version: '2.0',
+      data: alert.data
     };
 
     // Send through event service
@@ -660,12 +623,23 @@ export class MonitoringService {
     const statusEvent: BaseEvent = {
       type: 'server.status',
       serverId: report.serverId,
-      timestamp: new Date(report.timestamp).toISOString(),
-      version: '1.0'
+      timestamp: report.timestamp,
+      version: '2.0',
+      status: report.status,
+      data: {
+        uptime: report.uptime,
+        playerCount: report.playerCount,
+        maxPlayers: report.maxPlayers,
+        tps: report.tps,
+        memoryUsage: report.memoryUsage,
+        cpuUsage: report.cpuUsage,
+        ping: report.ping,
+        worldInfo: report.worldInfo,
+        version: report.version
+      }
     };
 
-    // This would normally be handled by the event service
-    // For now, we'll just log it
+    await this.eventService.handleIncomingEvent(statusEvent);
     this.logger.debug(`Status event: ${report.serverId} - ${report.status}`);
   }
 
@@ -722,11 +696,26 @@ export class MonitoringService {
     const alertCount = Array.from(this.activeAlerts.values())
       .filter(alert => alert.serverId === serverId).length;
 
-    // Simplified uptime calculation
-    const uptimePercentage = 95.0; // Would calculate from actual data
+    const latest = recentHistory.length > 0 ? recentHistory[recentHistory.length - 1] : null;
+    const uptimePercentage = recentHistory.length === 0
+      ? 0
+      : recentHistory.filter(metric => metric.tps > 0).length / recentHistory.length * 100;
 
     return {
-      currentStatus: null, // Would get from latest report
+      currentStatus: latest ? {
+        serverId,
+        timestamp: latest.timestamp,
+        status: latest.tps > 0 ? 'online' : 'error',
+        uptime: 0,
+        playerCount: latest.playerCount,
+        maxPlayers: 0,
+        tps: latest.tps,
+        memoryUsage: { used: 0, max: 0, free: 0, percentage: latest.memoryUsage },
+        cpuUsage: latest.cpuUsage,
+        ping: latest.ping,
+        worldInfo: [],
+        version: 'unknown'
+      } : null,
       averageMetrics,
       alertCount,
       uptimePercentage

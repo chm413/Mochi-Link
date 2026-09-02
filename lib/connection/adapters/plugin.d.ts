@@ -10,6 +10,7 @@ export declare class PluginConnectionAdapter extends BaseConnectionAdapter {
     private ws?;
     private reconnectTimer?;
     private heartbeatTimer?;
+    private lastPing?;
     private pendingRequests;
     constructor(serverId: string);
     protected doConnect(config: ConnectionConfig): Promise<void>;

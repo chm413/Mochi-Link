@@ -37,6 +37,7 @@ interface ConnectionInfo {
 }
 export declare class MochiWebSocketServer extends EventEmitter {
     private server;
+    private httpServer?;
     private config;
     private connections;
     private authManager;

@@ -253,8 +253,34 @@ describe('PluginConnectionAdapter', () => {
       expect(info.serverId).toBe(serverId);
       expect(info.mode).toBe('plugin');
       expect(info.isConnected).toBe(true);
-      expect(info.capabilities).toContain('realtime_events');
+      expect(info.capabilities).toContain('event_streaming');
       expect(info.capabilities).toContain('command_execution');
+    });
+
+    it('normalizes capability updates and correlates pong latency by requestId', () => {
+      const sentAt = Date.now() - 25;
+      (adapter as any).lastPing = { id: 'ping-1', sentAt };
+
+      (adapter as any).handleSystemMessage({
+        type: 'system',
+        id: 'capabilities-1',
+        op: 'capabilities',
+        systemOp: 'capabilities',
+        data: { capabilities: ['realtime_events', 'command.execute', 'unknown'] }
+      });
+      (adapter as any).handleSystemMessage({
+        type: 'system',
+        id: 'pong-1',
+        requestId: 'ping-1',
+        op: 'pong',
+        systemOp: 'pong',
+        data: {}
+      });
+
+      const info = adapter.getConnectionInfo();
+      expect(info.capabilities).toEqual(['event_streaming', 'command_execution']);
+      expect(info.stats.latency).toBeGreaterThanOrEqual(0);
+      expect((adapter as any).lastPing).toBeUndefined();
     });
   });
 });

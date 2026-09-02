@@ -17,6 +17,7 @@ import {
 } from '../types/index';
 import { BaseConnectorBridge } from './base';
 import {
+  BridgeCapability,
   BridgeConfig,
   PlayerAction,
   PlayerActionResult,
@@ -31,7 +32,8 @@ import {
   PluginOperation,
   PluginOperationResult,
   BridgeConnectionError,
-  BridgeTimeoutError
+  BridgeTimeoutError,
+  UnsupportedOperationError
 } from './types';
 
 // ============================================================================
@@ -47,6 +49,55 @@ export class BedrockConnectorBridge extends BaseConnectorBridge {
   constructor(config: BridgeConfig, connectionAdapter?: any) {
     super(config);
     this.connectionAdapter = connectionAdapter;
+  }
+
+  /** Send a canonical U-WBP request when the adapter supports it. */
+  private async sendProtocolRequest(op: string, data: Record<string, any> = {}, timeout = 10000): Promise<any> {
+    if (!this.connectionAdapter || typeof this.connectionAdapter.sendRequest !== 'function') {
+      return null;
+    }
+    return this.connectionAdapter.sendRequest(op, data, timeout);
+  }
+
+  private responseData(response: any): any {
+    const data = response?.data && typeof response.data === 'object' ? response.data : {};
+    return data.result && typeof data.result === 'object' ? data.result : data;
+  }
+
+  private normalizeMemory(value: any): MemoryInfo {
+    const memory = value && typeof value === 'object' ? value : {};
+    const used = Number(memory.used ?? 0);
+    const max = Number(memory.max ?? 0);
+    const free = Number(memory.free ?? Math.max(0, max - used));
+    const percentage = Number(memory.percentage ?? (max > 0 ? used / max * 100 : 0));
+    return { used, max, free, percentage };
+  }
+
+  private normalizePlayer(value: any): Player | null {
+    if (!value || typeof value !== 'object' || !value.id || !value.name) return null;
+    return {
+      id: String(value.id),
+      name: String(value.name),
+      displayName: String(value.displayName ?? value.name),
+      world: String(value.world ?? 'unknown'),
+      position: {
+        x: Number(value.position?.x ?? 0),
+        y: Number(value.position?.y ?? 0),
+        z: Number(value.position?.z ?? 0),
+        ...(value.position?.yaw !== undefined ? { yaw: Number(value.position.yaw) } : {}),
+        ...(value.position?.pitch !== undefined ? { pitch: Number(value.position.pitch) } : {})
+      },
+      ping: Math.max(0, Number(value.ping ?? 0)),
+      isOp: Boolean(value.isOp),
+      permissions: Array.isArray(value.permissions) ? value.permissions.map(String) : [],
+      edition: 'Bedrock',
+      ...(value.deviceType !== undefined ? { deviceType: String(value.deviceType) } : {}),
+      ...(value.ipAddress !== undefined ? { ipAddress: String(value.ipAddress) } : {}),
+      ...(value.health !== undefined ? { health: Number(value.health) } : {}),
+      ...(value.level !== undefined ? { level: Number(value.level) } : {}),
+      ...(value.gameMode !== undefined ? { gameMode: String(value.gameMode) } : {}),
+      ...(value.isOnline !== undefined ? { isOnline: Boolean(value.isOnline) } : {})
+    };
   }
 
   // ============================================================================
@@ -113,6 +164,41 @@ export class BedrockConnectorBridge extends BaseConnectorBridge {
   async getServerInfo(): Promise<ServerInfo> {
     this.requireConnection();
 
+    if (typeof this.connectionAdapter?.sendRequest === 'function') {
+      const response = await this.sendProtocolRequest('server.getInfo');
+      const responsePayload = this.responseData(response);
+      const info = responsePayload?.info || responsePayload;
+      if (!info || typeof info !== 'object' || !info.serverId) {
+        throw new BridgeConnectionError('Bedrock connector returned no server info', this.config.serverId);
+      }
+      let metrics: any = {};
+      if (info.tps === undefined || info.memoryUsage === undefined) {
+        try {
+          const metricsResponse = await this.sendProtocolRequest('server.getMetrics');
+          const metricsPayload = this.responseData(metricsResponse);
+          metrics = metricsPayload?.metrics || metricsPayload || {};
+        } catch {
+          // Keep explicitly unavailable metric values rather than inventing a
+          // successful default record.
+        }
+      }
+      return {
+        serverId: String(info.serverId),
+        name: String(info.name ?? this.config.serverId),
+        version: String(info.version ?? this.config.coreVersion ?? 'unknown'),
+        coreType: 'Bedrock',
+        coreName: String(info.coreName ?? this.config.coreName ?? 'Bedrock'),
+        maxPlayers: Number(info.maxPlayers ?? 0),
+        onlinePlayers: Number(info.onlinePlayers ?? info.playerCount ?? 0),
+        uptime: Number(info.uptime ?? 0),
+        tps: Number(info.tps ?? metrics.tps ?? 0),
+        memoryUsage: this.normalizeMemory(info.memoryUsage ?? metrics.memoryUsage),
+        worldInfo: Array.isArray(info.worldInfo) ? info.worldInfo : [],
+        ...(info.status !== undefined ? { status: String(info.status) } : {}),
+        ...(info.online !== undefined ? { online: Boolean(info.online) } : {})
+      };
+    }
+
     try {
       // Get basic server info using Bedrock-specific commands
       const versionResult = await this.executeCommand('version');
@@ -133,7 +219,9 @@ export class BedrockConnectorBridge extends BaseConnectorBridge {
         coreName: versionInfo.coreName,
         maxPlayers: playerInfo.maxPlayers,
         onlinePlayers: playerInfo.onlinePlayers,
-        uptime: metrics.timestamp - this.lastUpdate.getTime(),
+        // Bukkit/Bedrock command output does not expose a portable start time.
+        // Do not derive uptime from two unrelated timestamps.
+        uptime: 0,
         tps: metrics.tps,
         memoryUsage: metrics.memoryUsage,
         worldInfo: await this.getWorldInfo()
@@ -152,6 +240,24 @@ export class BedrockConnectorBridge extends BaseConnectorBridge {
 
   async getPerformanceMetrics(): Promise<PerformanceMetrics> {
     this.requireConnection();
+
+    if (typeof this.connectionAdapter?.sendRequest === 'function') {
+      const response = await this.sendProtocolRequest('server.getMetrics');
+      const responsePayload = this.responseData(response);
+      const metrics = responsePayload?.metrics || responsePayload;
+      if (!metrics || typeof metrics !== 'object' || !metrics.serverId) {
+        throw new BridgeConnectionError('Bedrock connector returned no performance metrics', this.config.serverId);
+      }
+      return {
+        serverId: String(metrics.serverId),
+        timestamp: Number(metrics.timestamp ?? Date.now()),
+        tps: Number(metrics.tps ?? 0),
+        cpuUsage: Number(metrics.cpuUsage ?? 0),
+        memoryUsage: this.normalizeMemory(metrics.memoryUsage),
+        playerCount: Number(metrics.playerCount ?? 0),
+        ping: Number(metrics.ping ?? 0)
+      };
+    }
 
     // Return cached metrics if recent (within 30 seconds)
     const now = new Date();
@@ -184,18 +290,10 @@ export class BedrockConnectorBridge extends BaseConnectorBridge {
       return metrics;
       
     } catch (error) {
-      // Return basic metrics if detailed ones fail
-      const basicMetrics: PerformanceMetrics = {
-        serverId: this.config.serverId,
-        timestamp: now.getTime(),
-        tps: 20.0,
-        cpuUsage: 0,
-        memoryUsage: { used: 0, max: 0, free: 0, percentage: 0 },
-        playerCount: 0,
-        ping: 0
-      };
-      
-      return basicMetrics;
+      throw new BridgeConnectionError(
+        `Performance metrics are unavailable: ${error instanceof Error ? error.message : String(error)}`,
+        this.config.serverId
+      );
     }
   }
 
@@ -204,14 +302,20 @@ export class BedrockConnectorBridge extends BaseConnectorBridge {
 
     try {
       const startTime = Date.now();
-      const result = await this.connectionAdapter.sendCommand(command);
+      const result = await this.connectionAdapter.sendCommand(command, timeout);
       const executionTime = Date.now() - startTime;
+      const rawOutput = result?.output;
+      const output = Array.isArray(rawOutput)
+        ? rawOutput.map(String)
+        : rawOutput === undefined || rawOutput === null
+          ? []
+          : String(rawOutput).split(/\r?\n/).filter(Boolean);
 
       return {
-        success: result.success || false,
-        output: result.output || [],
+        success: result?.success === true,
+        output,
         executionTime,
-        error: result.error
+        error: result?.error
       };
       
     } catch (error) {
@@ -235,33 +339,42 @@ export class BedrockConnectorBridge extends BaseConnectorBridge {
   async getOnlinePlayers(): Promise<Player[]> {
     this.requireConnection();
 
+    if (typeof this.connectionAdapter?.sendRequest === 'function') {
+      const response = await this.sendProtocolRequest('player.list');
+      const responsePayload = this.responseData(response);
+      if (!Array.isArray(responsePayload?.players)) {
+        throw new BridgeConnectionError('Bedrock connector returned no player list', this.config.serverId);
+      }
+      return responsePayload.players
+        .map((player: any) => this.normalizePlayer(player))
+        .filter((player: Player | null): player is Player => player !== null);
+    }
+
     try {
       const listResult = await this.executeCommand('list');
       const playerNames = this.parsePlayerNames(listResult.output);
+      const playerCount = this.parsePlayerList(listResult.output).onlinePlayers;
+      if (playerCount <= 0) {
+        return [];
+      }
+      // A player count without names is not enough to create player
+      // identities. Do not manufacture `unknown-*` records.
+      if (playerNames.length === 0) return [];
+      const normalizedNames = playerNames.slice(0, playerCount);
       
       const players: Player[] = [];
       
       // Get detailed info for each player (if possible)
-      for (const name of playerNames) {
+      for (const name of normalizedNames) {
         try {
           const player = await this.getBasicPlayerInfo(name);
           if (player) {
             players.push(player);
           }
         } catch {
-          // If we can't get detailed info, create basic player object
-          players.push({
-            id: name, // Use name as ID if XUID not available
-            name,
-            displayName: name,
-            world: 'Overworld',
-            position: { x: 0, y: 0, z: 0 },
-            ping: 0,
-            isOp: false,
-            permissions: [],
-            edition: 'Bedrock',
-            deviceType: 'Unknown'
-          });
+          // The command path only provides a name. Keep the real identity and
+          // explicit unknown fields from getBasicPlayerInfo; never invent a
+          // world, device or position fallback here.
         }
       }
       
@@ -277,35 +390,28 @@ export class BedrockConnectorBridge extends BaseConnectorBridge {
 
   async getPlayerDetail(playerId: string): Promise<PlayerDetail | null> {
     this.requireConnection();
-
-    try {
-      // Try to get player info using various commands
-      const player = await this.getBasicPlayerInfo(playerId);
-      if (!player) {
-        return null;
-      }
-
-      // Enhance with additional details if available
-      const detail: PlayerDetail = {
+    if (typeof this.connectionAdapter?.sendRequest === 'function') {
+      const response = await this.sendProtocolRequest('player.getInfo', { playerId });
+      const responsePayload = this.responseData(response);
+      const rawPlayer = responsePayload?.player || responsePayload?.playerInfo;
+      const player = this.normalizePlayer(rawPlayer);
+      if (!player) return null;
+      return {
         ...player,
-        firstJoinAt: new Date(), // Would need to be retrieved from server data
-        lastSeenAt: new Date(),
-        totalPlayTime: 0, // Would need to be calculated
-        isPremium: false, // Bedrock edition doesn't have premium concept
-        identityConfidence: 0.8, // Lower confidence for Bedrock due to name changes
-        identityMarkers: {
-          serverIds: [this.config.serverId],
-          firstSeen: new Date(),
-          lastSeen: new Date(),
-          device: player.deviceType
-        }
+        ...(rawPlayer.firstJoinAt ? { firstJoinAt: new Date(rawPlayer.firstJoinAt) } : {}),
+        ...(rawPlayer.lastSeenAt ? { lastSeenAt: new Date(rawPlayer.lastSeenAt) } : {}),
+        ...(rawPlayer.totalPlayTime !== undefined
+          ? { totalPlayTime: Number(rawPlayer.totalPlayTime) }
+          : {}),
+        ...(rawPlayer.identityConfidence !== undefined
+          ? { identityConfidence: Number(rawPlayer.identityConfidence) }
+          : {}),
+        ...(rawPlayer.identityMarkers && typeof rawPlayer.identityMarkers === 'object'
+          ? { identityMarkers: rawPlayer.identityMarkers }
+          : {})
       };
-
-      return detail;
-      
-    } catch (error) {
-      return null;
     }
+    return null;
   }
 
   // ============================================================================
@@ -479,8 +585,10 @@ export class BedrockConnectorBridge extends BaseConnectorBridge {
     
     try {
       const gameruleResult = await this.executeCommand('gamerule');
-      // Parse gamerule output to get current settings
-      // This is a simplified implementation
+      if (!gameruleResult.success) {
+        throw new UnsupportedOperationError('world.getSettings', this.config.serverId, 'Bedrock');
+      }
+      this.parseGamerules(gameruleResult.output, gamerules);
       
       return {
         name: worldName || 'Bedrock level',
@@ -491,18 +599,14 @@ export class BedrockConnectorBridge extends BaseConnectorBridge {
         weather: 'clear',
         gamerules
       };
-    } catch {
-      // Return default settings if we can't get them
-      return {
-        name: worldName || 'Bedrock level',
-        gamemode: 'survival',
-        difficulty: 'normal',
-        pvp: true,
-        time: 0,
-        weather: 'clear',
-        gamerules: {}
-      };
-    }
+    } catch (error) {
+      throw error instanceof UnsupportedOperationError
+        ? error
+        : new BridgeConnectionError(
+          `World settings are unavailable: ${error instanceof Error ? error.message : String(error)}`,
+          this.config.serverId
+        );
+      }
   }
 
   protected async doUpdateWorldSettings(settings: Partial<WorldSettings>, worldName?: string): Promise<boolean> {
@@ -546,6 +650,7 @@ export class BedrockConnectorBridge extends BaseConnectorBridge {
       
       switch (operation.type) {
         case 'stop':
+        case 'shutdown':
           command = 'stop';
           if (operation.message) {
             await this.executeCommand(`say ${operation.message}`);
@@ -589,19 +694,23 @@ export class BedrockConnectorBridge extends BaseConnectorBridge {
   }
 
   protected async doGetPlugins(): Promise<PluginInfo[]> {
-    try {
-      // Plugin commands vary by server implementation
-      if (this.config.coreName.toLowerCase().includes('pmmp')) {
-        const result = await this.executeCommand('plugins');
-        return this.parsePluginList(result.output);
-      } else if (this.config.coreName.toLowerCase().includes('llbds')) {
-        const result = await this.executeCommand('ll list');
-        return this.parseLLBDSPluginList(result.output);
+    // Plugin enumeration is core-specific; never report an empty list as a
+    // successful answer when the bridge has no defined command for this core.
+    if (this.config.coreName.toLowerCase().includes('pmmp')) {
+      const result = await this.executeCommand('plugins');
+      if (!result.success) {
+        throw new UnsupportedOperationError('plugin.list', this.config.serverId, this.config.coreName);
       }
-      return [];
-    } catch {
-      return [];
+      return this.parsePluginList(result.output);
     }
+    if (this.config.coreName.toLowerCase().includes('llbds')) {
+      const result = await this.executeCommand('ll list');
+      if (!result.success) {
+        throw new UnsupportedOperationError('plugin.list', this.config.serverId, this.config.coreName);
+      }
+      return this.parseLLBDSPluginList(result.output);
+    }
+    throw new UnsupportedOperationError('plugin.list', this.config.serverId, this.config.coreName);
   }
 
   protected async doPluginOperation(operation: PluginOperation): Promise<PluginOperationResult> {
@@ -720,12 +829,12 @@ export class BedrockConnectorBridge extends BaseConnectorBridge {
 
   private parsePlayerList(output: string[]): { onlinePlayers: number; maxPlayers: number } {
     // Parse "list" command output for Bedrock
-    const listLine = output.find(line => line.includes('players online')) || '';
-    const match = listLine.match(/(\d+) of (\d+) players online/);
+    const listLine = output.find(line => line.toLowerCase().includes('players online')) || '';
+    const match = listLine.match(/(\d+)\s+of\s+(?:a\s+max\s+of\s+)?(\d+)\s+players\s+online/i);
     
     return {
       onlinePlayers: match ? parseInt(match[1]) : 0,
-      maxPlayers: match ? parseInt(match[2]) : 20
+      maxPlayers: match ? parseInt(match[2], 10) : 0
     };
   }
 
@@ -741,28 +850,55 @@ export class BedrockConnectorBridge extends BaseConnectorBridge {
   }
 
   private parsePerformanceInfo(output: string[]): { tps: number; cpuUsage: number; memoryUsage: MemoryInfo } {
-    // Parse performance information from status command output
-    // This is a simplified implementation
+    const text = (output || []).join(' ');
+    const tpsMatch = text.match(/\bTPS\b\s*[:=]?\s*(\d+(?:\.\d+)?)/i);
+    const cpuMatch = text.match(/\bCPU\b\s*[:=]?\s*(\d+(?:\.\d+)?)\s*%?/i);
+    const memoryMatch = text.match(/(?:memory|mem)\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(?:MB|MiB)?\s*(?:\/|of)\s*(\d+(?:\.\d+)?)\s*(?:MB|MiB)?/i);
+    const used = memoryMatch ? Number(memoryMatch[1]) : 0;
+    const max = memoryMatch ? Number(memoryMatch[2]) : 0;
     return {
-      tps: 20.0,
-      cpuUsage: 0,
+      // Vanilla Bedrock does not expose TPS/CPU in a stable command format;
+      // zero means "not reported" when the command itself succeeded.
+      tps: tpsMatch ? Number(tpsMatch[1]) : 0,
+      cpuUsage: cpuMatch ? Number(cpuMatch[1]) : 0,
       memoryUsage: {
-        used: 0,
-        max: 0,
-        free: 0,
-        percentage: 0
+        used,
+        max,
+        free: Math.max(0, max - used),
+        percentage: max > 0 ? (used / max) * 100 : 0
       }
     };
   }
 
   private async getWorldInfo(): Promise<WorldInfo[]> {
-    // Get world information - simplified implementation for Bedrock
-    return [{
-      name: 'Bedrock level',
-      dimension: 'overworld',
-      playerCount: 0,
-      loadedChunks: 0
-    }];
+    // No portable Bedrock command reports loaded worlds/chunks. Keep the
+    // collection empty until a connector supplies real world metadata.
+    return [];
+  }
+
+  private parseGamerules(output: string[], target: Record<string, any>): void {
+    for (const line of output || []) {
+      const match = line.match(/^\s*([A-Za-z0-9_]+)\s*[:=]\s*(.+?)\s*$/);
+      if (!match) continue;
+      const raw = match[2].trim();
+      target[match[1]] = raw === 'true' ? true : raw === 'false' ? false :
+        (raw !== '' && !Number.isNaN(Number(raw)) ? Number(raw) : raw);
+    }
+  }
+
+  getCapabilities(): BridgeCapability[] {
+    const supported = super.getCapabilities();
+    if (typeof this.connectionAdapter?.sendRequest !== 'function') {
+      return supported;
+    }
+    const declared = Array.isArray(this.connectionAdapter.capabilities)
+      ? this.connectionAdapter.capabilities.map(String)
+      : [];
+    return supported.filter(capability => declared.includes(capability));
+  }
+
+  hasCapability(capability: BridgeCapability): boolean {
+    return this.getCapabilities().includes(capability);
   }
 
   private async getBasicPlayerInfo(playerName: string): Promise<Player | null> {
@@ -771,13 +907,12 @@ export class BedrockConnectorBridge extends BaseConnectorBridge {
       id: playerName,
       name: playerName,
       displayName: playerName,
-      world: 'Overworld',
+      world: 'unknown',
       position: { x: 0, y: 0, z: 0 },
       ping: 0,
       isOp: false,
       permissions: [],
       edition: 'Bedrock',
-      deviceType: 'Unknown'
     };
   }
 

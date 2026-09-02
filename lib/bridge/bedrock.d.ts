@@ -6,13 +6,18 @@
  */
 import { Player, PlayerDetail, CommandResult, ServerInfo, PerformanceMetrics } from '../types/index';
 import { BaseConnectorBridge } from './base';
-import { BridgeConfig, PlayerAction, PlayerActionResult, WhitelistEntry, BanEntry, WorldOperation, WorldOperationResult, WorldSettings, ServerOperation, ServerOperationResult, PluginInfo, PluginOperation, PluginOperationResult } from './types';
+import { BridgeCapability, BridgeConfig, PlayerAction, PlayerActionResult, WhitelistEntry, BanEntry, WorldOperation, WorldOperationResult, WorldSettings, ServerOperation, ServerOperationResult, PluginInfo, PluginOperation, PluginOperationResult } from './types';
 export declare class BedrockConnectorBridge extends BaseConnectorBridge {
     private connectionAdapter;
     private serverCache;
     private lastMetricsUpdate;
     private metricsCache?;
     constructor(config: BridgeConfig, connectionAdapter?: any);
+    /** Send a canonical U-WBP request when the adapter supports it. */
+    private sendProtocolRequest;
+    private responseData;
+    private normalizeMemory;
+    private normalizePlayer;
     connect(): Promise<void>;
     disconnect(): Promise<void>;
     isHealthy(): Promise<boolean>;
@@ -44,6 +49,9 @@ export declare class BedrockConnectorBridge extends BaseConnectorBridge {
     private parsePlayerNames;
     private parsePerformanceInfo;
     private getWorldInfo;
+    private parseGamerules;
+    getCapabilities(): BridgeCapability[];
+    hasCapability(capability: BridgeCapability): boolean;
     private getBasicPlayerInfo;
     private parseWhitelistEntries;
     private parseBanEntries;

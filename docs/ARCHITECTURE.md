@@ -66,7 +66,7 @@ Unified WebSocket Bridge Protocol v2。它定义消息外壳、操作名、请�
 - `serverId`：Mochi-Link 内的稳定服务器标识，不等同于主机名、端口或 Minecraft MOTD。
 - `userId`：Koishi 会话中的用户标识；必须结合平台/频道上下文处理，不应假定全局唯一。
 - `playerId`：优先使用在线模式 UUID 或 Bedrock XUID。名称和 IP 只能作为辅助线索。
-- `capabilities`：认证成功后由 Connector 声明的实际能力；认证前声明不可信。
+- `capabilities`：Connector 可随请求头或握手声明，Koishi 仅在认证成功后采信，并与 Bridge 本地实现能力取交集；认证前声明不可信。
 - `binding`：群组/频道与服务器的路由记录。设计目标是多对多；当前实现是一个群组最多绑定一台服务器，而一台服务器可绑定多个群组。
 - `token`：一次性展示的认证秘密。持久化层只允许保存 `token_hash`、过期时间和策略字段。
 
@@ -91,6 +91,6 @@ Unified WebSocket Bridge Protocol v2。它定义消息外壳、操作名、请�
 2. 插件注册模型、服务、命令、WebSocket 和 HTTP 处理器。
 3. 管理员登记服务器并一次性取得 Connector token。
 4. Connector 建立连接并完成认证。
-5. 认证后的能力声明决定可路由操作。
+5. Koishi 采用已认证的能力声明，并与 Bridge 实现能力取交集后决定可路由操作。
 6. 请求使用 `requestId` 关联响应；断线时未完成请求超时失败。
 7. 插件卸载时关闭监听器、连接、计时器和服务。

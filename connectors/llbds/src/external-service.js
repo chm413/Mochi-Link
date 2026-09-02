@@ -1,63 +1,75 @@
 "use strict";
-var __assign = (this && this.__assign) || function () {
-    __assign = Object.assign || function(t) {
-        for (var s, i = 1, n = arguments.length; i < n; i++) {
-            s = arguments[i];
-            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
-                t[p] = s[p];
-        }
-        return t;
-    };
-    return __assign.apply(this, arguments);
-};
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __generator = (this && this.__generator) || function (thisArg, body) {
-    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g = Object.create((typeof Iterator === "function" ? Iterator : Object).prototype);
-    return g.next = verb(0), g["throw"] = verb(1), g["return"] = verb(2), typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
-    function verb(n) { return function (v) { return step([n, v]); }; }
-    function step(op) {
-        if (f) throw new TypeError("Generator is already executing.");
-        while (g && (g = 0, op[0] && (_ = 0)), _) try {
-            if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
-            if (y = 0, t) op = [op[0] & 2, t.value];
-            switch (op[0]) {
-                case 0: case 1: t = op; break;
-                case 4: _.label++; return { value: op[1], done: false };
-                case 5: _.label++; y = op[1]; op = [0]; continue;
-                case 7: op = _.ops.pop(); _.trys.pop(); continue;
-                default:
-                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
-                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
-                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
-                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
-                    if (t[2]) _.ops.pop();
-                    _.trys.pop(); continue;
-            }
-            op = body.call(thisArg, _);
-        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
-        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
     }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MochiLinkExternalService = void 0;
-var express = require("express");
-var cors = require("cors");
-var helmet = require("helmet");
-var compression = require("compression");
-var cron = require("node-cron");
-var winston = require("winston");
-var http_1 = require("http");
-var LLBDSConfig_1 = require("./config/LLBDSConfig");
-var MochiLinkConnectionManager_1 = require("./network/MochiLinkConnectionManager");
-var ExternalPerformanceMonitor_1 = require("./monitoring/ExternalPerformanceMonitor");
+const express_1 = __importDefault(require("express"));
+const cors = __importStar(require("cors"));
+const helmet = __importStar(require("helmet"));
+const compression = __importStar(require("compression"));
+const cron = __importStar(require("node-cron"));
+const winston = __importStar(require("winston"));
+const http_1 = require("http");
+const LLBDSConfig_1 = require("./config/LLBDSConfig");
+const MochiLinkConnectionManager_1 = require("./network/MochiLinkConnectionManager");
+const ExternalPerformanceMonitor_1 = require("./monitoring/ExternalPerformanceMonitor");
+async function getFetch() {
+    const nativeFetch = globalThis.fetch;
+    if (typeof nativeFetch === 'function') {
+        return nativeFetch.bind(globalThis);
+    }
+    // node-fetch v3 is ESM-only. Keep the CommonJS connector compatible with
+    // Node versions that do not provide a global fetch without using require().
+    const dynamicImport = new Function('specifier', 'return import(specifier)');
+    return (await dynamicImport('node-fetch')).default;
+}
+async function fetchWithTimeout(url, init = {}, timeout = 30000) {
+    const fetch = await getFetch();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+        const requestInit = { ...init };
+        delete requestInit.timeout;
+        return await fetch(url, { ...requestInit, signal: controller.signal });
+    }
+    finally {
+        clearTimeout(timer);
+    }
+}
 /**
  * Mochi-Link External Network Service for LLBDS
  *
@@ -71,8 +83,8 @@ var ExternalPerformanceMonitor_1 = require("./monitoring/ExternalPerformanceMoni
  * @author chm413
  * @version 1.0.0
  */
-var MochiLinkExternalService = /** @class */ (function () {
-    function MochiLinkExternalService() {
+class MochiLinkExternalService {
+    constructor() {
         this.httpPort = 25581; // External service HTTP port
         this.lseBridgePort = 25580; // LSE bridge port
         this.isRunning = false;
@@ -88,7 +100,7 @@ var MochiLinkExternalService = /** @class */ (function () {
     /**
      * Initialize Winston logger
      */
-    MochiLinkExternalService.prototype.initializeLogger = function () {
+    initializeLogger() {
         this.logger = winston.createLogger({
             level: 'info',
             format: winston.format.combine(winston.format.timestamp(), winston.format.errors({ stack: true }), winston.format.json()),
@@ -106,12 +118,12 @@ var MochiLinkExternalService = /** @class */ (function () {
                 })
             ]
         });
-    };
+    }
     /**
      * Initialize Express application
      */
-    MochiLinkExternalService.prototype.initializeExpress = function () {
-        this.app = express();
+    initializeExpress() {
+        this.app = (0, express_1.default)();
         // Security middleware
         this.app.use(helmet());
         this.app.use(cors({
@@ -119,678 +131,719 @@ var MochiLinkExternalService = /** @class */ (function () {
             credentials: true
         }));
         this.app.use(compression());
-        this.app.use(express.json({ limit: '10mb' }));
-        this.app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+        this.app.use(express_1.default.json({ limit: '10mb' }));
+        this.app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
         // Setup routes
         this.setupRoutes();
-    };
+    }
     /**
      * Setup Express routes
      */
-    MochiLinkExternalService.prototype.setupRoutes = function () {
-        var _this = this;
+    setupRoutes() {
         // Health check endpoint
-        this.app.get('/health', function (req, res) {
+        this.app.get('/health', (_req, res) => {
             res.json({
                 status: 'ok',
                 service: 'mochi-link-external-service',
                 version: '1.0.0',
                 uptime: process.uptime(),
-                connected: _this.isConnected,
+                connected: this.isConnected,
                 timestamp: new Date().toISOString()
             });
         });
         // Server data endpoints
-        this.app.get('/api/server/status', function (req, res) {
+        this.app.get('/api/server/status', (_req, res) => {
             res.json({
                 success: true,
-                data: _this.serverData
+                data: this.serverData
             });
         });
-        this.app.post('/api/server/update', function (req, res) {
+        this.app.post('/api/server/update', (_req, res) => {
             try {
-                _this.serverData = __assign(__assign({}, _this.serverData), req.body);
-                _this.logger.debug('Server data updated:', req.body);
+                this.serverData = { ...this.serverData, ..._req.body };
+                this.logger.debug('Server data updated:', _req.body);
                 res.json({ success: true });
             }
             catch (error) {
-                _this.logger.error('Failed to update server data:', error);
-                res.status(500).json({ success: false, error: error.message });
+                this.logger.error('Failed to update server data:', error);
+                res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
             }
         });
         // Player data endpoints
-        this.app.get('/api/players', function (req, res) {
+        this.app.get('/api/players', (_req, res) => {
             res.json({
                 success: true,
-                data: Array.from(_this.playerData.values())
+                data: Array.from(this.playerData.values())
             });
         });
-        this.app.post('/api/players/update', function (req, res) {
+        this.app.post('/api/players/update', (req, res) => {
             try {
-                var _a = req.body, playerId = _a.playerId, data = _a.data;
-                _this.playerData.set(playerId, __assign(__assign({}, _this.playerData.get(playerId)), data));
-                _this.logger.debug("Player data updated for ".concat(playerId, ":"), data);
+                const { playerId, data } = req.body;
+                this.playerData.set(playerId, { ...this.playerData.get(playerId), ...data });
+                this.logger.debug(`Player data updated for ${playerId}:`, data);
                 res.json({ success: true });
             }
             catch (error) {
-                _this.logger.error('Failed to update player data:', error);
-                res.status(500).json({ success: false, error: error.message });
+                this.logger.error('Failed to update player data:', error);
+                res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
             }
         });
-        this.app.delete('/api/players/:playerId', function (req, res) {
+        this.app.delete('/api/players/:playerId', (req, res) => {
             try {
-                var playerId = req.params.playerId;
-                _this.playerData.delete(playerId);
-                _this.logger.debug("Player data removed for ".concat(playerId));
+                const { playerId } = req.params;
+                this.playerData.delete(playerId);
+                this.logger.debug(`Player data removed for ${playerId}`);
                 res.json({ success: true });
             }
             catch (error) {
-                _this.logger.error('Failed to remove player data:', error);
-                res.status(500).json({ success: false, error: error.message });
+                this.logger.error('Failed to remove player data:', error);
+                res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
             }
         });
         // Event forwarding endpoint
-        this.app.post('/api/events/forward', function (req, res) {
+        this.app.post('/api/events/forward', async (req, res) => {
             try {
-                var event_1 = req.body;
-                _this.forwardEventToMochiLink(event_1);
+                const event = req.body;
+                await this.forwardEventToMochiLink(event);
                 res.json({ success: true });
             }
             catch (error) {
-                _this.logger.error('Failed to forward event:', error);
-                res.status(500).json({ success: false, error: error.message });
+                this.logger.error('Failed to forward event:', error);
+                res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
             }
         });
         // Command execution endpoint
-        this.app.post('/api/commands/execute', function (req, res) { return __awaiter(_this, void 0, void 0, function () {
-            var _a, command, _b, timeout, result, error_1;
-            return __generator(this, function (_c) {
-                switch (_c.label) {
-                    case 0:
-                        _c.trys.push([0, 2, , 3]);
-                        _a = req.body, command = _a.command, _b = _a.timeout, timeout = _b === void 0 ? 30000 : _b;
-                        return [4 /*yield*/, this.executeCommandOnServer(command, timeout)];
-                    case 1:
-                        result = _c.sent();
-                        res.json({ success: true, result: result });
-                        return [3 /*break*/, 3];
-                    case 2:
-                        error_1 = _c.sent();
-                        this.logger.error('Failed to execute command:', error_1);
-                        res.status(500).json({ success: false, error: error_1.message });
-                        return [3 /*break*/, 3];
-                    case 3: return [2 /*return*/];
-                }
-            });
-        }); });
+        this.app.post('/api/commands/execute', async (req, res) => {
+            try {
+                const { command, timeout = 30000 } = req.body;
+                const result = await this.executeCommandOnServer(command, timeout);
+                res.json({ success: true, result });
+            }
+            catch (error) {
+                this.logger.error('Failed to execute command:', error);
+                res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
+            }
+        });
         // Performance data endpoint
-        this.app.get('/api/performance', function (req, res) {
+        this.app.get('/api/performance', (_req, res) => {
             res.json({
                 success: true,
-                data: _this.performanceData
+                data: this.performanceData
             });
         });
         // Shutdown endpoint
-        this.app.post('/shutdown', function (req, res) {
+        this.app.post('/shutdown', (_req, res) => {
             res.json({ success: true, message: 'Shutting down...' });
-            setTimeout(function () {
-                _this.shutdown();
+            setTimeout(() => {
+                this.shutdown();
             }, 1000);
         });
-    };
+    }
     /**
      * Start the external service
      */
-    MochiLinkExternalService.prototype.start = function () {
-        return __awaiter(this, void 0, void 0, function () {
-            var error_2;
-            var _this = this;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        _a.trys.push([0, 4, , 5]);
-                        this.logger.info('Starting Mochi-Link External Service...');
-                        this.logger.info('正在启动大福连外部服务...');
-                        // Load configuration
-                        return [4 /*yield*/, this.config.load()];
-                    case 1:
-                        // Load configuration
-                        _a.sent();
-                        this.httpPort = this.config.getExternalServicePort();
-                        this.lseBridgePort = this.config.getHttpPort();
-                        // Start HTTP server
-                        this.server = (0, http_1.createServer)(this.app);
-                        return [4 /*yield*/, new Promise(function (resolve, reject) {
-                                _this.server.listen(_this.httpPort, function (error) {
-                                    if (error) {
-                                        reject(error);
-                                    }
-                                    else {
-                                        resolve();
-                                    }
-                                });
-                            })];
-                    case 2:
-                        _a.sent();
-                        // Initialize connection manager
-                        this.connectionManager = new MochiLinkConnectionManager_1.MochiLinkConnectionManager(this.config, this.logger);
-                        // Initialize performance monitor
-                        this.performanceMonitor = new ExternalPerformanceMonitor_1.ExternalPerformanceMonitor(this.logger);
-                        // Start connection to Mochi-Link
-                        return [4 /*yield*/, this.startMochiLinkConnection()];
-                    case 3:
-                        // Start connection to Mochi-Link
-                        _a.sent();
-                        // Start performance monitoring
-                        this.startPerformanceMonitoring();
-                        // Start periodic tasks
-                        this.startPeriodicTasks();
-                        this.isRunning = true;
-                        this.logger.info("External service started on port ".concat(this.httpPort));
-                        this.logger.info("\u5916\u90E8\u670D\u52A1\u5DF2\u5728\u7AEF\u53E3 ".concat(this.httpPort, " \u542F\u52A8"));
-                        return [3 /*break*/, 5];
-                    case 4:
-                        error_2 = _a.sent();
-                        this.logger.error('Failed to start external service:', error_2);
-                        throw error_2;
-                    case 5: return [2 /*return*/];
-                }
+    async start() {
+        try {
+            this.logger.info('Starting Mochi-Link External Service...');
+            this.logger.info('正在启动大福连外部服务...');
+            // Load configuration
+            await this.config.load();
+            this.httpPort = this.config.getExternalServicePort();
+            this.lseBridgePort = this.config.getHttpPort();
+            // Start HTTP server
+            this.server = (0, http_1.createServer)(this.app);
+            await new Promise((resolve, reject) => {
+                this.server.listen(this.httpPort, (error) => {
+                    if (error) {
+                        reject(error);
+                    }
+                    else {
+                        resolve();
+                    }
+                });
             });
-        });
-    };
+            // Initialize connection manager
+            this.connectionManager = new MochiLinkConnectionManager_1.MochiLinkConnectionManager(this.config, this.logger);
+            this.setupMochiLinkHandlers();
+            // Initialize performance monitor
+            this.performanceMonitor = new ExternalPerformanceMonitor_1.ExternalPerformanceMonitor(this.logger);
+            // Mark the process running before connecting so a failed initial
+            // connection can enter the configured reconnect path.
+            this.isRunning = true;
+            // Start connection to Mochi-Link
+            await this.startMochiLinkConnection();
+            // Start performance monitoring
+            this.startPerformanceMonitoring();
+            // Start periodic tasks
+            this.startPeriodicTasks();
+            this.logger.info(`External service started on port ${this.httpPort}`);
+            this.logger.info(`外部服务已在端口 ${this.httpPort} 启动`);
+        }
+        catch (error) {
+            this.logger.error('Failed to start external service:', error);
+            throw error;
+        }
+    }
     /**
      * Start connection to Mochi-Link management system
      */
-    MochiLinkExternalService.prototype.startMochiLinkConnection = function () {
-        return __awaiter(this, void 0, void 0, function () {
-            var error_3;
-            var _this = this;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        _a.trys.push([0, 2, , 3]);
-                        this.logger.info('Connecting to Mochi-Link management system...');
-                        return [4 /*yield*/, this.connectionManager.connect()];
-                    case 1:
-                        _a.sent();
-                        if (this.connectionManager.isConnected()) {
-                            this.isConnected = true;
-                            this.logger.info('Successfully connected to Mochi-Link management system!');
-                            this.logger.info('已成功连接到大福连管理系统！');
-                            // Setup message handlers
-                            this.setupMochiLinkHandlers();
-                        }
-                        return [3 /*break*/, 3];
-                    case 2:
-                        error_3 = _a.sent();
-                        this.logger.warn('Failed to connect to Mochi-Link:', error_3);
-                        // Schedule reconnection
-                        setTimeout(function () {
-                            if (_this.isRunning) {
-                                _this.startMochiLinkConnection();
-                            }
-                        }, 30000);
-                        return [3 /*break*/, 3];
-                    case 3: return [2 /*return*/];
+    async startMochiLinkConnection() {
+        try {
+            this.logger.info('Connecting to Mochi-Link management system...');
+            await this.connectionManager.connect();
+            if (this.connectionManager.isConnected()) {
+                this.isConnected = true;
+                this.logger.info('Successfully connected to Mochi-Link management system!');
+                this.logger.info('已成功连接到大福连管理系统！');
+            }
+        }
+        catch (error) {
+            this.logger.warn('Failed to connect to Mochi-Link:', error);
+            // Schedule reconnection
+            setTimeout(() => {
+                if (this.isRunning) {
+                    this.startMochiLinkConnection();
                 }
-            });
-        });
-    };
+            }, 30000);
+        }
+    }
     /**
      * Setup Mochi-Link message handlers
      */
-    MochiLinkExternalService.prototype.setupMochiLinkHandlers = function () {
-        var _this = this;
-        this.connectionManager.on('message', function (message) {
-            _this.handleMochiLinkMessage(message);
+    setupMochiLinkHandlers() {
+        this.connectionManager.on('message', (message) => {
+            this.handleMochiLinkMessage(message);
         });
-        this.connectionManager.on('disconnect', function () {
-            _this.isConnected = false;
-            _this.logger.warn('Disconnected from Mochi-Link management system');
+        this.connectionManager.on('disconnect', () => {
+            this.isConnected = false;
+            this.logger.warn('Disconnected from Mochi-Link management system');
             // Schedule reconnection
-            setTimeout(function () {
-                if (_this.isRunning) {
-                    _this.startMochiLinkConnection();
+            setTimeout(() => {
+                if (this.isRunning) {
+                    this.startMochiLinkConnection();
                 }
             }, 30000);
         });
-        this.connectionManager.on('error', function (error) {
-            _this.logger.error('Mochi-Link connection error:', error);
+        this.connectionManager.on('error', (error) => {
+            this.logger.error('Mochi-Link connection error:', error);
         });
-    };
+    }
     /**
      * Handle messages from Mochi-Link
      */
-    MochiLinkExternalService.prototype.handleMochiLinkMessage = function (message) {
-        return __awaiter(this, void 0, void 0, function () {
-            var _a, error_4;
-            return __generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        _b.trys.push([0, 11, , 12]);
-                        this.logger.debug('Received message from Mochi-Link:', message);
-                        _a = message.op;
-                        switch (_a) {
-                            case 'server.status': return [3 /*break*/, 1];
-                            case 'player.list': return [3 /*break*/, 3];
-                            case 'command.execute': return [3 /*break*/, 5];
-                            case 'performance.get': return [3 /*break*/, 7];
-                        }
-                        return [3 /*break*/, 9];
-                    case 1: return [4 /*yield*/, this.handleServerStatusRequest(message)];
-                    case 2:
-                        _b.sent();
-                        return [3 /*break*/, 10];
-                    case 3: return [4 /*yield*/, this.handlePlayerListRequest(message)];
-                    case 4:
-                        _b.sent();
-                        return [3 /*break*/, 10];
-                    case 5: return [4 /*yield*/, this.handleCommandExecuteRequest(message)];
-                    case 6:
-                        _b.sent();
-                        return [3 /*break*/, 10];
-                    case 7: return [4 /*yield*/, this.handlePerformanceRequest(message)];
-                    case 8:
-                        _b.sent();
-                        return [3 /*break*/, 10];
-                    case 9:
-                        this.logger.warn('Unknown message operation:', message.op);
-                        _b.label = 10;
-                    case 10: return [3 /*break*/, 12];
-                    case 11:
-                        error_4 = _b.sent();
-                        this.logger.error('Failed to handle Mochi-Link message:', error_4);
-                        return [3 /*break*/, 12];
-                    case 12: return [2 /*return*/];
-                }
+    async handleMochiLinkMessage(message) {
+        try {
+            // Do not log protocol bodies; handshake payloads can contain a
+            // token or challenge response.
+            this.logger.debug('Received message from Mochi-Link:', {
+                type: message?.type,
+                op: message?.op || message?.systemOp,
+                id: message?.id
             });
-        });
-    };
+            switch (message.op) {
+                case 'server.status':
+                case 'server.getStatus':
+                case 'server.getInfo':
+                    await this.handleServerStatusRequest(message);
+                    break;
+                case 'player.list':
+                    await this.handlePlayerListRequest(message);
+                    break;
+                case 'command.execute':
+                    await this.handleCommandExecuteRequest(message);
+                    break;
+                case 'performance.get':
+                case 'server.getMetrics':
+                    await this.handlePerformanceRequest(message);
+                    break;
+                case 'player.getInfo':
+                    await this.handlePlayerInfoRequest(message);
+                    break;
+                default:
+                    this.logger.warn('Unsupported message operation:', message.op);
+                    await this.connectionManager.send(this.createResponse(message, {}, false, `Unsupported operation: ${message.op || '(missing)'}`, 'UNSUPPORTED_OPERATION'));
+            }
+        }
+        catch (error) {
+            this.logger.error('Failed to handle Mochi-Link message:', error);
+            if (message?.type === 'request' && this.connectionManager) {
+                await this.connectionManager.send(this.createResponse(message, {}, false, error instanceof Error ? error.message : String(error), 'OPERATION_FAILED'));
+            }
+        }
+    }
+    /** Build the canonical U-WBP response envelope. */
+    createResponse(request, data = {}, success = true, error, code) {
+        const response = {
+            type: 'response',
+            id: this.generateMessageId(),
+            requestId: request?.id,
+            op: request?.op || 'response',
+            success,
+            data,
+            timestamp: Date.now(),
+            version: '2.0',
+            serverId: this.config.getServerId()
+        };
+        if (error) {
+            response.error = error;
+            response.data = { ...data, code: code || 'OPERATION_FAILED' };
+        }
+        return response;
+    }
+    /** Build a canonical event envelope. */
+    createEvent(op, data) {
+        const normalized = this.normalizeEventOperation(op);
+        const payload = normalized === op ? { ...data } : { ...data, sourceEvent: op };
+        if (normalized === 'server.status' && !payload.status) {
+            payload.status = op === 'server.stop' ? 'offline' : 'online';
+        }
+        return {
+            type: 'event',
+            id: this.generateMessageId(),
+            op: normalized,
+            eventType: normalized,
+            data: payload,
+            timestamp: Date.now(),
+            version: '2.0',
+            serverId: this.config.getServerId()
+        };
+    }
+    normalizeEventOperation(op) {
+        switch (op) {
+            case 'player.kick':
+            case 'player.quit':
+                return 'player.leave';
+            case 'server.load':
+            case 'server.ready':
+            case 'server.start':
+            case 'server.stop':
+                return 'server.status';
+            case 'performance.update':
+                return 'server.metrics';
+            case 'player.join':
+            case 'player.leave':
+            case 'player.chat':
+            case 'player.death':
+            case 'player.advancement':
+            case 'player.move':
+            case 'server.status':
+            case 'server.logLine':
+            case 'server.metrics':
+            case 'alert.tpsLow':
+            case 'alert.memoryHigh':
+            case 'alert.playerFlood':
+            case 'alert.diskSpace':
+            case 'alert.connectionLost':
+                return op;
+            default:
+                return 'server.logLine';
+        }
+    }
+    generateMessageId() {
+        return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    }
     /**
      * Handle server status request
      */
-    MochiLinkExternalService.prototype.handleServerStatusRequest = function (message) {
-        return __awaiter(this, void 0, void 0, function () {
-            var response;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        response = {
-                            type: 'response',
-                            id: message.id,
-                            success: true,
-                            data: __assign(__assign({}, this.serverData), { players: Array.from(this.playerData.values()), performance: this.performanceData, timestamp: new Date().toISOString() })
-                        };
-                        return [4 /*yield*/, this.connectionManager.send(response)];
-                    case 1:
-                        _a.sent();
-                        return [2 /*return*/];
-                }
-            });
-        });
-    };
+    async handleServerStatusRequest(message) {
+        await this.refreshSnapshot();
+        const players = Array.from(this.playerData.values());
+        if (!this.serverData.serverId && !this.serverData.version) {
+            await this.connectionManager.send(this.createResponse(message, {}, false, 'LLBDS status is unavailable'));
+            return;
+        }
+        const baseInfo = {
+            ...this.serverData,
+            serverId: this.serverData.serverId || this.config.getServerId(),
+            coreType: 'Bedrock',
+            coreName: this.serverData.coreName || 'LLBDS',
+            players,
+            performance: this.performanceData
+        };
+        const op = message?.op;
+        const data = op === 'server.getInfo'
+            ? { info: baseInfo }
+            : {
+                status: this.serverData.status || 'online',
+                online: this.serverData.status === 'online',
+                playerCount: players.length,
+                maxPlayers: this.serverData.maxPlayers,
+                tps: this.performanceData.tps,
+                memoryUsage: this.performanceData.memoryUsage
+            };
+        const response = this.createResponse(message, data);
+        await this.connectionManager.send(response);
+    }
     /**
      * Handle player list request
      */
-    MochiLinkExternalService.prototype.handlePlayerListRequest = function (message) {
-        return __awaiter(this, void 0, void 0, function () {
-            var response;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        response = {
-                            type: 'response',
-                            id: message.id,
-                            success: true,
-                            data: {
-                                players: Array.from(this.playerData.values()),
-                                count: this.playerData.size,
-                                timestamp: new Date().toISOString()
-                            }
-                        };
-                        return [4 /*yield*/, this.connectionManager.send(response)];
-                    case 1:
-                        _a.sent();
-                        return [2 /*return*/];
-                }
-            });
+    async handlePlayerListRequest(message) {
+        await this.refreshSnapshot();
+        if (!this.serverData.serverId && this.playerData.size === 0) {
+            await this.connectionManager.send(this.createResponse(message, {}, false, 'LLBDS player list is unavailable'));
+            return;
+        }
+        const response = this.createResponse(message, {
+            players: Array.from(this.playerData.values()),
+            count: this.playerData.size,
+            online: this.playerData.size,
+            max: this.serverData.maxPlayers
         });
-    };
+        await this.connectionManager.send(response);
+    }
     /**
      * Handle command execute request
      */
-    MochiLinkExternalService.prototype.handleCommandExecuteRequest = function (message) {
-        return __awaiter(this, void 0, void 0, function () {
-            var _a, command, _b, timeout, result, response, error_5, response;
-            return __generator(this, function (_c) {
-                switch (_c.label) {
-                    case 0:
-                        _c.trys.push([0, 3, , 5]);
-                        _a = message.data, command = _a.command, _b = _a.timeout, timeout = _b === void 0 ? 30000 : _b;
-                        return [4 /*yield*/, this.executeCommandOnServer(command, timeout)];
-                    case 1:
-                        result = _c.sent();
-                        response = {
-                            type: 'response',
-                            id: message.id,
-                            success: true,
-                            data: {
-                                command: command,
-                                result: result,
-                                timestamp: new Date().toISOString()
-                            }
-                        };
-                        return [4 /*yield*/, this.connectionManager.send(response)];
-                    case 2:
-                        _c.sent();
-                        return [3 /*break*/, 5];
-                    case 3:
-                        error_5 = _c.sent();
-                        response = {
-                            type: 'response',
-                            id: message.id,
-                            success: false,
-                            error: error_5.message,
-                            timestamp: new Date().toISOString()
-                        };
-                        return [4 /*yield*/, this.connectionManager.send(response)];
-                    case 4:
-                        _c.sent();
-                        return [3 /*break*/, 5];
-                    case 5: return [2 /*return*/];
-                }
-            });
-        });
-    };
+    async handleCommandExecuteRequest(message) {
+        try {
+            const { command, timeout = 30000 } = message.data;
+            const result = await this.executeCommandOnServer(command, timeout);
+            const commandResult = result?.result && typeof result.result === 'object'
+                ? result.result
+                : result;
+            const response = this.createResponse(message, { command, ...commandResult }, commandResult?.success !== false, commandResult?.error);
+            await this.connectionManager.send(response);
+        }
+        catch (error) {
+            const response = this.createResponse(message, {}, false, error instanceof Error ? error.message : String(error));
+            await this.connectionManager.send(response);
+        }
+    }
     /**
      * Handle performance request
      */
-    MochiLinkExternalService.prototype.handlePerformanceRequest = function (message) {
-        return __awaiter(this, void 0, void 0, function () {
-            var response;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        response = {
-                            type: 'response',
-                            id: message.id,
-                            success: true,
-                            data: __assign(__assign({}, this.performanceData), { timestamp: new Date().toISOString() })
-                        };
-                        return [4 /*yield*/, this.connectionManager.send(response)];
-                    case 1:
-                        _a.sent();
-                        return [2 /*return*/];
+    async handlePerformanceRequest(message) {
+        await this.refreshSnapshot();
+        if (!this.performanceData || Object.keys(this.performanceData).length === 0) {
+            await this.connectionManager.send(this.createResponse(message, {}, false, 'LLBDS performance metrics are unavailable'));
+            return;
+        }
+        const response = this.createResponse(message, { metrics: { ...this.performanceData } });
+        await this.connectionManager.send(response);
+    }
+    async handlePlayerInfoRequest(message) {
+        await this.refreshSnapshot();
+        const playerId = message.data?.playerId || message.data?.id || message.data?.playerName;
+        const player = playerId ? this.findPlayer(String(playerId)) : undefined;
+        if (!player) {
+            await this.connectionManager.send(this.createResponse(message, {}, false, 'Player not found'));
+            return;
+        }
+        await this.connectionManager.send(this.createResponse(message, { player }));
+    }
+    /** Refresh the cache from the in-process LSE bridge before serving reads. */
+    async refreshSnapshot() {
+        const base = `http://localhost:${this.lseBridgePort}`;
+        const requests = await Promise.allSettled([
+            fetchWithTimeout(`${base}/api/server/status`, {}, 5000),
+            fetchWithTimeout(`${base}/api/players`, {}, 5000),
+            fetchWithTimeout(`${base}/api/performance`, {}, 5000)
+        ]);
+        let refreshed = false;
+        const statusResponse = requests[0];
+        if (statusResponse.status === 'fulfilled' && statusResponse.value.ok) {
+            const body = await statusResponse.value.json();
+            const raw = body?.data ?? body;
+            if (this.hasServerSnapshot(raw)) {
+                this.serverData = this.normalizeServerData(raw);
+                if (raw.tps !== undefined || raw.memory || raw.memoryUsage) {
+                    this.performanceData = this.normalizeMetrics(raw, this.performanceData);
                 }
-            });
-        });
-    };
+                refreshed = true;
+            }
+        }
+        const playersResponse = requests[1];
+        if (playersResponse.status === 'fulfilled' && playersResponse.value.ok) {
+            const body = await playersResponse.value.json();
+            const rawPlayers = body?.data ?? body;
+            if (Array.isArray(rawPlayers)) {
+                this.playerData.clear();
+                for (const rawPlayer of rawPlayers) {
+                    const player = this.normalizePlayer(rawPlayer);
+                    if (player)
+                        this.playerData.set(player.id, player);
+                }
+                refreshed = true;
+            }
+        }
+        const performanceResponse = requests[2];
+        if (performanceResponse.status === 'fulfilled' && performanceResponse.value.ok) {
+            const body = await performanceResponse.value.json();
+            const raw = body?.data ?? body;
+            if (this.hasMetricsSnapshot(raw)) {
+                this.performanceData = this.normalizeMetrics(raw, this.performanceData);
+                refreshed = true;
+            }
+        }
+        if (!refreshed && !this.serverData.serverId && this.playerData.size === 0 &&
+            Object.keys(this.performanceData).length === 0) {
+            throw new Error('LSE bridge snapshot unavailable');
+        }
+    }
+    normalizeServerData(raw) {
+        const players = raw.players && typeof raw.players === 'object' ? raw.players : {};
+        const onlinePlayers = Number(raw.onlinePlayers ?? players.online ?? 0);
+        const maxPlayers = Number(raw.maxPlayers ?? players.max ?? 0);
+        const memory = raw.memoryUsage ?? raw.memory;
+        return {
+            serverId: String(raw.serverId ?? this.config.getServerId()),
+            name: String(raw.name ?? this.config.getServerName()),
+            version: String(raw.version ?? 'unknown'),
+            coreType: 'Bedrock',
+            coreName: String(raw.coreName ?? 'LLBDS'),
+            status: raw.status ?? (raw.online === false ? 'offline' : 'online'),
+            online: raw.online !== undefined
+                ? Boolean(raw.online)
+                : raw.status !== undefined
+                    ? raw.status === 'online'
+                    : true,
+            maxPlayers,
+            onlinePlayers,
+            uptime: Number(raw.uptime ?? 0),
+            tps: Number(raw.tps ?? 0),
+            memoryUsage: this.normalizeMemory(memory),
+            worldInfo: Array.isArray(raw.worldInfo) ? raw.worldInfo : []
+        };
+    }
+    normalizeMetrics(raw, previous = {}) {
+        const metrics = raw.metrics && typeof raw.metrics === 'object' ? raw.metrics : raw;
+        const memory = metrics.memoryUsage ?? metrics.memory ?? raw.memoryUsage ?? raw.memory ?? previous.memoryUsage;
+        return {
+            serverId: String(metrics.serverId ?? this.config.getServerId()),
+            timestamp: Number(metrics.timestamp ?? Date.now()),
+            tps: Number(metrics.tps ?? metrics.ticksPerSecond ?? previous.tps ?? 0),
+            cpuUsage: Number(metrics.cpuUsage ?? metrics.cpu?.usage ?? previous.cpuUsage ?? 0),
+            memoryUsage: this.normalizeMemory(memory),
+            playerCount: Number(metrics.playerCount ?? metrics.players?.online ?? this.playerData.size),
+            ping: Number(metrics.ping ?? 0)
+        };
+    }
+    hasServerSnapshot(raw) {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+            return false;
+        return ['serverId', 'status', 'online', 'version', 'coreName', 'maxPlayers',
+            'onlinePlayers', 'playerCount', 'error'].some(key => Object.prototype.hasOwnProperty.call(raw, key));
+    }
+    hasMetricsSnapshot(raw) {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+            return false;
+        const metrics = raw.metrics && typeof raw.metrics === 'object' ? raw.metrics : raw;
+        return ['tps', 'ticksPerSecond', 'cpuUsage', 'memoryUsage', 'memory',
+            'playerCount', 'players', 'ping'].some(key => Object.prototype.hasOwnProperty.call(metrics, key));
+    }
+    normalizeMemory(raw) {
+        const memory = raw && typeof raw === 'object' ? raw : {};
+        const used = Number(memory.used ?? 0);
+        const max = Number(memory.max ?? memory.total ?? 0);
+        const free = Number(memory.free ?? Math.max(0, max - used));
+        const percentage = Number(memory.percentage ?? (max > 0 ? used / max * 100 : 0));
+        return { used, max, free, percentage };
+    }
+    normalizePlayer(raw) {
+        if (!raw || typeof raw !== 'object')
+            return null;
+        const name = String(raw.name ?? raw.realName ?? '');
+        const id = String(raw.id ?? raw.xuid ?? raw.uuid ?? name);
+        if (!name || !id)
+            return null;
+        const position = raw.position ?? raw.pos ?? {};
+        return {
+            id,
+            name,
+            displayName: String(raw.displayName ?? name),
+            world: String(raw.world ?? raw.level ?? 'unknown'),
+            position: {
+                x: Number(position.x ?? 0),
+                y: Number(position.y ?? 0),
+                z: Number(position.z ?? 0),
+                ...(position.yaw !== undefined ? { yaw: Number(position.yaw) } : {}),
+                ...(position.pitch !== undefined ? { pitch: Number(position.pitch) } : {})
+            },
+            ping: Math.max(0, Number(raw.ping ?? raw.avgPing ?? 0)),
+            isOp: Boolean(raw.isOp ?? raw.isOP ?? false),
+            permissions: Array.isArray(raw.permissions) ? raw.permissions.map(String) : [],
+            edition: 'Bedrock',
+            ...(raw.deviceType || raw.device ? { deviceType: String(raw.deviceType ?? raw.device) } : {}),
+            isOnline: raw.online !== false
+        };
+    }
+    findPlayer(identifier) {
+        const direct = this.playerData.get(identifier);
+        if (direct)
+            return direct;
+        return Array.from(this.playerData.values()).find(player => player.name === identifier || player.displayName === identifier);
+    }
     /**
      * Execute command on LLBDS server via LSE bridge
      */
-    MochiLinkExternalService.prototype.executeCommandOnServer = function (command, timeout) {
-        return __awaiter(this, void 0, void 0, function () {
-            var fetch_1, response, error_6;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        _a.trys.push([0, 3, , 4]);
-                        fetch_1 = require('node-fetch');
-                        return [4 /*yield*/, fetch_1("http://localhost:".concat(this.lseBridgePort, "/api/commands/execute"), {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify({ command: command, timeout: timeout }),
-                                timeout: timeout
-                            })];
-                    case 1:
-                        response = _a.sent();
-                        if (!response.ok) {
-                            throw new Error("Command execution failed: ".concat(response.statusText));
-                        }
-                        return [4 /*yield*/, response.json()];
-                    case 2: return [2 /*return*/, _a.sent()];
-                    case 3:
-                        error_6 = _a.sent();
-                        this.logger.error('Failed to execute command on server:', error_6);
-                        throw error_6;
-                    case 4: return [2 /*return*/];
-                }
-            });
-        });
-    };
+    async executeCommandOnServer(command, timeout) {
+        try {
+            const response = await fetchWithTimeout(`http://localhost:${this.lseBridgePort}/api/commands/execute`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ command, timeout })
+            }, timeout);
+            if (!response.ok) {
+                throw new Error(`Command execution failed: ${response.statusText}`);
+            }
+            return await response.json();
+        }
+        catch (error) {
+            this.logger.error('Failed to execute command on server:', error);
+            throw error;
+        }
+    }
     /**
      * Forward event to Mochi-Link
      */
-    MochiLinkExternalService.prototype.forwardEventToMochiLink = function (event) {
-        return __awaiter(this, void 0, void 0, function () {
-            var message, error_7;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        if (!this.isConnected) {
-                            this.logger.warn('Cannot forward event: not connected to Mochi-Link');
-                            return [2 /*return*/];
-                        }
-                        _a.label = 1;
-                    case 1:
-                        _a.trys.push([1, 3, , 4]);
-                        message = {
-                            type: 'event',
-                            event: event.type,
-                            data: event.data,
-                            timestamp: new Date().toISOString(),
-                            serverId: this.config.getServerId()
-                        };
-                        return [4 /*yield*/, this.connectionManager.send(message)];
-                    case 2:
-                        _a.sent();
-                        this.logger.debug('Event forwarded to Mochi-Link:', event.type);
-                        return [3 /*break*/, 4];
-                    case 3:
-                        error_7 = _a.sent();
-                        this.logger.error('Failed to forward event to Mochi-Link:', error_7);
-                        return [3 /*break*/, 4];
-                    case 4: return [2 /*return*/];
-                }
-            });
-        });
-    };
+    async forwardEventToMochiLink(event) {
+        if (!this.isConnected) {
+            this.logger.warn('Cannot forward event: not connected to Mochi-Link');
+            return;
+        }
+        try {
+            const message = this.createEvent(event.type || 'server.event', event.data || event);
+            await this.connectionManager.send(message);
+            this.logger.debug('Event forwarded to Mochi-Link:', event.type);
+        }
+        catch (error) {
+            this.logger.error('Failed to forward event to Mochi-Link:', error);
+        }
+    }
     /**
      * Start performance monitoring
      */
-    MochiLinkExternalService.prototype.startPerformanceMonitoring = function () {
-        var _this = this;
+    startPerformanceMonitoring() {
         // Monitor system performance every 30 seconds
-        cron.schedule('*/30 * * * * *', function () { return __awaiter(_this, void 0, void 0, function () {
-            var systemInfo, message, error_8;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        _a.trys.push([0, 4, , 5]);
-                        return [4 /*yield*/, this.performanceMonitor.collectSystemInfo()];
-                    case 1:
-                        systemInfo = _a.sent();
-                        this.performanceData = __assign(__assign({}, this.performanceData), { system: systemInfo, timestamp: new Date().toISOString() });
-                        if (!this.isConnected) return [3 /*break*/, 3];
-                        message = {
-                            type: 'event',
-                            event: 'performance.update',
-                            data: this.performanceData,
-                            timestamp: new Date().toISOString(),
-                            serverId: this.config.getServerId()
-                        };
-                        return [4 /*yield*/, this.connectionManager.send(message)];
-                    case 2:
-                        _a.sent();
-                        _a.label = 3;
-                    case 3: return [3 /*break*/, 5];
-                    case 4:
-                        error_8 = _a.sent();
-                        this.logger.error('Failed to collect performance data:', error_8);
-                        return [3 /*break*/, 5];
-                    case 5: return [2 /*return*/];
+        cron.schedule('*/30 * * * * *', async () => {
+            try {
+                const systemInfo = await this.performanceMonitor.collectSystemInfo();
+                this.performanceData = {
+                    ...this.normalizeMetrics(this.performanceData, this.performanceData),
+                    cpuUsage: Number(systemInfo?.cpu?.usage?.total ?? this.performanceData.cpuUsage ?? 0),
+                    timestamp: Date.now(),
+                    system: systemInfo
+                };
+                // Send performance data to Mochi-Link if connected
+                if (this.isConnected) {
+                    const message = this.createEvent('server.metrics', {
+                        metrics: { ...this.performanceData }
+                    });
+                    await this.connectionManager.send(message);
                 }
-            });
-        }); });
-    };
+            }
+            catch (error) {
+                this.logger.error('Failed to collect performance data:', error);
+            }
+        });
+    }
     /**
      * Start periodic tasks
      */
-    MochiLinkExternalService.prototype.startPeriodicTasks = function () {
-        var _this = this;
+    startPeriodicTasks() {
         // Heartbeat every 30 seconds
-        cron.schedule('*/30 * * * * *', function () { return __awaiter(_this, void 0, void 0, function () {
-            var message, error_9;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        if (!this.isConnected) return [3 /*break*/, 4];
-                        _a.label = 1;
-                    case 1:
-                        _a.trys.push([1, 3, , 4]);
-                        message = {
-                            type: 'heartbeat',
-                            timestamp: new Date().toISOString(),
-                            serverId: this.config.getServerId()
-                        };
-                        return [4 /*yield*/, this.connectionManager.send(message)];
-                    case 2:
-                        _a.sent();
-                        return [3 /*break*/, 4];
-                    case 3:
-                        error_9 = _a.sent();
-                        this.logger.error('Failed to send heartbeat:', error_9);
-                        return [3 /*break*/, 4];
-                    case 4: return [2 /*return*/];
+        cron.schedule('*/30 * * * * *', async () => {
+            if (this.isConnected) {
+                try {
+                    const message = {
+                        type: 'system',
+                        id: this.generateMessageId(),
+                        op: 'ping',
+                        systemOp: 'ping',
+                        data: { serverId: this.config.getServerId() },
+                        timestamp: Date.now(),
+                        version: '2.0',
+                        serverId: this.config.getServerId()
+                    };
+                    await this.connectionManager.send(message);
                 }
-            });
-        }); });
-        // Clean up old data every 5 minutes
-        cron.schedule('*/5 * * * *', function () {
-            _this.cleanupOldData();
+                catch (error) {
+                    this.logger.error('Failed to send heartbeat:', error);
+                }
+            }
         });
-    };
+        // Clean up old data every 5 minutes
+        cron.schedule('*/5 * * * *', () => {
+            this.cleanupOldData();
+        });
+    }
     /**
      * Clean up old data
      */
-    MochiLinkExternalService.prototype.cleanupOldData = function () {
+    cleanupOldData() {
         try {
             // Remove offline players older than 1 hour
-            var oneHourAgo = Date.now() - (60 * 60 * 1000);
-            var entries = Array.from(this.playerData.entries());
-            for (var _i = 0, entries_1 = entries; _i < entries_1.length; _i++) {
-                var _a = entries_1[_i], playerId = _a[0], playerData = _a[1];
+            const oneHourAgo = Date.now() - (60 * 60 * 1000);
+            const entries = Array.from(this.playerData.entries());
+            for (const [playerId, playerData] of entries) {
                 if (playerData.lastSeen && playerData.lastSeen < oneHourAgo && !playerData.online) {
                     this.playerData.delete(playerId);
-                    this.logger.debug("Cleaned up old player data for ".concat(playerId));
+                    this.logger.debug(`Cleaned up old player data for ${playerId}`);
                 }
             }
         }
         catch (error) {
             this.logger.error('Failed to clean up old data:', error);
         }
-    };
+    }
     /**
      * Shutdown the service
      */
-    MochiLinkExternalService.prototype.shutdown = function () {
-        return __awaiter(this, void 0, void 0, function () {
-            var error_10;
-            var _this = this;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        _a.trys.push([0, 5, , 6]);
-                        this.logger.info('Shutting down Mochi-Link External Service...');
-                        this.isRunning = false;
-                        if (!this.connectionManager) return [3 /*break*/, 2];
-                        return [4 /*yield*/, this.connectionManager.disconnect()];
-                    case 1:
-                        _a.sent();
-                        _a.label = 2;
-                    case 2:
-                        if (!this.server) return [3 /*break*/, 4];
-                        return [4 /*yield*/, new Promise(function (resolve) {
-                                _this.server.close(function () {
-                                    resolve();
-                                });
-                            })];
-                    case 3:
-                        _a.sent();
-                        _a.label = 4;
-                    case 4:
-                        this.logger.info('Mochi-Link External Service shutdown completed');
-                        process.exit(0);
-                        return [3 /*break*/, 6];
-                    case 5:
-                        error_10 = _a.sent();
-                        this.logger.error('Error during shutdown:', error_10);
-                        process.exit(1);
-                        return [3 /*break*/, 6];
-                    case 6: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    return MochiLinkExternalService;
-}());
+    async shutdown() {
+        try {
+            this.logger.info('Shutting down Mochi-Link External Service...');
+            this.isRunning = false;
+            // Disconnect from Mochi-Link
+            if (this.connectionManager) {
+                await this.connectionManager.disconnect();
+            }
+            // Stop HTTP server
+            if (this.server) {
+                await new Promise((resolve) => {
+                    this.server.close(() => {
+                        resolve();
+                    });
+                });
+            }
+            this.logger.info('Mochi-Link External Service shutdown completed');
+            process.exit(0);
+        }
+        catch (error) {
+            this.logger.error('Error during shutdown:', error);
+            process.exit(1);
+        }
+    }
+}
 exports.MochiLinkExternalService = MochiLinkExternalService;
 // Handle process signals
-process.on('SIGINT', function () { return __awaiter(void 0, void 0, void 0, function () {
-    return __generator(this, function (_a) {
-        switch (_a.label) {
-            case 0:
-                console.log('\nReceived SIGINT, shutting down gracefully...');
-                if (!service) return [3 /*break*/, 2];
-                return [4 /*yield*/, service.shutdown()];
-            case 1:
-                _a.sent();
-                _a.label = 2;
-            case 2: return [2 /*return*/];
-        }
-    });
-}); });
-process.on('SIGTERM', function () { return __awaiter(void 0, void 0, void 0, function () {
-    return __generator(this, function (_a) {
-        switch (_a.label) {
-            case 0:
-                console.log('\nReceived SIGTERM, shutting down gracefully...');
-                if (!service) return [3 /*break*/, 2];
-                return [4 /*yield*/, service.shutdown()];
-            case 1:
-                _a.sent();
-                _a.label = 2;
-            case 2: return [2 /*return*/];
-        }
-    });
-}); });
+process.on('SIGINT', async () => {
+    console.log('\nReceived SIGINT, shutting down gracefully...');
+    if (service) {
+        await service.shutdown();
+    }
+});
+process.on('SIGTERM', async () => {
+    console.log('\nReceived SIGTERM, shutting down gracefully...');
+    if (service) {
+        await service.shutdown();
+    }
+});
 // Start the service
-var service;
-function main() {
-    return __awaiter(this, void 0, void 0, function () {
-        var error_11;
-        return __generator(this, function (_a) {
-            switch (_a.label) {
-                case 0:
-                    _a.trys.push([0, 2, , 3]);
-                    service = new MochiLinkExternalService();
-                    return [4 /*yield*/, service.start()];
-                case 1:
-                    _a.sent();
-                    return [3 /*break*/, 3];
-                case 2:
-                    error_11 = _a.sent();
-                    console.error('Failed to start Mochi-Link External Service:', error_11);
-                    process.exit(1);
-                    return [3 /*break*/, 3];
-                case 3: return [2 /*return*/];
-            }
-        });
-    });
+let service;
+async function main() {
+    try {
+        service = new MochiLinkExternalService();
+        await service.start();
+    }
+    catch (error) {
+        console.error('Failed to start Mochi-Link External Service:', error);
+        process.exit(1);
+    }
 }
 // Auto-start if running directly
 if (require.main === module) {
     main();
 }
+//# sourceMappingURL=external-service.js.map

@@ -16,6 +16,7 @@ import {
   ProtocolError
 } from '../../types';
 import { MessageSerializer } from '../../protocol/serialization';
+import { normalizeConnectorCapabilities } from '../../protocol/capabilities';
 
 // ============================================================================
 // Plugin Connection Adapter
@@ -25,6 +26,7 @@ export class PluginConnectionAdapter extends BaseConnectionAdapter {
   private ws?: WebSocket;
   private reconnectTimer?: NodeJS.Timeout;
   private heartbeatTimer?: NodeJS.Timeout;
+  private lastPing?: { id: string; sentAt: number };
   private pendingRequests = new Map<string, {
     resolve: (value: any) => void;
     reject: (error: Error) => void;
@@ -34,7 +36,7 @@ export class PluginConnectionAdapter extends BaseConnectionAdapter {
   constructor(serverId: string) {
     super(serverId, 'plugin');
     this.capabilities = [
-      'realtime_events',
+      'event_streaming',
       'command_execution',
       'player_management',
       'world_management',
@@ -240,14 +242,14 @@ export class PluginConnectionAdapter extends BaseConnectionAdapter {
         this.sendPong(message.id);
         break;
       case 'pong':
-        // Update latency
-        const pingTime = parseInt(message.id.split('-')[1]);
-        if (!isNaN(pingTime)) {
-          this._stats.latency = Date.now() - pingTime;
+        const correlationId = (message as UWBPSystemMessage).requestId || message.data?.pingId;
+        if (this.lastPing && correlationId === this.lastPing.id) {
+          this._stats.latency = Math.max(0, Date.now() - this.lastPing.sentAt);
+          this.lastPing = undefined;
         }
         break;
       case 'capabilities':
-        this.capabilities = message.data?.capabilities || [];
+        this.capabilities = normalizeConnectorCapabilities(message.data?.capabilities);
         this.emit('capabilitiesUpdated', this.capabilities);
         break;
       case 'disconnect':
@@ -309,9 +311,10 @@ export class PluginConnectionAdapter extends BaseConnectionAdapter {
   }
 
   private async sendPing(): Promise<void> {
+    const pingId = `ping-${Date.now()}`;
     const pingMessage: UWBPSystemMessage = {
       type: 'system',
-      id: `ping-${Date.now()}`,
+      id: pingId,
       op: 'ping',
       data: {},
       timestamp: Date.now(),
@@ -321,8 +324,10 @@ export class PluginConnectionAdapter extends BaseConnectionAdapter {
     };
 
     try {
+      this.lastPing = { id: pingId, sentAt: Date.now() };
       await this.doSendMessage(pingMessage);
     } catch (error) {
+      this.lastPing = undefined;
       this.emit('error', error);
     }
   }
@@ -367,6 +372,7 @@ export class PluginConnectionAdapter extends BaseConnectionAdapter {
   // ============================================================================
 
   private clearTimers(): void {
+    this.lastPing = undefined;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = undefined;

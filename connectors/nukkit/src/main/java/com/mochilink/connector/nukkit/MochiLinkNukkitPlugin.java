@@ -344,7 +344,7 @@ public class MochiLinkNukkitPlugin extends PluginBase {
             eventData.addProperty("coreName", "Nukkit");
             eventData.addProperty("onlinePlayers", getServer().getOnlinePlayers().size());
             eventData.addProperty("maxPlayers", getServer().getMaxPlayers());
-            eventData.addProperty("startTime", java.time.Instant.now().toString());
+            eventData.addProperty("startTime", System.currentTimeMillis());
             
             connectionManager.sendEvent("server.start", eventData);
             getLogger().info("Server start event sent");
@@ -361,7 +361,7 @@ public class MochiLinkNukkitPlugin extends PluginBase {
             com.google.gson.JsonObject eventData = new com.google.gson.JsonObject();
             eventData.addProperty("serverName", getServer().getName());
             eventData.addProperty("reason", "Plugin disabled");
-            eventData.addProperty("stopTime", java.time.Instant.now().toString());
+            eventData.addProperty("stopTime", System.currentTimeMillis());
             
             connectionManager.sendEvent("server.stop", eventData);
             getLogger().info("Server stop event sent");

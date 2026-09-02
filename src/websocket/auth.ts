@@ -16,6 +16,13 @@ import {
   UWBPSystemMessage 
 } from '../types';
 import { UWBP_VERSION } from '../protocol/messages';
+import { normalizeConnectorCapabilities } from '../protocol/capabilities';
+
+export {
+  CONNECTOR_CAPABILITY_NAMES,
+  ConnectorCapability,
+  normalizeConnectorCapabilities
+} from '../protocol/capabilities';
 
 // ============================================================================
 // Authentication Types
@@ -33,7 +40,7 @@ export interface AuthenticationResponse {
   token: string;
   /** Challenge nonce echoed back by the client */
   challenge?: string;
-  /** HMAC of (challenge + timestamp) keyed by the token */
+  /** HMAC-SHA256 of `${challenge}:${token}:${timestamp}` keyed by the token */
   challengeResponse: string;
   timestamp: string | number;  // 支持两种格式
 }
@@ -105,6 +112,11 @@ export class AuthenticationManager extends EventEmitter {
    * Generate authentication challenge for a server
    */
   async generateChallenge(serverId: string): Promise<string> {
+    return (await this.generateChallengeData(serverId)).challenge;
+  }
+
+  /** Generate a challenge and return the timestamp needed by HMAC clients. */
+  async generateChallengeData(serverId: string): Promise<AuthenticationChallenge> {
     // Clean up old challenges for this server
     this.cleanupChallengesForServer(serverId);
     
@@ -135,7 +147,7 @@ export class AuthenticationManager extends EventEmitter {
     
     this.emit('challengeGenerated', serverId, challenge);
     
-    return challenge;
+    return { ...challengeData };
   }
 
   /**
@@ -368,12 +380,16 @@ export class AuthenticationManager extends EventEmitter {
         token,
         challenge: data.challenge,
         challengeResponse: data.challengeResponse,
-        timestamp: message.timestamp || Date.now()
+        timestamp: data.challengeTimestamp ?? message.timestamp ?? Date.now()
       }, clientIP);
 
     } else {
       // Simple token authentication
       result = await this.authenticateWithToken(serverId, token, clientIP);
+    }
+
+    if (result.success) {
+      result.capabilities = normalizeConnectorCapabilities(data.capabilities);
     }
 
     // Extract server info from handshake message
@@ -426,21 +442,11 @@ export class AuthenticationManager extends EventEmitter {
    * Get capabilities for a token
    */
   private getTokenCapabilities(token: APIToken): string[] {
-    // Basic capabilities for all authenticated connections
-    const capabilities = [
-      'server.getInfo',
-      'server.getStatus',
-      'player.list',
-      'player.getInfo'
-    ];
-
-    // Add additional capabilities based on token configuration
-    // This could be extended to read from token metadata
-    if (token.encryptionConfig) {
-      capabilities.push('encryption');
-    }
-
-    return capabilities;
+    // The token schema currently has no capability scopes. Capabilities come
+    // from the authenticated connector declaration and are constrained again
+    // by the local bridge implementation.
+    void token;
+    return [];
   }
 
   /**
@@ -465,6 +471,7 @@ export class AuthenticationManager extends EventEmitter {
     return {
       type: 'system',
       id: `auth-success-${Date.now()}`,
+      requestId,
       op: 'handshake',
       data: responseData,
       timestamp: Date.now(),
@@ -484,6 +491,7 @@ export class AuthenticationManager extends EventEmitter {
     return {
       type: 'system',
       id: `auth-error-${Date.now()}`,
+      requestId,
       op: 'error',
       data: {
         success: false,

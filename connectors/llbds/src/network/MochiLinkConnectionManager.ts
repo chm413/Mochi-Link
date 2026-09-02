@@ -1,8 +1,16 @@
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
+import { createHmac } from 'crypto';
 import * as winston from 'winston';
 import { LLBDSConfig } from '../config/LLBDSConfig';
 import { ReconnectionManager, ReconnectionConfig } from '../common/ReconnectionManager';
+
+const DECLARED_CAPABILITIES = [
+    'player_management',
+    'command_execution',
+    'performance_monitoring',
+    'event_streaming'
+] as const;
 
 /**
  * Mochi-Link Connection Manager
@@ -81,17 +89,27 @@ export class MochiLinkConnectionManager extends EventEmitter {
             const path = this.config.getMochiLinkPath();
             const serverId = this.config.getServerId();
             
-            const wsUrl = `ws://${host}:${port}${path}?serverId=${encodeURIComponent(serverId)}`;
+            const networkConfig = this.config.getConfig().network || {};
+            const scheme = networkConfig.ssl ? 'wss' : 'ws';
+            const params = new URLSearchParams({ serverId });
+            const token = this.config.getAuthToken();
+            const wsUrl = `${scheme}://${host}:${port}${path}?${params.toString()}`;
             
-            this.logger.info(`Connecting to Mochi-Link at ${wsUrl}...`);
+            this.logger.info(`Connecting to Mochi-Link at ${scheme}://${host}:${port}${path}...`);
             
+            const headers: Record<string, string> = {
+                'X-Server-Id': serverId,
+                'X-Server-Type': 'LLBDS',
+                'X-Protocol-Version': '2.0',
+                'X-Capabilities': DECLARED_CAPABILITIES.join(',')
+            };
+            if (token) {
+                headers['X-Auth-Token'] = token;
+                headers.Authorization = `Bearer ${token}`;
+            }
+
             this.ws = new WebSocket(wsUrl, {
-                headers: {
-                    'X-Server-Id': serverId,
-                    'X-Server-Type': 'LLBDS',
-                    'X-Protocol-Version': '2.0',
-                    'Authorization': `Bearer ${this.config.getAuthToken()}`
-                },
+                headers,
                 handshakeTimeout: this.config.getTimeout()
             });
             
@@ -155,7 +173,7 @@ export class MochiLinkConnectionManager extends EventEmitter {
             this.logger.debug('Message sent:', message.type || 'unknown');
             
             // Track pending messages that expect responses
-            if (message.id && message.type !== 'response') {
+            if (message.id && message.type === 'request') {
                 this.pendingMessages.set(message.id, {
                     message,
                     timestamp: Date.now()
@@ -241,10 +259,11 @@ export class MochiLinkConnectionManager extends EventEmitter {
             }
             
             // Handle responses to pending messages
-            if (message.type === 'response' && message.id) {
-                const pending = this.pendingMessages.get(message.id);
+            if (message.type === 'response') {
+                const correlationId = message.requestId || message.id;
+                const pending = correlationId ? this.pendingMessages.get(correlationId) : undefined;
                 if (pending) {
-                    this.pendingMessages.delete(message.id);
+                    this.pendingMessages.delete(correlationId!);
                     this.emit('response', message, pending.message);
                     return;
                 }
@@ -285,30 +304,45 @@ export class MochiLinkConnectionManager extends EventEmitter {
      */
     private async handleHandshake(message: any): Promise<void> {
         try {
-            // Send handshake response (U-WBP v2 compliant)
+            const serverId = this.config.getServerId();
+            const token = this.config.getAuthToken();
+            const data: any = {
+                serverId,
+                serverName: this.config.getServerName(),
+                serverType: 'LLBDS',
+                protocolVersion: '2.0',
+                capabilities: [...DECLARED_CAPABILITIES],
+                authentication: {
+                    token,
+                    method: 'token'
+                }
+            };
+
+            // Upgrade headers carry the token. Keep challenge support for
+            // deployments that deliberately omit it from the upgrade.
+            if (message.data?.challenge && token) {
+                const challenge = String(message.data.challenge);
+                const challengeTimestamp = Number(
+                    message.data.challengeTimestamp ?? message.timestamp ?? Date.now()
+                );
+                data.authentication.method = 'challenge';
+                data.challenge = challenge;
+                data.challengeTimestamp = challengeTimestamp;
+                data.challengeResponse = createHmac('sha256', token)
+                    .update(`${challenge}:${token}:${challengeTimestamp}`, 'utf8')
+                    .digest('hex');
+            }
+
             const response = {
-                type: 'response',
-                id: message.id,
-                op: 'system.handshake',
-                data: {
-                    serverId: this.config.getServerId(),
-                    serverName: this.config.getServerName(),
-                    serverType: 'LLBDS',
-                    protocolVersion: '2.0',
-                    capabilities: [
-                        'player_management',
-                        'command_execution',
-                        'performance_monitoring',
-                        'event_streaming',
-                        'whitelist_management',
-                        'ban_management'
-                    ],
-                    authentication: {
-                        token: this.config.getAuthToken()
-                    }
-                },
+                type: 'system',
+                id: this.generateId(),
+                requestId: message.id,
+                op: 'handshake',
+                systemOp: 'handshake',
+                data,
                 timestamp: Date.now(),
-                version: '2.0'
+                version: '2.0',
+                serverId
             };
             
             await this.send(response);
@@ -326,9 +360,11 @@ export class MochiLinkConnectionManager extends EventEmitter {
     private async handlePing(message: any): Promise<void> {
         try {
             const response = {
-                type: 'response',
-                id: message.id,
-                op: 'system.pong',
+                type: 'system',
+                id: this.generateId(),
+                requestId: message.id,
+                op: 'pong',
+                systemOp: 'pong',
                 data: {
                     timestamp: Date.now(),
                     serverId: this.config.getServerId()
@@ -421,15 +457,17 @@ export class MochiLinkConnectionManager extends EventEmitter {
             if (this._isConnected) {
                 try {
                     const heartbeat = {
-                        type: 'request',
+                        type: 'system',
                         id: this.generateId(),
-                        op: 'system.ping',
+                        op: 'ping',
+                        systemOp: 'ping',
                         data: {
                             serverId: this.config.getServerId(),
                             timestamp: Date.now()
                         },
                         timestamp: Date.now(),
-                        version: '2.0'
+                        version: '2.0',
+                        serverId: this.config.getServerId()
                     };
                     
                     await this.send(heartbeat);

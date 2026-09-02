@@ -52,7 +52,7 @@ export class JavaConnectorBridge {
    */
   private parseListOutput(output: string[]): { online: number; max: number; names: string[] } {
     const text = (output || []).join(' ');
-    const match = text.match(/There are (\d+) of a max of (\d+) players online/);
+    const match = text.match(/There are\s+(\d+)\s+of\s+(?:a\s+max\s+of\s+)?(\d+)\s+players online/i);
     if (!match) {
       return { online: 0, max: 0, names: [] };
     }
@@ -64,8 +64,94 @@ export class JavaConnectorBridge {
     return { online: parseInt(match[1], 10), max: parseInt(match[2], 10), names };
   }
 
+  /** Send a canonical U-WBP request when the adapter supports it. */
+  private async sendProtocolRequest(op: string, data: Record<string, any> = {}, timeout = 10000): Promise<any> {
+    if (!this.connectionAdapter || typeof this.connectionAdapter.sendRequest !== 'function') {
+      return null;
+    }
+    return this.connectionAdapter.sendRequest(op, data, timeout);
+  }
+
+  private responseData(response: any): any {
+    const data = response?.data && typeof response.data === 'object' ? response.data : {};
+    return data.result && typeof data.result === 'object' ? data.result : data;
+  }
+
+  private normalizeMemory(value: any): any {
+    const memory = value && typeof value === 'object' ? value : {};
+    const used = Number(memory.used ?? 0);
+    const max = Number(memory.max ?? 0);
+    const free = Number(memory.free ?? Math.max(0, max - used));
+    const percentage = Number(memory.percentage ?? (max > 0 ? used / max * 100 : 0));
+    return { used, max, free, percentage };
+  }
+
+  private normalizePlayer(value: any): any | null {
+    if (!value || typeof value !== 'object' || !value.id || !value.name) return null;
+    return {
+      id: String(value.id),
+      name: String(value.name),
+      displayName: String(value.displayName ?? value.name),
+      world: String(value.world ?? 'unknown'),
+      position: {
+        x: Number(value.position?.x ?? 0),
+        y: Number(value.position?.y ?? 0),
+        z: Number(value.position?.z ?? 0),
+        ...(value.position?.yaw !== undefined ? { yaw: Number(value.position.yaw) } : {}),
+        ...(value.position?.pitch !== undefined ? { pitch: Number(value.position.pitch) } : {})
+      },
+      ping: Math.max(0, Number(value.ping ?? 0)),
+      isOp: Boolean(value.isOp),
+      permissions: Array.isArray(value.permissions) ? value.permissions.map(String) : [],
+      edition: 'Java' as const,
+      ...(value.deviceType !== undefined ? { deviceType: String(value.deviceType) } : {}),
+      ...(value.ipAddress !== undefined ? { ipAddress: String(value.ipAddress) } : {}),
+      ...(value.health !== undefined ? { health: Number(value.health) } : {}),
+      ...(value.level !== undefined ? { level: Number(value.level) } : {}),
+      ...(value.gameMode !== undefined ? { gameMode: String(value.gameMode) } : {}),
+      ...(value.isOnline !== undefined ? { isOnline: Boolean(value.isOnline) } : {})
+    };
+  }
+
   async getServerInfo(): Promise<any> {
-    let version = this.config?.coreVersion || '1.20.1';
+    if (typeof this.connectionAdapter?.sendRequest === 'function') {
+      const response = await this.sendProtocolRequest('server.getInfo');
+      const responsePayload = this.responseData(response);
+      const info = responsePayload?.info || responsePayload;
+      if (!info || typeof info !== 'object' || !info.serverId) {
+        throw new Error('Java connector returned no server info');
+      }
+
+      let metrics: any = {};
+      if (info.tps === undefined || info.memoryUsage === undefined) {
+        try {
+          const metricsResponse = await this.sendProtocolRequest('server.getMetrics');
+          const metricsPayload = this.responseData(metricsResponse);
+          metrics = metricsPayload?.metrics || metricsPayload || {};
+        } catch {
+          // Metric fields remain explicitly unavailable (zero), while the
+          // connector-provided identity and player counts are preserved.
+        }
+      }
+
+      return {
+        serverId: String(info.serverId),
+        name: String(info.name ?? this.config?.serverId ?? info.serverId),
+        version: String(info.version ?? this.config?.coreVersion ?? 'unknown'),
+        coreType: 'Java',
+        coreName: String(info.coreName ?? this.config?.coreName ?? 'Java'),
+        maxPlayers: Number(info.maxPlayers ?? 0),
+        onlinePlayers: Number(info.onlinePlayers ?? info.playerCount ?? 0),
+        uptime: Number(info.uptime ?? 0),
+        tps: Number(info.tps ?? metrics.tps ?? 0),
+        memoryUsage: this.normalizeMemory(info.memoryUsage ?? metrics.memoryUsage),
+        worldInfo: Array.isArray(info.worldInfo) ? info.worldInfo : [],
+        ...(info.status !== undefined ? { status: String(info.status) } : {}),
+        ...(info.online !== undefined ? { online: Boolean(info.online) } : {})
+      };
+    }
+
+    let version = this.config?.coreVersion || 'unknown';
     let online = 0;
     let max = 0;
 
@@ -85,27 +171,47 @@ export class JavaConnectorBridge {
           max = parsed.max;
         }
       } catch {
-        // 查询失败时保留默认值，不阻塞基本信息返回
+        // Keep identity fields from configuration, but leave live metrics at
+        // explicit unavailable values when the legacy command path fails.
       }
     }
 
     return {
-      serverId: this.config?.serverId || 'test',
-      name: this.config?.name || 'Test Server',
+      serverId: this.config?.serverId || 'unknown',
+      name: this.config?.name || this.config?.serverId || 'unknown',
       version,
       coreType: 'Java',
-      coreName: this.config?.coreName || 'Paper',
+      coreName: this.config?.coreName || 'unknown',
       maxPlayers: max,
       onlinePlayers: online,
       uptime: 0,
-      tps: 20.0,
+      // Legacy command adapters do not expose performance metadata.
+      tps: 0,
       memoryUsage: { used: 0, max: 0, free: 0, percentage: 0 },
       worldInfo: []
     };
   }
 
   async getPerformanceMetrics(): Promise<any> {
-    let tps = 20.0;
+    if (typeof this.connectionAdapter?.sendRequest === 'function') {
+      const response = await this.sendProtocolRequest('server.getMetrics');
+      const responsePayload = this.responseData(response);
+      const metrics = responsePayload?.metrics || responsePayload;
+      if (!metrics || typeof metrics !== 'object' || !metrics.serverId) {
+        throw new Error('Java connector returned no performance metrics');
+      }
+      return {
+        serverId: String(metrics.serverId),
+        timestamp: Number(metrics.timestamp ?? Date.now()),
+        tps: Number(metrics.tps ?? 0),
+        cpuUsage: Number(metrics.cpuUsage ?? 0),
+        memoryUsage: this.normalizeMemory(metrics.memoryUsage),
+        playerCount: Number(metrics.playerCount ?? 0),
+        ping: Number(metrics.ping ?? 0)
+      };
+    }
+
+    let tps = 0;
     let memoryUsed = 0;
     let memoryMax = 0;
     let playerCount = 0;
@@ -139,7 +245,7 @@ export class JavaConnectorBridge {
     const memoryPercentage = memoryMax > 0 ? (memoryUsed / memoryMax) * 100 : 0;
 
     return {
-      serverId: this.config?.serverId || 'test',
+      serverId: this.config?.serverId || 'unknown',
       timestamp: Date.now(),
       tps,
       cpuUsage: 0,
@@ -152,7 +258,18 @@ export class JavaConnectorBridge {
   async executeCommand(command: string, timeout?: number): Promise<any> {
     if (this.connectionAdapter && this.connectionAdapter.sendCommand) {
       try {
-        return await this.connectionAdapter.sendCommand(command, timeout);
+        const result = await this.connectionAdapter.sendCommand(command, timeout);
+        const rawOutput = result?.output;
+        return {
+          success: result?.success === true,
+          output: Array.isArray(rawOutput)
+            ? rawOutput.map(String)
+            : rawOutput === undefined || rawOutput === null
+              ? []
+              : String(rawOutput).split(/\r?\n/).filter(Boolean),
+          executionTime: Number(result?.executionTime ?? result?.execution_time ?? 0),
+          ...(result?.error ? { error: String(result.error) } : {})
+        };
       } catch (error) {
         // 命令失败（含超时）以结构化结果返回，不向调用方抛异常
         return {
@@ -177,12 +294,38 @@ export class JavaConnectorBridge {
   }
 
   async getOnlinePlayers(): Promise<any[]> {
+    if (typeof this.connectionAdapter?.sendRequest === 'function') {
+      const response = await this.sendProtocolRequest('player.list');
+      const responsePayload = this.responseData(response);
+      if (!Array.isArray(responsePayload?.players)) {
+        throw new Error('Java connector returned no player list');
+      }
+      return responsePayload.players
+        .map((player: any) => this.normalizePlayer(player))
+        .filter((player: any) => player !== null);
+    }
+
     if (this.connectionAdapter && this.connectionAdapter.sendCommand) {
       try {
         const result = await this.executeCommand('list');
         if (result && result.success && result.output) {
-          return this.parseListOutput(result.output).names.map(name => ({
+          const parsed = this.parseListOutput(result.output);
+          if (parsed.online <= 0) return [];
+          // A player count without names is not enough to create player
+          // identities. Do not manufacture `unknown-*` records.
+          if (parsed.names.length === 0) return [];
+          const names = parsed.names.slice(0, parsed.online);
+          return names.map(name => ({
+            // The list command only exposes names. Keep the unified shape and
+            // use explicit unknown-safe values until player.getInfo succeeds.
+            id: name,
             name,
+            displayName: name,
+            world: 'unknown',
+            position: { x: 0, y: 0, z: 0 },
+            ping: 0,
+            isOp: false,
+            permissions: [],
             edition: 'Java' as const
           }));
         }
@@ -194,7 +337,16 @@ export class JavaConnectorBridge {
   }
 
   async getPlayerDetail(playerId: string): Promise<any> {
-    if (!this.connectionAdapter || !this.connectionAdapter.sendCommand) {
+    if (typeof this.connectionAdapter?.sendRequest === 'function') {
+      const response = await this.sendProtocolRequest('player.getInfo', { playerId });
+      const responsePayload = this.responseData(response);
+      const rawPlayer = responsePayload?.player || responsePayload?.playerInfo;
+      const player = this.normalizePlayer(rawPlayer);
+      return player ? { ...rawPlayer, ...player } : null;
+    }
+
+    if (!this.connectionAdapter || !this.connectionAdapter.sendCommand ||
+        !this.connectionAdapter.send || !this.connectionAdapter.pendingRequests) {
       return null;
     }
 
@@ -225,7 +377,7 @@ export class JavaConnectorBridge {
       await this.connectionAdapter.send({
         type: 'request',
         id: requestId,
-        op: 'player.info',
+        op: 'player.getInfo',
         data: {
           playerId: playerId
         },
@@ -247,7 +399,7 @@ export class JavaConnectorBridge {
   }
 
   getCapabilities(): string[] {
-    return [
+    const supported = [
       'player_management',
       'world_management', 
       'command_execution',
@@ -256,17 +408,81 @@ export class JavaConnectorBridge {
       'whitelist_management',
       'ban_management',
       'operator_management',
-      'server_control',
-      'plugin_integration'
+      'server_control'
     ];
+
+    if (typeof this.connectionAdapter?.sendRequest === 'function') {
+      const declared = Array.isArray(this.connectionAdapter.capabilities)
+        ? this.connectionAdapter.capabilities.map(String)
+        : [];
+      return supported.filter(capability => declared.includes(capability));
+    }
+
+    return supported;
+  }
+
+  hasCapability(capability: string): boolean {
+    return this.getCapabilities().includes(capability);
+  }
+
+  async performServerOperation(operation: any): Promise<any> {
+    const startTime = Date.now();
+    try {
+      let result: any;
+      switch (operation?.type) {
+        case 'stop':
+        case 'shutdown':
+          result = typeof this.connectionAdapter?.sendRequest === 'function'
+            ? await this.sendProtocolRequest('server.shutdown', {
+                delay: Number(operation.delay ?? 0),
+                message: operation.message
+              }, Number(operation.timeout ?? 30000))
+            : await this.executeCommand('stop', operation.timeout);
+          break;
+        case 'restart':
+          result = typeof this.connectionAdapter?.sendRequest === 'function'
+            ? await this.sendProtocolRequest('server.restart', {
+                delay: Number(operation.delay ?? 0),
+                message: operation.message
+              }, Number(operation.timeout ?? 30000))
+            : await this.executeCommand('restart', operation.timeout);
+          break;
+        case 'reload':
+          result = await this.executeCommand('reload', operation.timeout);
+          break;
+        case 'save':
+          result = await this.executeCommand('save-all', operation.timeout);
+          break;
+        default:
+          throw new Error(`Unsupported server operation: ${operation?.type}`);
+      }
+
+      const payload = this.responseData(result);
+      const success = result?.success !== false && payload?.success !== false;
+      return {
+        success,
+        operation,
+        timestamp: new Date(),
+        duration: Date.now() - startTime,
+        ...(success ? {} : { error: String(result?.error ?? payload?.error ?? 'Server operation failed') })
+      };
+    } catch (error) {
+      return {
+        success: false,
+        operation,
+        timestamp: new Date(),
+        duration: Date.now() - startTime,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
   }
 
   getBridgeInfo(): any {
     return {
-      serverId: this.config?.serverId || 'test',
+      serverId: this.config?.serverId || 'unknown',
       coreType: 'Java',
       coreName: this.config?.coreName || 'Paper',
-      coreVersion: this.config?.coreVersion || '1.20.1',
+      coreVersion: this.config?.coreVersion || 'unknown',
       capabilities: this.getCapabilities(),
       protocolVersion: '2.0',
       isOnline: this.connected,

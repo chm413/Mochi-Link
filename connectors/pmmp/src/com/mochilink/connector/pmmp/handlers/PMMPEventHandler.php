@@ -52,15 +52,20 @@ class PMMPEventHandler implements Listener {
                 'position' => [
                     'x' => $player->getPosition()->getX(),
                     'y' => $player->getPosition()->getY(),
-                    'z' => $player->getPosition()->getZ()
+                    'z' => $player->getPosition()->getZ(),
+                    'yaw' => $player->getLocation()->getYaw(),
+                    'pitch' => $player->getLocation()->getPitch()
                 ],
-                'ping' => $player->getNetworkSession()->getPing(),
+                'ping' => max(0, (int) ($player->getNetworkSession()->getPing() ?? 0)),
+                'isOp' => $player->hasPermission('pocketmine.command.op'),
+                'permissions' => $this->getPermissions($player),
                 'ipAddress' => $player->getNetworkSession()->getIp(),
                 'deviceType' => $this->getDeviceType($player),
                 'edition' => 'Bedrock'
             ],
             'firstJoin' => !$player->hasPlayedBefore(),
-            'joinMessage' => $event->getJoinMessage()
+            'joinMessage' => $this->stringifyMessage($event->getJoinMessage()),
+            'playerCount' => count($this->plugin->getServer()->getOnlinePlayers())
         ];
         
         // Check filters
@@ -90,7 +95,8 @@ class PMMPEventHandler implements Listener {
             'playerId' => $player->getUniqueId()->toString(),
             'playerName' => $player->getName(),
             'reason' => 'quit',
-            'quitMessage' => $event->getQuitMessage()
+            'quitMessage' => $this->stringifyMessage($event->getQuitMessage()),
+            'playerCount' => max(0, count($this->plugin->getServer()->getOnlinePlayers()) - 1)
         ];
         
         // Check filters
@@ -157,8 +163,8 @@ class PMMPEventHandler implements Listener {
         $eventData = [
             'playerId' => $player->getUniqueId()->toString(),
             'playerName' => $player->getName(),
-            'cause' => $cause !== null ? $cause->getCause()->name : 'unknown',
-            'deathMessage' => $event->getDeathMessage(),
+            'cause' => $cause !== null ? strtolower($cause->getCause()->name) : 'unknown',
+            'deathMessage' => $this->stringifyMessage($event->getDeathMessage()),
             'location' => [
                 'world' => $player->getWorld()->getFolderName(),
                 'x' => $player->getPosition()->getX(),
@@ -169,7 +175,7 @@ class PMMPEventHandler implements Listener {
         
         // Check filters
         $filterData = [
-            'cause' => $cause !== null ? $cause->getCause()->name : 'unknown'
+            'cause' => $cause !== null ? strtolower($cause->getCause()->name) : 'unknown'
         ];
         
         if (!$this->plugin->getSubscriptionManager()->matchesFilters('player.death', $filterData)) {
@@ -209,5 +215,24 @@ class PMMPEventHandler implements Listener {
             14 => 'Windows Phone',
             default => 'Unknown'
         };
+    }
+
+    private function getPermissions(\pocketmine\player\Player $player): array {
+        if (!method_exists($player, 'getEffectivePermissions')) return [];
+        $permissions = [];
+        foreach ($player->getEffectivePermissions() as $name => $info) {
+            if (method_exists($info, 'getValue') && !$info->getValue()) continue;
+            $permissions[] = method_exists($info, 'getPermission')
+                ? (string) $info->getPermission()
+                : (string) $name;
+        }
+        sort($permissions);
+        return $permissions;
+    }
+
+    private function stringifyMessage($message): string {
+        return is_string($message)
+            ? $message
+            : $this->plugin->getServer()->getLanguage()->translate($message);
     }
 }

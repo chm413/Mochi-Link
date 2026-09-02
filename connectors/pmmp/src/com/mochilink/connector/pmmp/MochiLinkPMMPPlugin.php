@@ -36,6 +36,7 @@ class MochiLinkPMMPPlugin extends PluginBase {
     private ?PMMPCommandHandler $commandHandler = null;
     private ?PMMPPerformanceMonitor $performanceMonitor = null;
     private ?SubscriptionManager $subscriptionManager = null;
+    private ?\pocketmine\scheduler\TaskHandler $connectionTickTask = null;
     
     // Plugin state
     private bool $isEnabled = false;
@@ -63,6 +64,11 @@ class MochiLinkPMMPPlugin extends PluginBase {
     
     public function onDisable(): void {
         try {
+            if ($this->connectionTickTask !== null) {
+                $this->connectionTickTask->cancel();
+                $this->connectionTickTask = null;
+            }
+
             // Disconnect from management server
             if ($this->connectionManager !== null) {
                 $this->connectionManager->disconnect();
@@ -135,6 +141,7 @@ class MochiLinkPMMPPlugin extends PluginBase {
             
             // Start performance monitoring after successful connection
             if ($this->connectionManager->isConnected()) {
+                $this->startConnectionPolling();
                 $this->performanceMonitor->start();
                 $this->setConnected(true);
                 
@@ -166,6 +173,21 @@ class MochiLinkPMMPPlugin extends PluginBase {
                 }
             }),
             30 * 20 // 30 seconds in ticks
+        );
+    }
+
+    /** Poll the non-blocking socket on the main thread so inbound requests are processed. */
+    private function startConnectionPolling(): void {
+        if ($this->connectionTickTask !== null) {
+            return;
+        }
+        $this->connectionTickTask = $this->getScheduler()->scheduleRepeatingTask(
+            new \pocketmine\scheduler\ClosureTask(function(): void {
+                if ($this->connectionManager !== null && $this->connectionManager->isConnected()) {
+                    $this->connectionManager->tick();
+                }
+            }),
+            1
         );
     }
     
@@ -206,6 +228,7 @@ class MochiLinkPMMPPlugin extends PluginBase {
             $this->connectionManager->connect();
             
             if ($this->connectionManager->isConnected()) {
+                $this->startConnectionPolling();
                 $this->setConnected(true);
                 $this->getLogger()->info(TextFormat::GREEN . "Reconnection successful!");
             }

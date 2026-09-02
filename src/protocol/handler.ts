@@ -48,6 +48,7 @@ import { MessageValidator, ValidationUtils } from './validation';
 import { MessageSerializer } from './serialization';
 import { MessageRouter, RequestHandler, EventHandler, SystemHandler } from './router';
 import { MessageFactory, MessageUtils } from './messages';
+import { normalizeConnectorCapabilities } from './capabilities';
 
 // ============================================================================
 // Handler Configuration
@@ -253,6 +254,7 @@ export class ProtocolHandler {
       // Set up timeout
       const timer = setTimeout(() => {
         this.pendingRequests.delete(request.id);
+        this.router.unregisterResponseHandler(request.id);
         this.activeRequests--;
         reject(new ProtocolError(`Request timeout: ${operation}`, request.id));
       }, timeout);
@@ -270,11 +272,15 @@ export class ProtocolHandler {
 
       this.pendingRequests.set(request.id, pendingRequest);
       this.activeRequests++;
+      this.router.registerResponseHandler(request.id, async (response, responseConnection) => {
+        await this.handleResponse(response, responseConnection);
+      });
 
       // Send request
       this.sendMessage(connection, request).catch(error => {
         clearTimeout(timer);
         this.pendingRequests.delete(request.id);
+        this.router.unregisterResponseHandler(request.id);
         this.activeRequests--;
         reject(error);
       });
@@ -298,7 +304,16 @@ export class ProtocolHandler {
     // Clear timeout and remove from pending
     clearTimeout(pendingRequest.timer);
     this.pendingRequests.delete(response.requestId);
+    this.router.unregisterResponseHandler(response.requestId);
     this.activeRequests--;
+
+    if (response.op !== pendingRequest.operation) {
+      pendingRequest.reject(new ProtocolError(
+        `Response operation mismatch: expected ${pendingRequest.operation}, got ${response.op}`,
+        response.requestId
+      ));
+      return;
+    }
 
     // Resolve or reject based on response
     if (response.success) {
@@ -472,19 +487,15 @@ export class ProtocolHandler {
   // ============================================================================
 
   private setupDefaultHandlers(): void {
-    // Handle responses
-    this.router.registerResponseHandler = (requestId: string, handler: any) => {
-      // Override to use our response handling
-      this.router.registerResponseHandler(requestId, async (response, connection) => {
-        await this.handleResponse(response, connection);
-      });
-    };
-
     // Default ping handler
     this.onSystem('ping', async (message, connection) => {
       return MessageFactory.createSystemMessage('pong', {
-        timestamp: Date.now(),
-        originalId: message.id
+        latency: typeof message.timestamp === 'number'
+          ? Math.max(0, Date.now() - message.timestamp)
+          : 0
+      }, {
+        serverId: connection.serverId,
+        requestId: message.id
       });
     });
 
@@ -499,9 +510,7 @@ export class ProtocolHandler {
     // Default capabilities handler
     this.onSystem('capabilities', async (message, connection) => {
       // Store connection capabilities
-      if (Array.isArray(message.data?.capabilities)) {
-        connection.capabilities = message.data.capabilities;
-      }
+      connection.capabilities = normalizeConnectorCapabilities(message.data?.capabilities);
     });
   }
 
@@ -527,6 +536,7 @@ export class ProtocolHandler {
       if (request) {
         clearTimeout(request.timer);
         this.pendingRequests.delete(id);
+        this.router.unregisterResponseHandler(id);
         this.activeRequests--;
         request.reject(new ProtocolError(`Request expired: ${request.operation}`, id));
       }
@@ -557,6 +567,7 @@ export class ProtocolHandler {
     // Cancel all pending requests
     for (const [id, request] of this.pendingRequests) {
       clearTimeout(request.timer);
+      this.router.unregisterResponseHandler(id);
       request.reject(new ProtocolError('Handler shutting down', id));
     }
 

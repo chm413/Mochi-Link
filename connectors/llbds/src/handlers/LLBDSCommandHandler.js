@@ -10,15 +10,15 @@ exports.LLBDSCommandHandler = void 0;
  * @author chm413
  * @version 1.0.0
  */
-var LLBDSCommandHandler = /** @class */ (function () {
-    function LLBDSCommandHandler(lseBridge) {
+class LLBDSCommandHandler {
+    constructor(lseBridge) {
         this.registeredCommands = new Set();
         this.lseBridge = lseBridge;
     }
     /**
      * Register all LLBDS commands
      */
-    LLBDSCommandHandler.prototype.registerCommands = function () {
+    registerCommands() {
         try {
             // Register main Mochi-Link command
             this.registerMochiLinkCommand();
@@ -31,11 +31,11 @@ var LLBDSCommandHandler = /** @class */ (function () {
         catch (error) {
             logger.error('Failed to register LLBDS command handlers:', error);
         }
-    };
+    }
     /**
      * Unregister all commands
      */
-    LLBDSCommandHandler.prototype.unregisterCommands = function () {
+    unregisterCommands() {
         try {
             // LLBDS doesn't have a direct way to unregister commands
             // Commands are automatically cleaned up when the plugin is unloaded
@@ -46,35 +46,34 @@ var LLBDSCommandHandler = /** @class */ (function () {
         catch (error) {
             logger.error('Failed to unregister LLBDS command handlers:', error);
         }
-    };
+    }
     /**
      * Register main Mochi-Link command
      */
-    LLBDSCommandHandler.prototype.registerMochiLinkCommand = function () {
-        var _this = this;
+    registerMochiLinkCommand() {
         if (typeof mc !== 'undefined' && mc.regPlayerCmd) {
-            mc.regPlayerCmd('mochilink', 'Mochi-Link connector management', function (player, args) {
+            mc.regPlayerCmd('mochilink', 'Mochi-Link connector management', (player, args = []) => {
                 try {
                     if (args.length === 0) {
-                        _this.sendHelpMessage(player);
+                        this.sendHelpMessage(player);
                         return;
                     }
-                    var subCommand = args[0].toLowerCase();
+                    const subCommand = args[0]?.toLowerCase();
                     switch (subCommand) {
                         case 'status':
-                            _this.handleStatusCommand(player);
+                            this.handleStatusCommand(player);
                             break;
                         case 'reload':
-                            _this.handleReloadCommand(player);
+                            this.handleReloadCommand(player);
                             break;
                         case 'connect':
-                            _this.handleConnectCommand(player);
+                            this.handleConnectCommand(player);
                             break;
                         case 'disconnect':
-                            _this.handleDisconnectCommand(player);
+                            this.handleDisconnectCommand(player);
                             break;
                         case 'info':
-                            _this.handleInfoCommand(player);
+                            this.handleInfoCommand(player);
                             break;
                         default:
                             player.tell('§c未知的子命令。使用 /mochilink help 查看帮助。');
@@ -90,7 +89,7 @@ var LLBDSCommandHandler = /** @class */ (function () {
         }
         // Also register console command
         if (typeof mc !== 'undefined' && mc.regConsoleCmd) {
-            mc.regConsoleCmd('mochilink', 'Mochi-Link connector management', function (args) {
+            mc.regConsoleCmd('mochilink', 'Mochi-Link connector management', (args = []) => {
                 try {
                     if (args.length === 0) {
                         logger.info('Mochi-Link Console Commands:');
@@ -100,19 +99,19 @@ var LLBDSCommandHandler = /** @class */ (function () {
                         logger.info('  mochilink disconnect - Disconnect from Mochi-Link');
                         return;
                     }
-                    var subCommand = args[0].toLowerCase();
+                    const subCommand = args[0]?.toLowerCase();
                     switch (subCommand) {
                         case 'status':
-                            _this.handleConsoleStatusCommand();
+                            this.handleConsoleStatusCommand();
                             break;
                         case 'reload':
-                            _this.handleConsoleReloadCommand();
+                            this.handleConsoleReloadCommand();
                             break;
                         case 'connect':
-                            _this.handleConsoleConnectCommand();
+                            this.handleConsoleConnectCommand();
                             break;
                         case 'disconnect':
-                            _this.handleConsoleDisconnectCommand();
+                            this.handleConsoleDisconnectCommand();
                             break;
                         default:
                             logger.info('Unknown subcommand. Use /mochilink for help.');
@@ -124,67 +123,65 @@ var LLBDSCommandHandler = /** @class */ (function () {
                 }
             });
         }
-    };
+    }
     /**
      * Register status command
      */
-    LLBDSCommandHandler.prototype.registerStatusCommand = function () {
-        var _this = this;
+    registerStatusCommand() {
         if (typeof mc !== 'undefined' && mc.regPlayerCmd) {
-            mc.regPlayerCmd('mlstatus', 'Show Mochi-Link connection status', function (player) {
-                _this.handleStatusCommand(player);
+            mc.regPlayerCmd('mlstatus', 'Show Mochi-Link connection status', (player) => {
+                this.handleStatusCommand(player);
             });
             this.registeredCommands.add('mlstatus');
         }
-    };
+    }
     /**
      * Register reload command
      */
-    LLBDSCommandHandler.prototype.registerReloadCommand = function () {
-        var _this = this;
+    registerReloadCommand() {
         if (typeof mc !== 'undefined' && mc.regPlayerCmd) {
-            mc.regPlayerCmd('mlreload', 'Reload Mochi-Link configuration', function (player) {
+            mc.regPlayerCmd('mlreload', 'Reload Mochi-Link configuration', (player) => {
                 if (!player.isOP()) {
                     player.tell('§c你没有权限执行此命令。');
                     return;
                 }
-                _this.handleReloadCommand(player);
+                this.handleReloadCommand(player);
             });
             this.registeredCommands.add('mlreload');
         }
-    };
+    }
     /**
      * Send help message to player
      */
-    LLBDSCommandHandler.prototype.sendHelpMessage = function (player) {
+    sendHelpMessage(player) {
         player.tell('§6=== Mochi-Link 连接器帮助 ===');
         player.tell('§e/mochilink status §7- 显示连接状态');
         player.tell('§e/mochilink reload §7- 重载配置 (需要OP权限)');
         player.tell('§e/mochilink connect §7- 连接到大福连系统');
         player.tell('§e/mochilink disconnect §7- 断开连接');
         player.tell('§e/mochilink info §7- 显示连接器信息');
-    };
+    }
     /**
      * Handle status command
      */
-    LLBDSCommandHandler.prototype.handleStatusCommand = function (player) {
+    handleStatusCommand(player) {
         try {
-            var status_1 = this.lseBridge.isRunning() ? '§a已连接' : '§c未连接';
-            var port = this.lseBridge.getPort();
+            const status = this.lseBridge.isRunning() ? '§a已连接' : '§c未连接';
+            const port = this.lseBridge.getPort();
             player.tell('§6=== Mochi-Link 状态 ===');
-            player.tell("\u00A77LSE\u6865\u63A5\u5668\u72B6\u6001: ".concat(status_1));
-            player.tell("\u00A77HTTP\u7AEF\u53E3: \u00A7e".concat(port));
-            player.tell("\u00A77\u670D\u52A1\u5668\u65F6\u95F4: \u00A7e".concat(new Date().toLocaleString()));
+            player.tell(`§7LSE桥接器状态: ${status}`);
+            player.tell(`§7HTTP端口: §e${port}`);
+            player.tell(`§7服务器时间: §e${new Date().toLocaleString()}`);
         }
         catch (error) {
             logger.error('Error handling status command:', error);
             player.tell('§c获取状态信息时发生错误。');
         }
-    };
+    }
     /**
      * Handle reload command
      */
-    LLBDSCommandHandler.prototype.handleReloadCommand = function (player) {
+    handleReloadCommand(player) {
         try {
             if (!player.isOP()) {
                 player.tell('§c你没有权限执行此命令。');
@@ -199,12 +196,11 @@ var LLBDSCommandHandler = /** @class */ (function () {
             logger.error('Error handling reload command:', error);
             player.tell('§c重载配置时发生错误。');
         }
-    };
+    }
     /**
      * Handle connect command
      */
-    LLBDSCommandHandler.prototype.handleConnectCommand = function (player) {
-        var _this = this;
+    handleConnectCommand(player) {
         try {
             if (this.lseBridge.isRunning()) {
                 player.tell('§e已经连接到Mochi-Link系统。');
@@ -213,8 +209,8 @@ var LLBDSCommandHandler = /** @class */ (function () {
             player.tell('§e正在连接到Mochi-Link系统...');
             // Trigger connection through LSE bridge
             this.lseBridge.emit('connect');
-            setTimeout(function () {
-                if (_this.lseBridge.isRunning()) {
+            setTimeout(() => {
+                if (this.lseBridge.isRunning()) {
                     player.tell('§a成功连接到Mochi-Link系统！');
                 }
                 else {
@@ -226,11 +222,11 @@ var LLBDSCommandHandler = /** @class */ (function () {
             logger.error('Error handling connect command:', error);
             player.tell('§c连接时发生错误。');
         }
-    };
+    }
     /**
      * Handle disconnect command
      */
-    LLBDSCommandHandler.prototype.handleDisconnectCommand = function (player) {
+    handleDisconnectCommand(player) {
         try {
             if (!this.lseBridge.isRunning()) {
                 player.tell('§e当前未连接到Mochi-Link系统。');
@@ -245,11 +241,11 @@ var LLBDSCommandHandler = /** @class */ (function () {
             logger.error('Error handling disconnect command:', error);
             player.tell('§c断开连接时发生错误。');
         }
-    };
+    }
     /**
      * Handle info command
      */
-    LLBDSCommandHandler.prototype.handleInfoCommand = function (player) {
+    handleInfoCommand(player) {
         try {
             player.tell('§6=== Mochi-Link 连接器信息 ===');
             player.tell('§7版本: §e1.0.0');
@@ -262,22 +258,22 @@ var LLBDSCommandHandler = /** @class */ (function () {
             logger.error('Error handling info command:', error);
             player.tell('§c获取信息时发生错误。');
         }
-    };
+    }
     // Console command handlers
-    LLBDSCommandHandler.prototype.handleConsoleStatusCommand = function () {
+    handleConsoleStatusCommand() {
         try {
-            var status_2 = this.lseBridge.isRunning() ? 'Connected' : 'Disconnected';
-            var port = this.lseBridge.getPort();
+            const status = this.lseBridge.isRunning() ? 'Connected' : 'Disconnected';
+            const port = this.lseBridge.getPort();
             logger.info('=== Mochi-Link Status ===');
-            logger.info("LSE Bridge Status: ".concat(status_2));
-            logger.info("HTTP Port: ".concat(port));
-            logger.info("Server Time: ".concat(new Date().toLocaleString()));
+            logger.info(`LSE Bridge Status: ${status}`);
+            logger.info(`HTTP Port: ${port}`);
+            logger.info(`Server Time: ${new Date().toLocaleString()}`);
         }
         catch (error) {
             logger.error('Error handling console status command:', error);
         }
-    };
-    LLBDSCommandHandler.prototype.handleConsoleReloadCommand = function () {
+    }
+    handleConsoleReloadCommand() {
         try {
             logger.info('Reloading Mochi-Link configuration...');
             // Trigger configuration reload through LSE bridge
@@ -287,8 +283,8 @@ var LLBDSCommandHandler = /** @class */ (function () {
         catch (error) {
             logger.error('Error handling console reload command:', error);
         }
-    };
-    LLBDSCommandHandler.prototype.handleConsoleConnectCommand = function () {
+    }
+    handleConsoleConnectCommand() {
         try {
             if (this.lseBridge.isRunning()) {
                 logger.info('Already connected to Mochi-Link system.');
@@ -301,8 +297,8 @@ var LLBDSCommandHandler = /** @class */ (function () {
         catch (error) {
             logger.error('Error handling console connect command:', error);
         }
-    };
-    LLBDSCommandHandler.prototype.handleConsoleDisconnectCommand = function () {
+    }
+    handleConsoleDisconnectCommand() {
         try {
             if (!this.lseBridge.isRunning()) {
                 logger.info('Not currently connected to Mochi-Link system.');
@@ -316,19 +312,19 @@ var LLBDSCommandHandler = /** @class */ (function () {
         catch (error) {
             logger.error('Error handling console disconnect command:', error);
         }
-    };
+    }
     /**
      * Get registered commands
      */
-    LLBDSCommandHandler.prototype.getRegisteredCommands = function () {
+    getRegisteredCommands() {
         return Array.from(this.registeredCommands);
-    };
+    }
     /**
      * Check if command is registered
      */
-    LLBDSCommandHandler.prototype.isCommandRegistered = function (commandName) {
+    isCommandRegistered(commandName) {
         return this.registeredCommands.has(commandName);
-    };
-    return LLBDSCommandHandler;
-}());
+    }
+}
 exports.LLBDSCommandHandler = LLBDSCommandHandler;
+//# sourceMappingURL=LLBDSCommandHandler.js.map

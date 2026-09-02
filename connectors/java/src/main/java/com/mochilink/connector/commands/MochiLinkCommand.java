@@ -166,13 +166,25 @@ public class MochiLinkCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.YELLOW + "Players: " + ChatColor.WHITE + 
             server.getOnlinePlayers().size() + "/" + server.getMaxPlayers());
         sender.sendMessage(ChatColor.YELLOW + "TPS: " + ChatColor.WHITE + 
-            String.format("%.2f", server.getTPS()[0]));
+            String.format("%.2f", getCurrentTps(server)));
         
         Runtime runtime = Runtime.getRuntime();
         long usedMemory = (runtime.totalMemory() - runtime.freeMemory()) / 1024 / 1024;
         long maxMemory = runtime.maxMemory() / 1024 / 1024;
         sender.sendMessage(ChatColor.YELLOW + "Memory: " + ChatColor.WHITE + 
             usedMemory + "MB / " + maxMemory + "MB");
+    }
+
+    private double getCurrentTps(org.bukkit.Server server) {
+        try {
+            Object value = server.getClass().getMethod("getTPS").invoke(server);
+            if (value instanceof double[] && ((double[]) value).length > 0) {
+                return Math.max(0.0, Math.min(20.0, ((double[]) value)[0]));
+            }
+        } catch (ReflectiveOperationException ignored) {
+            // Spigot does not expose TPS through the Bukkit Server interface.
+        }
+        return 0.0;
     }
     
     /**

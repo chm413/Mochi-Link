@@ -168,9 +168,17 @@ public class PluginConfig {
     }
     
     private void loadSecuritySettings() {
-        enableEncryption = config.getBoolean("security.enable_encryption", false);
-        encryptionAlgorithm = config.getString("security.encryption_algorithm", "AES-256-GCM");
-        verifyMessageIntegrity = config.getBoolean("security.verify_message_integrity", true);
+        // U-WBP does not define an application-layer cipher. Transport
+        // protection is provided by the ws/wss connection settings; retain
+        // these getters only for configuration compatibility.
+        boolean legacyEncryption = config.getBoolean("security.enable_encryption", false);
+        if (legacyEncryption) {
+            plugin.getLogger().warning(
+                "security.enable_encryption is deprecated and ignored; use connection.forward.ssl for WSS");
+        }
+        enableEncryption = false;
+        encryptionAlgorithm = "TLS";
+        verifyMessageIntegrity = false;
         allowedManagementIps = config.getStringList("security.allowed_management_ips");
     }
     

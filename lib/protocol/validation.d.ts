@@ -70,6 +70,7 @@ export declare class MessageValidator {
     private static isValidEventOperation;
     private static isValidSystemOperation;
     private static validateRequestData;
+    private static validateResponseData;
     private static validateEventData;
     private static validateSystemData;
     private static addError;

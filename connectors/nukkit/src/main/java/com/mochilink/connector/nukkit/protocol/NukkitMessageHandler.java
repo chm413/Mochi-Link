@@ -389,7 +389,7 @@ public class NukkitMessageHandler {
             JsonObject statusData = new JsonObject();
             statusData.addProperty("status", "online");
             // Note: getStartTime() not available
-            statusData.addProperty("timestamp", java.time.Instant.now().toString());
+            statusData.addProperty("timestamp", System.currentTimeMillis());
             
             JsonObject playersData = new JsonObject();
             playersData.addProperty("online", server.getOnlinePlayers().size());
@@ -745,7 +745,7 @@ public class NukkitMessageHandler {
         response.addProperty("type", "response");
         response.addProperty("id", requestId);
         response.addProperty("op", op);
-        response.addProperty("timestamp", java.time.Instant.now().toString());
+        response.addProperty("timestamp", System.currentTimeMillis());
         response.addProperty("version", "2.0");
         response.add("data", data);
         return response;
@@ -759,7 +759,7 @@ public class NukkitMessageHandler {
         response.addProperty("type", "response");
         response.addProperty("id", requestId);
         response.addProperty("op", op);
-        response.addProperty("timestamp", java.time.Instant.now().toString());
+        response.addProperty("timestamp", System.currentTimeMillis());
         response.addProperty("version", "2.0");
         
         JsonObject data = new JsonObject();

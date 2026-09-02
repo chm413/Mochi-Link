@@ -71,13 +71,9 @@ export class LLBDSEventHandler {
                     const event = {
                         type: 'player.join',
                         data: {
-                            playerId: player.xuid || player.uuid || player.name,
-                            playerName: player.name || player.realName,
-                            playerUUID: player.uuid || '',
-                            playerXUID: player.xuid || '',
-                            ip: player.ip || '',
-                            device: player.deviceTypeName || 'Unknown',
-                            joinTime: Date.now()
+                            player: this.toPlayer(player),
+                            firstJoin: false,
+                            joinMessage: `${player.name || player.realName || 'Player'} joined the game`
                         },
                         timestamp: Date.now()
                     };
@@ -105,10 +101,11 @@ export class LLBDSEventHandler {
                         data: {
                             playerId: player.xuid || player.uuid || player.name,
                             playerName: player.name || player.realName,
-                            playerUUID: player.uuid || '',
-                            playerXUID: player.xuid || '',
-                            leaveTime: Date.now(),
-                            reason: 'disconnect'
+                            reason: 'disconnect',
+                            leaveMessage: `${player.name || player.realName || 'Player'} left the game`,
+                            playTime: typeof player.joinTime === 'number'
+                                ? Math.max(0, Date.now() - player.joinTime)
+                                : 0
                         },
                         timestamp: Date.now()
                     };
@@ -165,8 +162,14 @@ export class LLBDSEventHandler {
                         data: {
                             playerId: player.xuid || player.uuid || player.name,
                             playerName: player.name || player.realName,
-                            deathCause: source?.type || 'unknown',
+                            cause: source?.type || 'unknown',
                             deathMessage: `${player.name} died`,
+                            location: {
+                                x: Number(player.pos?.x || 0),
+                                y: Number(player.pos?.y || 0),
+                                z: Number(player.pos?.z || 0),
+                                ...(player.pos?.dimid !== undefined ? { dimension: Number(player.pos.dimid) } : {})
+                            },
                             timestamp: Date.now()
                         },
                         timestamp: Date.now()
@@ -193,8 +196,8 @@ export class LLBDSEventHandler {
                     const event = {
                         type: 'server.start',
                         data: {
-                            serverVersion: mc.getBDSVersion?.() || 'Unknown',
-                            startTime: Date.now()
+                            status: 'online',
+                            version: mc.getBDSVersion?.() || 'Unknown'
                         },
                         timestamp: Date.now()
                     };
@@ -220,7 +223,7 @@ export class LLBDSEventHandler {
                     const event = {
                         type: 'server.stop',
                         data: {
-                            stopTime: Date.now(),
+                            status: 'offline',
                             uptime: process.uptime?.() || 0
                         },
                         timestamp: Date.now()
@@ -320,6 +323,30 @@ export class LLBDSEventHandler {
         } catch (error) {
             logger.error('Failed to forward event:', error);
         }
+    }
+
+    /** Convert an LLBDS player object to the required U-WBP Player shape. */
+    private toPlayer(player: any): Record<string, any> {
+        const name = String(player?.name || player?.realName || 'unknown');
+        const position = player?.pos || player?.position || {};
+        return {
+            id: String(player?.xuid || player?.uuid || name),
+            name,
+            displayName: String(player?.realName || player?.name || name),
+            world: String(player?.level?.name || player?.world?.name || player?.dimension || 'unknown'),
+            position: {
+                x: Number(position.x || 0),
+                y: Number(position.y || 0),
+                z: Number(position.z || 0),
+                ...(position.yaw !== undefined ? { yaw: Number(position.yaw) } : {}),
+                ...(position.pitch !== undefined ? { pitch: Number(position.pitch) } : {})
+            },
+            ping: Math.max(0, Number(player?.avgPing ?? player?.ping ?? 0)),
+            isOp: Boolean(player?.isOP ?? player?.isOp ?? false),
+            permissions: Array.isArray(player?.permissions) ? player.permissions.map(String) : [],
+            edition: 'Bedrock',
+            ...(player?.deviceTypeName ? { deviceType: String(player.deviceTypeName) } : {})
+        };
     }
     
     /**

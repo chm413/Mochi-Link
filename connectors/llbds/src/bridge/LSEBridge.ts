@@ -63,7 +63,7 @@ export class LSEBridge {
                 status: 'ok',
                 service: 'lse-bridge',
                 version: '1.0.0',
-                timestamp: new Date().toISOString()
+                timestamp: Date.now()
             }));
         });
         
@@ -91,7 +91,7 @@ export class LSEBridge {
                 res.end(JSON.stringify({ 
                     success: true, 
                     result: result,
-                    timestamp: new Date().toISOString()
+                    timestamp: Date.now()
                 }));
                 
             } catch (error: unknown) {
@@ -204,7 +204,7 @@ export class LSEBridge {
             const response = {
                 type,
                 data,
-                timestamp: new Date().toISOString()
+                timestamp: Date.now()
             };
             
             // Write to a temporary file that external service can read
@@ -224,20 +224,33 @@ export class LSEBridge {
      */
     private getServerStatus(): any {
         try {
+            const runtimeMc = (globalThis as any).mc;
+            const runtimeProcess = typeof process !== 'undefined' ? process : undefined;
+            const onlinePlayers = runtimeMc?.getOnlinePlayers?.()?.length || 0;
+            const maxPlayers = runtimeMc?.getMaxPlayers?.() || 0;
+            const uptime = runtimeProcess?.uptime?.() || 0;
+            const memory: any = runtimeProcess?.memoryUsage?.() || {};
             const status = {
-                online: true,
-                version: mc?.getBDSVersion?.() || 'Unknown',
-                players: {
-                    online: mc?.getOnlinePlayers?.()?.length || 0,
-                    max: mc?.getMaxPlayers?.() || 20
+                serverId: this.config.getServerId(),
+                name: this.config.getServerName(),
+                coreType: 'Bedrock',
+                coreName: 'LLBDS',
+                status: runtimeMc ? 'online' : 'offline',
+                online: Boolean(runtimeMc),
+                version: runtimeMc?.getBDSVersion?.() || 'Unknown',
+                maxPlayers,
+                onlinePlayers,
+                playerCount: onlinePlayers,
+                tps: Number(runtimeMc?.getTPS?.() || 0),
+                memoryUsage: {
+                    used: Number(memory.heapUsed || 0),
+                    max: Number(memory.heapTotal || 0),
+                    free: Math.max(0, Number(memory.heapTotal || 0) - Number(memory.heapUsed || 0)),
+                    percentage: memory.heapTotal ? Number(memory.heapUsed || 0) / Number(memory.heapTotal) * 100 : 0
                 },
-                tps: mc?.getTPS?.() || 20.0,
-                memory: {
-                    used: process.memoryUsage?.()?.heapUsed || 0,
-                    total: process.memoryUsage?.()?.heapTotal || 0
-                },
-                uptime: process.uptime?.() || 0,
-                timestamp: new Date().toISOString()
+                uptime: uptime * 1000,
+                worldInfo: [],
+                timestamp: Date.now()
             };
             
             return status;
@@ -247,7 +260,7 @@ export class LSEBridge {
             return {
                 online: false,
                 error: error instanceof Error ? error.message : String(error),
-                timestamp: new Date().toISOString()
+                timestamp: Date.now()
             };
         }
     }
@@ -257,18 +270,30 @@ export class LSEBridge {
      */
     private getPlayerList(): any[] {
         try {
-            const players = mc?.getOnlinePlayers?.() || [];
+            const runtimeMc = (globalThis as any).mc;
+            const players = runtimeMc?.getOnlinePlayers?.() || [];
             
-            return players.map((player: any) => ({
-                name: player.name || player.realName || 'Unknown',
-                xuid: player.xuid || '',
-                uuid: player.uuid || '',
-                ip: player.ip || '',
-                device: player.deviceTypeName || 'Unknown',
-                ping: player.avgPing || 0,
-                joinTime: player.joinTime || Date.now(),
-                online: true
-            }));
+            return players.map((player: any) => {
+                const name = String(player.name || player.realName || '');
+                const position = player.pos || player.position || {};
+                return {
+                    id: String(player.xuid || player.uuid || name),
+                    name,
+                    displayName: String(player.realName || player.name || name),
+                    world: String(player.level?.name || player.world?.name || 'unknown'),
+                    position: {
+                        x: Number(position.x || 0),
+                        y: Number(position.y || 0),
+                        z: Number(position.z || 0)
+                    },
+                    ping: Math.max(0, Number(player.avgPing || player.ping || 0)),
+                    isOp: Boolean(player.isOP || player.isOp),
+                    permissions: Array.isArray(player.permissions) ? player.permissions.map(String) : [],
+                    edition: 'Bedrock',
+                    ...(player.deviceTypeName ? { deviceType: String(player.deviceTypeName) } : {}),
+                    isOnline: true
+                };
+            }).filter((player: any) => player.name && player.id);
             
         } catch (error) {
             logger.error('Failed to get player list:', error);
@@ -290,33 +315,39 @@ export class LSEBridge {
                 throw new Error('Command not allowed');
             }
             
-            // Execute command using LLBDS API
-            let result = '';
-            
-            if (mc?.runcmd) {
-                result = mc.runcmd(command);
-            } else if (mc?.runcmdEx) {
-                const cmdResult = mc.runcmdEx(command);
-                result = cmdResult.output || '';
+            const runtimeMc = (globalThis as any).mc;
+            let result: any = '';
+            let success = true;
+
+            // runcmdEx provides both the real success flag and command output.
+            if (runtimeMc?.runcmdEx) {
+                const cmdResult = runtimeMc.runcmdEx(command);
+                result = cmdResult?.output || '';
+                success = cmdResult?.success !== false;
+            } else if (runtimeMc?.runcmd) {
+                success = Boolean(runtimeMc.runcmd(command));
             } else {
                 throw new Error('Command execution not available');
             }
             
             return {
                 command,
-                output: result,
-                success: true,
-                timestamp: new Date().toISOString()
+                output: Array.isArray(result)
+                    ? result.map(String)
+                    : String(result ?? '').split(/\r?\n/).filter(Boolean),
+                success,
+                ...(success ? {} : { error: 'Command execution failed' }),
+                timestamp: Date.now()
             };
             
         } catch (error: unknown) {
             logger.error('Failed to execute command:', error);
             return {
                 command,
-                output: '',
+                output: [],
                 success: false,
                 error: error instanceof Error ? error.message : String(error),
-                timestamp: new Date().toISOString()
+                timestamp: Date.now()
             };
         }
     }
@@ -383,7 +414,7 @@ export class LSEBridge {
                 fs.writeFileSync(filename, JSON.stringify({
                     endpoint,
                     data,
-                    timestamp: new Date().toISOString()
+                timestamp: Date.now()
                 }));
             }
             

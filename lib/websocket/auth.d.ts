@@ -7,6 +7,7 @@
  */
 import { EventEmitter } from 'events';
 import { APIToken, UWBPSystemMessage } from '../types';
+export { CONNECTOR_CAPABILITY_NAMES, ConnectorCapability, normalizeConnectorCapabilities } from '../protocol/capabilities';
 export interface AuthenticationChallenge {
     challenge: string;
     timestamp: number;
@@ -18,7 +19,7 @@ export interface AuthenticationResponse {
     token: string;
     /** Challenge nonce echoed back by the client */
     challenge?: string;
-    /** HMAC of (challenge + timestamp) keyed by the token */
+    /** HMAC-SHA256 of `${challenge}:${token}:${timestamp}` keyed by the token */
     challengeResponse: string;
     timestamp: string | number;
 }
@@ -63,6 +64,8 @@ export declare class AuthenticationManager extends EventEmitter {
      * Generate authentication challenge for a server
      */
     generateChallenge(serverId: string): Promise<string>;
+    /** Generate a challenge and return the timestamp needed by HMAC clients. */
+    generateChallengeData(serverId: string): Promise<AuthenticationChallenge>;
     /**
      * Validate authentication response
      */

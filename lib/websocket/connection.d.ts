@@ -44,6 +44,11 @@ export declare class WebSocketConnection extends EventEmitter implements Connect
      */
     isReady(): boolean;
     /**
+     * Mark an already-open server-side socket as connected. The `open` event
+     * may fire before a wrapper is created for accepted WebSocket connections.
+     */
+    markConnected(): void;
+    /**
      * Get connection statistics
      */
     getStats(): ConnectionStats;

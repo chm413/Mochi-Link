@@ -85,6 +85,7 @@ export declare class MonitoringService {
     private ctx;
     private auditService;
     private eventService;
+    private bridgeGetter?;
     private config;
     private reportIntervals;
     private serverConnections;
@@ -93,7 +94,7 @@ export declare class MonitoringService {
     private cleanupInterval?;
     private stats;
     private logger;
-    constructor(ctx: Context, auditService: AuditService, eventService: EventService, config?: Partial<MonitoringConfig>);
+    constructor(ctx: Context, auditService: AuditService, eventService: EventService, config?: Partial<MonitoringConfig>, bridgeGetter?: ((serverId: string) => any) | undefined);
     /**
      * Register server for monitoring
      */

@@ -35,6 +35,36 @@ npm run dev -- <subcommand>
 
 所有报告必须记录命令、提交、环境、退出码和失败项。只写“全部通过”而没有原始命令与结果，不构成验证证据。
 
+U-WBP v2 收尾时至少运行协议/认证/心跳/状态定向测试，并记录真实 Connector 运行时是否装载。协议烟测通过只证明消息互通，不等同于目标 Minecraft 核心已经验收。
+
+## Connector 验证命令
+
+Java Connector 当前没有 Gradle Wrapper，需先安装 Gradle：
+
+```bash
+cd connectors/java
+gradle clean test --no-daemon
+```
+
+LLBDS 外部服务：
+
+```bash
+cd connectors/llbds
+npm ci
+npm run build
+npm run test:protocol
+```
+
+PMMP Connector 使用 PHP 8.2+：
+
+```bash
+cd connectors/pmmp
+php tests/protocol-smoke.php
+find src tests -name '*.php' -exec php -l {} \;
+```
+
+这些命令验证编译、协议构造和可独立检查的 API 逻辑。最终发布仍需在目标 Paper/Spigot、LiteLoaderBDS 和 PocketMine-MP 版本上完成装载、命令、事件、重连与停止测试。
+
 ## 文档规则
 
 - `README.md`：入口、安装、能力边界。

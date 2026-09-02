@@ -234,7 +234,7 @@ public class MochiLinkFabricMod {
             }
             eventData.addProperty("coreType", "Java");
             eventData.addProperty("coreName", "Fabric");
-            eventData.addProperty("startTime", java.time.Instant.now().toString());
+            eventData.addProperty("startTime", System.currentTimeMillis());
             
             connectionManager.sendEvent("server.start", eventData);
             LOGGER.info("Server start event sent");
@@ -253,7 +253,7 @@ public class MochiLinkFabricMod {
                 eventData.addProperty("serverName", server.getName());
             }
             eventData.addProperty("reason", "Mod shutdown");
-            eventData.addProperty("stopTime", java.time.Instant.now().toString());
+            eventData.addProperty("stopTime", System.currentTimeMillis());
             
             connectionManager.sendEvent("server.stop", eventData);
             LOGGER.info("Server stop event sent");

@@ -71,12 +71,12 @@ export interface Player {
     isOnline?: boolean;
 }
 export interface PlayerDetail extends Player {
-    firstJoinAt: Date;
-    lastSeenAt: Date;
-    totalPlayTime: number;
-    isPremium: boolean;
-    identityConfidence: number;
-    identityMarkers: IdentityMarkers;
+    firstJoinAt?: Date;
+    lastSeenAt?: Date;
+    totalPlayTime?: number;
+    isPremium?: boolean;
+    identityConfidence?: number;
+    identityMarkers?: IdentityMarkers;
 }
 export interface PlayerIdentity {
     uuid?: string;
@@ -129,12 +129,15 @@ export interface UWBPSystemMessage extends UWBPMessage {
     systemOp: 'ping' | 'pong' | 'disconnect' | 'handshake' | 'capabilities' | 'error';
     requestId?: string;
 }
-export type EventType = 'player.join' | 'player.leave' | 'player.chat' | 'player.death' | 'player.advancement' | 'server.status' | 'server.logLine' | 'alert.tpsLow' | 'alert.memoryHigh' | 'alert.playerFlood';
+export type EventType = 'player.join' | 'player.leave' | 'player.chat' | 'player.death' | 'player.advancement' | 'server.status' | 'server.logLine' | 'alert.tpsLow' | 'alert.memoryHigh' | 'alert.cpuHigh' | 'alert.playerFlood';
 export interface BaseEvent {
     type: EventType;
     serverId: string;
     timestamp: number | string;
     version: string;
+    /** Optional operation-specific payload for status and alert events. */
+    data?: Record<string, any>;
+    status?: ServerStatus;
 }
 export interface PlayerJoinEvent extends BaseEvent {
     type: 'player.join';
@@ -238,6 +241,8 @@ export interface ServerInfo {
     tps: number;
     memoryUsage: MemoryInfo;
     worldInfo: WorldInfo[];
+    status?: string;
+    online?: boolean;
 }
 export interface MemoryInfo {
     used: number;

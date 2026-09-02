@@ -83,6 +83,12 @@ export declare class RequestHandler {
      * Handle permission operations
      */
     private handlePermissionOperation;
+    /**
+     * Reject permission operations that target a server other than the one the
+     * connection is authenticated for. Prevents a connector from modifying or
+     * reading the ACL of unrelated servers.
+     */
+    private rejectCrossServerPermission;
     private handlePermissionGrant;
     private handlePermissionRevoke;
     private handlePermissionUpdate;

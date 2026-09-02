@@ -10,15 +10,15 @@ exports.LLBDSEventHandler = void 0;
  * @author chm413
  * @version 1.0.0
  */
-var LLBDSEventHandler = /** @class */ (function () {
-    function LLBDSEventHandler(lseBridge) {
+class LLBDSEventHandler {
+    constructor(lseBridge) {
         this.registeredEvents = new Set();
         this.lseBridge = lseBridge;
     }
     /**
      * Register all LLBDS event listeners
      */
-    LLBDSEventHandler.prototype.registerEvents = function () {
+    registerEvents() {
         try {
             // Player events
             this.registerPlayerJoinEvent();
@@ -37,11 +37,11 @@ var LLBDSEventHandler = /** @class */ (function () {
         catch (error) {
             logger.error('Failed to register LLBDS event handlers:', error);
         }
-    };
+    }
     /**
      * Unregister all event listeners
      */
-    LLBDSEventHandler.prototype.unregisterEvents = function () {
+    unregisterEvents() {
         try {
             // LLBDS doesn't have a direct way to unregister events
             // Events are automatically cleaned up when the plugin is unloaded
@@ -52,29 +52,24 @@ var LLBDSEventHandler = /** @class */ (function () {
         catch (error) {
             logger.error('Failed to unregister LLBDS event handlers:', error);
         }
-    };
+    }
     /**
      * Register player join event
      */
-    LLBDSEventHandler.prototype.registerPlayerJoinEvent = function () {
-        var _this = this;
+    registerPlayerJoinEvent() {
         if (typeof mc !== 'undefined' && mc.listen) {
-            mc.listen('onJoin', function (player) {
+            mc.listen('onJoin', (player) => {
                 try {
-                    var event_1 = {
+                    const event = {
                         type: 'player.join',
                         data: {
-                            playerId: player.xuid || player.uuid || player.name,
-                            playerName: player.name || player.realName,
-                            playerUUID: player.uuid || '',
-                            playerXUID: player.xuid || '',
-                            ip: player.ip || '',
-                            device: player.deviceTypeName || 'Unknown',
-                            joinTime: Date.now()
+                            player: this.toPlayer(player),
+                            firstJoin: false,
+                            joinMessage: `${player.name || player.realName || 'Player'} joined the game`
                         },
                         timestamp: Date.now()
                     };
-                    _this.forwardEvent(event_1);
+                    this.forwardEvent(event);
                 }
                 catch (error) {
                     logger.error('Error handling player join event:', error);
@@ -82,28 +77,28 @@ var LLBDSEventHandler = /** @class */ (function () {
             });
             this.registeredEvents.add('onJoin');
         }
-    };
+    }
     /**
      * Register player leave event
      */
-    LLBDSEventHandler.prototype.registerPlayerLeaveEvent = function () {
-        var _this = this;
+    registerPlayerLeaveEvent() {
         if (typeof mc !== 'undefined' && mc.listen) {
-            mc.listen('onLeft', function (player) {
+            mc.listen('onLeft', (player) => {
                 try {
-                    var event_2 = {
+                    const event = {
                         type: 'player.leave',
                         data: {
                             playerId: player.xuid || player.uuid || player.name,
                             playerName: player.name || player.realName,
-                            playerUUID: player.uuid || '',
-                            playerXUID: player.xuid || '',
-                            leaveTime: Date.now(),
-                            reason: 'disconnect'
+                            reason: 'disconnect',
+                            leaveMessage: `${player.name || player.realName || 'Player'} left the game`,
+                            playTime: typeof player.joinTime === 'number'
+                                ? Math.max(0, Date.now() - player.joinTime)
+                                : 0
                         },
                         timestamp: Date.now()
                     };
-                    _this.forwardEvent(event_2);
+                    this.forwardEvent(event);
                 }
                 catch (error) {
                     logger.error('Error handling player leave event:', error);
@@ -111,16 +106,15 @@ var LLBDSEventHandler = /** @class */ (function () {
             });
             this.registeredEvents.add('onLeft');
         }
-    };
+    }
     /**
      * Register player chat event
      */
-    LLBDSEventHandler.prototype.registerPlayerChatEvent = function () {
-        var _this = this;
+    registerPlayerChatEvent() {
         if (typeof mc !== 'undefined' && mc.listen) {
-            mc.listen('onChat', function (player, msg) {
+            mc.listen('onChat', (player, msg) => {
                 try {
-                    var event_3 = {
+                    const event = {
                         type: 'player.chat',
                         data: {
                             playerId: player.xuid || player.uuid || player.name,
@@ -130,7 +124,7 @@ var LLBDSEventHandler = /** @class */ (function () {
                         },
                         timestamp: Date.now()
                     };
-                    _this.forwardEvent(event_3);
+                    this.forwardEvent(event);
                 }
                 catch (error) {
                     logger.error('Error handling player chat event:', error);
@@ -138,27 +132,32 @@ var LLBDSEventHandler = /** @class */ (function () {
             });
             this.registeredEvents.add('onChat');
         }
-    };
+    }
     /**
      * Register player death event
      */
-    LLBDSEventHandler.prototype.registerPlayerDeathEvent = function () {
-        var _this = this;
+    registerPlayerDeathEvent() {
         if (typeof mc !== 'undefined' && mc.listen) {
-            mc.listen('onPlayerDie', function (player, source) {
+            mc.listen('onPlayerDie', (player, source) => {
                 try {
-                    var event_4 = {
+                    const event = {
                         type: 'player.death',
                         data: {
                             playerId: player.xuid || player.uuid || player.name,
                             playerName: player.name || player.realName,
-                            deathCause: (source === null || source === void 0 ? void 0 : source.type) || 'unknown',
-                            deathMessage: "".concat(player.name, " died"),
+                            cause: source?.type || 'unknown',
+                            deathMessage: `${player.name} died`,
+                            location: {
+                                x: Number(player.pos?.x || 0),
+                                y: Number(player.pos?.y || 0),
+                                z: Number(player.pos?.z || 0),
+                                ...(player.pos?.dimid !== undefined ? { dimension: Number(player.pos.dimid) } : {})
+                            },
                             timestamp: Date.now()
                         },
                         timestamp: Date.now()
                     };
-                    _this.forwardEvent(event_4);
+                    this.forwardEvent(event);
                 }
                 catch (error) {
                     logger.error('Error handling player death event:', error);
@@ -166,25 +165,23 @@ var LLBDSEventHandler = /** @class */ (function () {
             });
             this.registeredEvents.add('onPlayerDie');
         }
-    };
+    }
     /**
      * Register server start event
      */
-    LLBDSEventHandler.prototype.registerServerStartEvent = function () {
-        var _this = this;
+    registerServerStartEvent() {
         if (typeof mc !== 'undefined' && mc.listen) {
-            mc.listen('onServerStarted', function () {
-                var _a;
+            mc.listen('onServerStarted', () => {
                 try {
-                    var event_5 = {
+                    const event = {
                         type: 'server.start',
                         data: {
-                            serverVersion: ((_a = mc.getBDSVersion) === null || _a === void 0 ? void 0 : _a.call(mc)) || 'Unknown',
-                            startTime: Date.now()
+                            status: 'online',
+                            version: mc.getBDSVersion?.() || 'Unknown'
                         },
                         timestamp: Date.now()
                     };
-                    _this.forwardEvent(event_5);
+                    this.forwardEvent(event);
                 }
                 catch (error) {
                     logger.error('Error handling server start event:', error);
@@ -192,25 +189,23 @@ var LLBDSEventHandler = /** @class */ (function () {
             });
             this.registeredEvents.add('onServerStarted');
         }
-    };
+    }
     /**
      * Register server stop event
      */
-    LLBDSEventHandler.prototype.registerServerStopEvent = function () {
-        var _this = this;
+    registerServerStopEvent() {
         if (typeof mc !== 'undefined' && mc.listen) {
-            mc.listen('onServerStop', function () {
-                var _a;
+            mc.listen('onServerStop', () => {
                 try {
-                    var event_6 = {
+                    const event = {
                         type: 'server.stop',
                         data: {
-                            stopTime: Date.now(),
-                            uptime: ((_a = process.uptime) === null || _a === void 0 ? void 0 : _a.call(process)) || 0
+                            status: 'offline',
+                            uptime: process.uptime?.() || 0
                         },
                         timestamp: Date.now()
                     };
-                    _this.forwardEvent(event_6);
+                    this.forwardEvent(event);
                 }
                 catch (error) {
                     logger.error('Error handling server stop event:', error);
@@ -218,33 +213,31 @@ var LLBDSEventHandler = /** @class */ (function () {
             });
             this.registeredEvents.add('onServerStop');
         }
-    };
+    }
     /**
      * Register block place event
      */
-    LLBDSEventHandler.prototype.registerBlockPlaceEvent = function () {
-        var _this = this;
+    registerBlockPlaceEvent() {
         if (typeof mc !== 'undefined' && mc.listen) {
-            mc.listen('onBlockPlaced', function (player, block) {
-                var _a, _b, _c, _d;
+            mc.listen('onBlockPlaced', (player, block) => {
                 try {
-                    var event_7 = {
+                    const event = {
                         type: 'world.block_place',
                         data: {
                             playerId: player.xuid || player.uuid || player.name,
                             playerName: player.name || player.realName,
                             blockType: block.type || 'unknown',
                             position: {
-                                x: ((_a = block.pos) === null || _a === void 0 ? void 0 : _a.x) || 0,
-                                y: ((_b = block.pos) === null || _b === void 0 ? void 0 : _b.y) || 0,
-                                z: ((_c = block.pos) === null || _c === void 0 ? void 0 : _c.z) || 0,
-                                dimension: ((_d = block.pos) === null || _d === void 0 ? void 0 : _d.dimid) || 0
+                                x: block.pos?.x || 0,
+                                y: block.pos?.y || 0,
+                                z: block.pos?.z || 0,
+                                dimension: block.pos?.dimid || 0
                             },
                             timestamp: Date.now()
                         },
                         timestamp: Date.now()
                     };
-                    _this.forwardEvent(event_7);
+                    this.forwardEvent(event);
                 }
                 catch (error) {
                     logger.error('Error handling block place event:', error);
@@ -252,33 +245,31 @@ var LLBDSEventHandler = /** @class */ (function () {
             });
             this.registeredEvents.add('onBlockPlaced');
         }
-    };
+    }
     /**
      * Register block break event
      */
-    LLBDSEventHandler.prototype.registerBlockBreakEvent = function () {
-        var _this = this;
+    registerBlockBreakEvent() {
         if (typeof mc !== 'undefined' && mc.listen) {
-            mc.listen('onBlockDestroyed', function (player, block) {
-                var _a, _b, _c, _d;
+            mc.listen('onBlockDestroyed', (player, block) => {
                 try {
-                    var event_8 = {
+                    const event = {
                         type: 'world.block_break',
                         data: {
                             playerId: player.xuid || player.uuid || player.name,
                             playerName: player.name || player.realName,
                             blockType: block.type || 'unknown',
                             position: {
-                                x: ((_a = block.pos) === null || _a === void 0 ? void 0 : _a.x) || 0,
-                                y: ((_b = block.pos) === null || _b === void 0 ? void 0 : _b.y) || 0,
-                                z: ((_c = block.pos) === null || _c === void 0 ? void 0 : _c.z) || 0,
-                                dimension: ((_d = block.pos) === null || _d === void 0 ? void 0 : _d.dimid) || 0
+                                x: block.pos?.x || 0,
+                                y: block.pos?.y || 0,
+                                z: block.pos?.z || 0,
+                                dimension: block.pos?.dimid || 0
                             },
                             timestamp: Date.now()
                         },
                         timestamp: Date.now()
                     };
-                    _this.forwardEvent(event_8);
+                    this.forwardEvent(event);
                 }
                 catch (error) {
                     logger.error('Error handling block break event:', error);
@@ -286,32 +277,55 @@ var LLBDSEventHandler = /** @class */ (function () {
             });
             this.registeredEvents.add('onBlockDestroyed');
         }
-    };
+    }
     /**
      * Forward event to external service
      */
-    LLBDSEventHandler.prototype.forwardEvent = function (event) {
+    forwardEvent(event) {
         try {
             // Forward through LSE bridge to external service
             this.lseBridge.forwardEventToExternal(event);
-            logger.debug("Event forwarded: ".concat(event.type));
+            logger.debug(`Event forwarded: ${event.type}`);
         }
         catch (error) {
             logger.error('Failed to forward event:', error);
         }
-    };
+    }
+    /** Convert an LLBDS player object to the required U-WBP Player shape. */
+    toPlayer(player) {
+        const name = String(player?.name || player?.realName || 'unknown');
+        const position = player?.pos || player?.position || {};
+        return {
+            id: String(player?.xuid || player?.uuid || name),
+            name,
+            displayName: String(player?.realName || player?.name || name),
+            world: String(player?.level?.name || player?.world?.name || player?.dimension || 'unknown'),
+            position: {
+                x: Number(position.x || 0),
+                y: Number(position.y || 0),
+                z: Number(position.z || 0),
+                ...(position.yaw !== undefined ? { yaw: Number(position.yaw) } : {}),
+                ...(position.pitch !== undefined ? { pitch: Number(position.pitch) } : {})
+            },
+            ping: Math.max(0, Number(player?.avgPing ?? player?.ping ?? 0)),
+            isOp: Boolean(player?.isOP ?? player?.isOp ?? false),
+            permissions: Array.isArray(player?.permissions) ? player.permissions.map(String) : [],
+            edition: 'Bedrock',
+            ...(player?.deviceTypeName ? { deviceType: String(player.deviceTypeName) } : {})
+        };
+    }
     /**
      * Get registered events
      */
-    LLBDSEventHandler.prototype.getRegisteredEvents = function () {
+    getRegisteredEvents() {
         return Array.from(this.registeredEvents);
-    };
+    }
     /**
      * Check if event is registered
      */
-    LLBDSEventHandler.prototype.isEventRegistered = function (eventName) {
+    isEventRegistered(eventName) {
         return this.registeredEvents.has(eventName);
-    };
-    return LLBDSEventHandler;
-}());
+    }
+}
 exports.LLBDSEventHandler = LLBDSEventHandler;
+//# sourceMappingURL=LLBDSEventHandler.js.map

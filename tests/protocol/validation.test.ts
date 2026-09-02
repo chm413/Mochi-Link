@@ -102,6 +102,51 @@ describe('MessageValidator', () => {
       expect(result.errors.some(e => e.code === 'MISSING_REQUEST_ID')).toBe(true);
     });
 
+    it('should reject failed responses without a stable error code', () => {
+      const response = MessageFactory.createResponse('req-123', 'server.getInfo', {}, {
+        success: false,
+        error: 'Request failed'
+      });
+      response.data = {};
+
+      const result = MessageValidator.validate(response);
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.code === 'MISSING_ERROR_CODE')).toBe(true);
+    });
+
+    it('should reject status responses without an explicit online boolean', () => {
+      const response = MessageFactory.createResponse('req-123', 'server.getStatus', {
+        status: 'online'
+      });
+
+      const result = MessageValidator.validate(response);
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.code === 'MISSING_ONLINE')).toBe(true);
+    });
+
+    it('should reject contradictory server status and online values', () => {
+      const response = MessageFactory.createResponse('req-123', 'server.getStatus', {
+        status: 'error',
+        online: true
+      });
+
+      const result = MessageValidator.validate(response);
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.code === 'STATUS_ONLINE_MISMATCH')).toBe(true);
+    });
+
+    it('should reject pong messages without request correlation', () => {
+      const pong = MessageFactory.createSystemMessage('pong', {});
+
+      const result = MessageValidator.validate(pong);
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.code === 'MISSING_REQUEST_ID')).toBe(true);
+    });
+
     it('should reject event without eventType', () => {
       const invalidEvent = {
         type: 'event',

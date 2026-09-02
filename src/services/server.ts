@@ -26,6 +26,7 @@ import { TokenManager } from './token';
 import { PluginIntegrationService } from './plugin-integration';
 import { ConnectionModeManager } from '../connection/manager';
 import { ConnectionAdapter } from '../connection/types';
+import { createBridgeConfig, createConnectorBridge } from '../bridge';
 
 // ============================================================================
 // Server Configuration Management
@@ -165,8 +166,10 @@ export class ServerManager {
         ipWhitelist: this.extractIPFromConnectionConfig(options.connectionConfig)
       }, operatorId);
 
-      // Grant owner permissions
-      await this.permission.assignRole(options.ownerId, serverId, 'owner', operatorId);
+      // Ownership is derived from servers.owner_id (see
+      // PermissionManager.checkOwnerPermission), not from an ACL entry. Do not
+      // call assignRole('owner') here: PermissionManager explicitly rejects
+      // assigning the owner role through the ACL system.
 
       // Log the registration
       await this.audit.logger.logSuccess(
@@ -430,7 +433,8 @@ export class ServerManager {
     status: ServerStatus,
     additionalInfo?: Partial<ServerStatusInfo>
   ): Promise<void> {
-    const logger = this.ctx.logger('mochi-link:server');
+    // During Koishi shutdown the Context logger provider may already be disposed.
+    const logger = this.logger;
     
     try {
       // Update database
@@ -1007,18 +1011,18 @@ export class ServerManager {
         throw new Error(`Server ${serverId} not found in database`);
       }
 
-      // Import bridge classes
-      const { JavaConnectorBridge } = await import('../bridge/java');
-      
-      // Create bridge based on core type
+      // Use the registered core type to select the bridge implementation.  The
+      // WebSocket has already authenticated, so the bridge only needs the
+      // adapter created below.
       let bridge: any;
-      
-      const bridgeConfig = {
-        serverId: server.id,
-        coreName: server.coreName,
-        coreVersion: server.coreVersion,
-        coreType: server.coreType
-      };
+
+      const bridgeConfig = createBridgeConfig(
+        server.id,
+        server.coreType,
+        server.coreName,
+        server.coreVersion,
+        server.connectionConfig
+      );
       
       // Create a pending requests map for request-response pattern
       const pendingRequests = new Map<string, {
@@ -1028,7 +1032,11 @@ export class ServerManager {
       }>();
       
       // Listen for responses from the server
-      connection.on('message', (message: any) => {
+      connection.on('message', (rawMessage: any) => {
+        const message = typeof rawMessage === 'string'
+          ? (() => { try { return JSON.parse(rawMessage); } catch { return null; } })()
+          : rawMessage;
+        if (!message) return;
         // Handle response messages (U-WBP v2 protocol)
         const correlationId = message.requestId || message.id;
         if (message.type === 'response' && correlationId) {
@@ -1037,64 +1045,119 @@ export class ServerManager {
             clearTimeout(pending.timeout);
             pendingRequests.delete(correlationId);
             
-            if (message.success === false || message.error || message.data?.success === false || message.data?.error) {
-              pending.reject(new Error(message.error || message.data?.error || 'Request failed'));
+            const responseData = message.data && typeof message.data === 'object'
+              ? message.data
+              : {};
+            const nestedResult = responseData.result && typeof responseData.result === 'object'
+              ? responseData.result
+              : {};
+            const success = message.success ?? responseData.success ?? nestedResult.success ?? true;
+            const error = message.error || responseData.error || nestedResult.error;
+            if (success === false || error) {
+              pending.reject(new Error(error || 'Request failed'));
             } else {
               pending.resolve(message);
             }
           }
         }
+
+        if (message.type === 'event') {
+          connection.emit('event', message);
+        }
       });
+
+      const sendRequestAndWait = async (
+        op: string,
+        data: Record<string, any> = {},
+        timeout = 30000
+      ): Promise<any> => {
+        const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+        const responsePromise = new Promise<any>((resolve, reject) => {
+          const timeoutHandle = setTimeout(() => {
+            pendingRequests.delete(requestId);
+            reject(new Error(`${op} request timeout`));
+          }, timeout);
+
+          pendingRequests.set(requestId, {
+            resolve,
+            reject,
+            timeout: timeoutHandle
+          });
+        });
+
+        try {
+          await connection.send({
+            type: 'request',
+            id: requestId,
+            op,
+            data,
+            timestamp: Date.now(),
+            serverId: server.id,
+            version: '2.0'
+          });
+        } catch (error) {
+          const pending = pendingRequests.get(requestId);
+          if (pending) {
+            clearTimeout(pending.timeout);
+            pendingRequests.delete(requestId);
+          }
+          throw error;
+        }
+
+        return responsePromise;
+      };
       
       // Create connection adapter for WebSocket
       const connectionAdapter: any = {
+        on: connection.on.bind(connection),
+        once: connection.once.bind(connection),
+        off: connection.off
+          ? connection.off.bind(connection)
+          : connection.removeListener.bind(connection),
+        removeListener: connection.removeListener.bind(connection),
         pendingRequests: pendingRequests, // 暴露 pendingRequests 供 bridge 使用
         send: async (message: any) => {
           // 直接发送消息
           await connection.send(message);
         },
+        sendRequest: sendRequestAndWait,
         sendCommand: async (command: string, timeout?: number) => {
           // Send command through WebSocket connection
           try {
-            const requestId = `cmd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
             const requestTimeout = timeout || 30000;
+            const response = await sendRequestAndWait('command.execute', {
+              command,
+              executor: 'console'
+            }, requestTimeout);
             
-            // Create promise for response
-            const responsePromise = new Promise<any>((resolve, reject) => {
-              const timeoutHandle = setTimeout(() => {
-                pendingRequests.delete(requestId);
-                reject(new Error('Command execution timeout'));
-              }, requestTimeout);
-              
-              pendingRequests.set(requestId, {
-                resolve,
-                reject,
-                timeout: timeoutHandle
-              });
-            });
-            
-            // Send command message (following U-WBP v2 protocol specification)
-            await connection.send({
-              type: 'request',
-              id: requestId,
-              op: 'command.execute',
-              data: {
-                command: command,
-                executor: 'console'
-              },
-              timestamp: Date.now(),
-              serverId: server.id,
-              version: '2.0'
-            });
-            
-            // Wait for response
-            const response = await responsePromise;
-            
+            const responseData = response.data && typeof response.data === 'object'
+              ? response.data
+              : {};
+            const nestedResult = responseData.result && typeof responseData.result === 'object'
+              ? responseData.result
+              : {};
+            const rawOutput = response.output
+              ?? responseData.output
+              ?? nestedResult.output
+              ?? responseData.result;
+            const output = Array.isArray(rawOutput)
+              ? rawOutput.map(String)
+              : rawOutput === undefined || rawOutput === null
+                ? []
+                : String(rawOutput).split(/\r?\n/).filter(Boolean);
             return {
-              success: response.success !== false,
-              output: response.data?.output || [],
-              executionTime: response.data?.executionTime || 0,
-              error: response.error
+              success: (response.success ?? responseData.success ?? nestedResult.success ?? true) !== false,
+              output,
+              executionTime: Number(
+                response.executionTime
+                ?? response.execution_time
+                ?? responseData.executionTime
+                ?? responseData.execution_time
+                ?? nestedResult.executionTime
+                ?? nestedResult.execution_time
+                ?? 0
+              ),
+              error: response.error || responseData.error || nestedResult.error
             };
           } catch (error) {
             return {
@@ -1112,6 +1175,13 @@ export class ServerManager {
           await connection.close(); 
         }
       };
+
+      Object.defineProperty(connectionAdapter, 'capabilities', {
+        get: () => Array.isArray(connection.capabilities)
+          ? [...connection.capabilities]
+          : [],
+        enumerable: true
+      });
       
       // Add isConnected as both property and method for compatibility
       Object.defineProperty(connectionAdapter, 'isConnected', {
@@ -1119,9 +1189,18 @@ export class ServerManager {
         enumerable: true
       });
       
-      // Create Java bridge (works for Folia, Paper, Spigot, etc.)
-      bridge = new JavaConnectorBridge(bridgeConfig, connectionAdapter);
-      
+      bridge = createConnectorBridge(bridgeConfig, connectionAdapter);
+
+      // 以连接器实际声明的能力收紧桥接能力（PROTOCOL §9）。
+      // 未在 X-Capabilities / handshake 中声明的能力视为不支持，
+      // requireCapability 会在执行时抛 UnsupportedOperationError。
+      const declaredCaps = Array.isArray(connection.capabilities)
+        ? [...connection.capabilities]
+        : [];
+      if (typeof bridge.applyDeclaredCapabilities === 'function') {
+        bridge.applyDeclaredCapabilities(declaredCaps);
+      }
+
       // Mark bridge as connected since WebSocket is already authenticated
       await bridge.connect();
       
@@ -1140,7 +1219,7 @@ export class ServerManager {
    * Remove bridge for a server
    */
   async removeBridge(serverId: string): Promise<void> {
-    const logger = this.ctx.logger('mochi-link:server');
+    const logger = this.logger;
     
     try {
       // Remove bridge

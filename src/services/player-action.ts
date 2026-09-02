@@ -577,32 +577,10 @@ export class PlayerActionService {
         throw new Error(`Server ${serverId} does not support player management`);
       }
 
-      // Execute unban action - using kick type as placeholder since unban isn't in PlayerAction type
-      // In a real implementation, this would need to be added to the bridge interface
-      const result = await bridge.performPlayerAction({
-        type: 'kick', // Placeholder - should be 'unban' in actual implementation
-        target: options.playerId,
-        reason: options.reason || 'Unbanned'
-      });
-
-      // Audit log
-      await this.auditService.logger.logSuccess(
-        'player.unban',
-        {
-          playerId: options.playerId,
-          reason: options.reason,
-          executionTime: Date.now() - startTime
-        },
-        { userId: options.executor }
-      );
-
-      this.logger.info(`Player ${options.playerId} unbanned from server ${serverId}`);
-
-      return {
-        success: result.success,
-        playerId: options.playerId,
-        timestamp: new Date()
-      };
+      // The connector bridge interface does not yet define an unban operation.
+      // Fail explicitly instead of issuing a kick as a placeholder, so callers
+      // never receive a false success for an operation that was not performed.
+      throw new Error('Player unban is not supported by the connector bridge interface');
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -655,13 +633,14 @@ export class PlayerActionService {
         throw new Error(`Server ${serverId} is not available`);
       }
 
-      // For now, return empty list as this would need to be implemented in the bridge
-      // In a real implementation, this would query the server's ban list
-      this.logger.warn(`getBanList not fully implemented for server ${serverId}`);
+      // The connector bridge interface does not yet expose a ban list query.
+      // Return an explicit failure rather than a false empty-success result.
+      this.logger.warn(`getBanList is not supported by the connector bridge for server ${serverId}`);
 
       return {
-        success: true,
-        bans: []
+        success: false,
+        bans: [],
+        error: 'Ban list retrieval is not supported by the connector bridge interface'
       };
 
     } catch (error) {

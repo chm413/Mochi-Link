@@ -163,7 +163,7 @@ public class ForgeConnectionManager {
             handshake.addProperty("type", "system");
             handshake.addProperty("id", generateId());
             handshake.addProperty("op", "handshake");
-            handshake.addProperty("timestamp", java.time.Instant.now().toString());
+            handshake.addProperty("timestamp", System.currentTimeMillis());
             handshake.addProperty("version", "2.0");
             handshake.addProperty("systemOp", "handshake");
             
@@ -228,7 +228,7 @@ public class ForgeConnectionManager {
         disconnect.addProperty("type", "request");
         disconnect.addProperty("id", generateId());
         disconnect.addProperty("op", "system.disconnect");
-        disconnect.addProperty("timestamp", java.time.Instant.now().toString());
+        disconnect.addProperty("timestamp", System.currentTimeMillis());
         disconnect.addProperty("version", "2.0");
         
         JsonObject data = new JsonObject();
@@ -254,7 +254,7 @@ public class ForgeConnectionManager {
             event.addProperty("type", "event");
             event.addProperty("id", generateId());
             event.addProperty("op", eventOp);
-            event.addProperty("timestamp", java.time.Instant.now().toString());
+            event.addProperty("timestamp", System.currentTimeMillis());
             event.addProperty("version", "2.0");
             event.add("data", eventData);
             
@@ -471,7 +471,7 @@ public class ForgeConnectionManager {
             response.addProperty("type", "response");
             response.addProperty("id", requestId);
             response.addProperty("op", "event.subscribe");
-            response.addProperty("timestamp", java.time.Instant.now().toString());
+            response.addProperty("timestamp", System.currentTimeMillis());
             response.addProperty("version", "2.0");
             
             JsonObject responseData = new JsonObject();
@@ -506,7 +506,7 @@ public class ForgeConnectionManager {
             response.addProperty("type", "response");
             response.addProperty("id", requestId);
             response.addProperty("op", "event.unsubscribe");
-            response.addProperty("timestamp", java.time.Instant.now().toString());
+            response.addProperty("timestamp", System.currentTimeMillis());
             response.addProperty("version", "2.0");
             
             JsonObject responseData = new JsonObject();
@@ -532,7 +532,7 @@ public class ForgeConnectionManager {
         response.addProperty("type", "error");
         response.addProperty("id", requestId);
         response.addProperty("op", op);
-        response.addProperty("timestamp", java.time.Instant.now().toString());
+        response.addProperty("timestamp", System.currentTimeMillis());
         response.addProperty("version", "2.0");
         
         JsonObject error = new JsonObject();
@@ -561,7 +561,7 @@ public class ForgeConnectionManager {
                     ping.addProperty("type", "request");
                     ping.addProperty("id", generateId());
                     ping.addProperty("op", "system.ping");
-                    ping.addProperty("timestamp", java.time.Instant.now().toString());
+                    ping.addProperty("timestamp", System.currentTimeMillis());
                     ping.addProperty("version", "2.0");
                     
                     JsonObject data = new JsonObject();

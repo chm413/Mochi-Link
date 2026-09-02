@@ -96,6 +96,19 @@ describe('Database Models', () => {
         expect(dbServer.tags).toBe(JSON.stringify(['production', 'bedrock']));
         expect(dbServer.updated_at).toBeInstanceOf(Date);
       });
+
+      it('should omit primary and unrelated fields from partial updates', () => {
+        const dbServer = ModelUtils.modelToDbServer({
+          coreVersion: '1.21.1'
+        });
+
+        expect(dbServer.core_version).toBe('1.21.1');
+        expect(dbServer.updated_at).toBeInstanceOf(Date);
+        expect(dbServer).not.toHaveProperty('id');
+        expect(dbServer).not.toHaveProperty('name');
+        expect(dbServer).not.toHaveProperty('connection_config');
+        expect(dbServer).not.toHaveProperty('tags');
+      });
     });
 
     describe('dbACLToModel', () => {

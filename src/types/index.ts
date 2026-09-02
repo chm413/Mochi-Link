@@ -95,12 +95,12 @@ export interface Player {
 }
 
 export interface PlayerDetail extends Player {
-  firstJoinAt: Date;
-  lastSeenAt: Date;
-  totalPlayTime: number;
-  isPremium: boolean;
-  identityConfidence: number;
-  identityMarkers: IdentityMarkers;
+  firstJoinAt?: Date;
+  lastSeenAt?: Date;
+  totalPlayTime?: number;
+  isPremium?: boolean;
+  identityConfidence?: number;
+  identityMarkers?: IdentityMarkers;
 }
 
 export interface PlayerIdentity {
@@ -183,6 +183,7 @@ export type EventType =
   | 'server.logLine'
   | 'alert.tpsLow'
   | 'alert.memoryHigh'
+  | 'alert.cpuHigh'
   | 'alert.playerFlood';
 
 export interface BaseEvent {
@@ -190,6 +191,9 @@ export interface BaseEvent {
   serverId: string;
   timestamp: number | string;
   version: string;
+  /** Optional operation-specific payload for status and alert events. */
+  data?: Record<string, any>;
+  status?: ServerStatus;
 }
 
 export interface PlayerJoinEvent extends BaseEvent {
@@ -322,6 +326,8 @@ export interface ServerInfo {
   tps: number;
   memoryUsage: MemoryInfo;
   worldInfo: WorldInfo[];
+  status?: string;
+  online?: boolean;
 }
 
 export interface MemoryInfo {

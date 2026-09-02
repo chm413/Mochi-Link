@@ -5,9 +5,10 @@
   "main": "src/index.js",
   "scripts": {
     "build": "tsc",
+    "test:protocol": "npm run build && node tests/protocol-smoke.js",
     "dev": "tsc --watch",
-    "start": "node src/external-service.js",
-    "service": "node src/external-service.js"
+    "start": "node dist/external-service.js",
+    "service": "node dist/external-service.js"
   },
   "keywords": [
     "minecraft",

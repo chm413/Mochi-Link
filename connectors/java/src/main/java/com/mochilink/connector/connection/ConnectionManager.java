@@ -94,6 +94,16 @@ public class ConnectionManager {
                 
                 // Create WebSocket client
                 webSocketClient = new MochiWebSocketClient(serverUri, this, messageHandler);
+                webSocketClient.addHeader("X-Server-Id", config.getServerId());
+                webSocketClient.addHeader("X-Server-Type", "Java");
+                webSocketClient.addHeader("X-Protocol-Version", UWBPv2Protocol.PROTOCOL_VERSION);
+                webSocketClient.addHeader("X-Capabilities",
+                    String.join(",", protocol.getDeclaredCapabilities()));
+                String token = config.getApiToken();
+                if (token != null && !token.isEmpty()) {
+                    webSocketClient.addHeader("X-Auth-Token", token);
+                    webSocketClient.addHeader("Authorization", "Bearer " + token);
+                }
                 
                 // Connect with timeout
                 boolean success = webSocketClient.connectBlocking();
@@ -105,8 +115,8 @@ public class ConnectionManager {
                     // Start heartbeat
                     startHeartbeat();
                     
-                    // Note: Authentication is now handled via URL parameters (serverId and token)
-                    // The server will authenticate the connection automatically
+                    // Upgrade headers authenticate the connection before the
+                    // first application message is exchanged.
                     
                     logger.info("Successfully connected to management server");
                     return true;
@@ -166,7 +176,7 @@ public class ConnectionManager {
             webSocketClient.send(message);
             
             if (config.isVerboseConnection()) {
-                logger.info("Sent message: " + message);
+                logger.info("Sent protocol message (" + message.length() + " bytes)");
             }
             
             return true;
@@ -219,7 +229,9 @@ public class ConnectionManager {
      */
     public void onMessageReceived(String message) {
         if (config.isVerboseConnection()) {
-            logger.info("Received message: " + message);
+            // Never log protocol bodies: authentication messages may contain
+            // a token or challenge response.
+            logger.info("Received protocol message (" + message.length() + " bytes)");
         }
         
         // Process message through protocol handler
@@ -235,13 +247,11 @@ public class ConnectionManager {
             String host = config.getForwardHost();
             int port = config.getForwardPort();
             String serverId = config.getServerId();
-            String token = config.getApiToken();
-            
-            // Create WebSocket endpoint URL with serverId and token parameters
-            String url = String.format("%s://%s:%d/ws?serverId=%s&token=%s", 
+            // Keep credentials out of the URI so proxy/access logs cannot
+            // capture them. Authentication is carried in upgrade headers.
+            String url = String.format("%s://%s:%d/ws?serverId=%s",
                 scheme, host, port, 
-                java.net.URLEncoder.encode(serverId, "UTF-8"),
-                java.net.URLEncoder.encode(token, "UTF-8"));
+                java.net.URLEncoder.encode(serverId, "UTF-8"));
             
             logger.info("Connecting to: " + scheme + "://" + host + ":" + port + "/ws");
             

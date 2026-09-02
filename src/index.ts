@@ -20,6 +20,7 @@ import {
 } from './utils/connection-config';
 import { formatLegacyModeWindowNotice, getLegacyModeWindows } from './constants/version-policy';
 import { TableNames } from './database/table-names';
+import { normalizeConnectorCapabilities } from './protocol/capabilities';
 
 // ============================================================================
 // Helper Functions
@@ -178,9 +179,14 @@ export function apply(ctx: Context, config: PluginConfig) {
     let serviceManager: ServiceManager | null = null;
     let wsManager: MochiWebSocketServer | null = null;
     let httpServer: HTTPServer | null = null;
+    // Reverse (dial_outbound_ws) client connections, keyed by serverId.
+    const outboundClients = new Map<string, import('./websocket/client').MochiWebSocketClient>();
+    // Re-dial trigger so newly registered reverse servers connect without a reload.
+    let triggerOutboundDial: (() => Promise<void>) | null = null;
     const legacyModeWindows = getLegacyModeWindows();
     const legacyModeWindowNotice = formatLegacyModeWindowNotice(legacyModeWindows.runtimeVersion);
     let isInitialized = false;
+    let isStopping = false;
     
     /**
      * 修复问题 #6: 安全的权限检查辅助函数
@@ -290,10 +296,10 @@ export function apply(ctx: Context, config: PluginConfig) {
                 
                 // Setup WebSocket event handlers using service manager
                 wsManager.on('connection', (connection: WebSocketConnection) => {
-                    logger.info(`Server connected: ${connection.serverId}`);
+                    logger.info(`WebSocket transport connected: ${connection.serverId}`);
                 });
                 
-                wsManager.on('authenticated', async (connection: WebSocketConnection) => {
+                const setupAuthenticatedConnection = async (connection: WebSocketConnection) => {
                     logger.info(`Server authenticated: ${connection.serverId}`);
                     
                     // Update server status to online and create bridge
@@ -364,11 +370,18 @@ export function apply(ctx: Context, config: PluginConfig) {
                             logger.error(`Failed to setup server ${connection.serverId}:`, error);
                         }
                     }
-                });
+                };
+                wsManager.on('authenticated', setupAuthenticatedConnection);
                 
-                wsManager.on('message', async (message: any, connection: WebSocketConnection) => {
+                const routeIncomingMessage = async (message: any, connection: WebSocketConnection) => {
                     try {
-                        logger.debug(`Received message from ${connection.serverId}:`, message);
+                        // Protocol bodies may contain credentials during
+                        // handshake; keep logs to non-sensitive metadata.
+                        logger.debug(`Received message from ${connection.serverId}:`, {
+                            type: message?.type,
+                            op: message?.op || message?.systemOp,
+                            id: message?.id
+                        });
                         
                         if (!serviceManager) {
                             logger.error('Service manager not initialized');
@@ -456,8 +469,9 @@ export function apply(ctx: Context, config: PluginConfig) {
                             logger.error('Failed to handle error response:', sendError);
                         }
                     }
-                });
-                
+                };
+                wsManager.on('message', routeIncomingMessage);
+
                 // Helper function to handle system messages
                 async function handleSystemMessage(message: any, connection: WebSocketConnection) {
                     switch (message.systemOp || message.op) {
@@ -480,6 +494,9 @@ export function apply(ctx: Context, config: PluginConfig) {
                                     
                                     // If authentication successful, emit authenticated event
                                     if (authResult.data?.success) {
+                                        connection.updateCapabilities(
+                                            normalizeConnectorCapabilities(authResult.data.capabilities)
+                                        );
                                         connection.setAuthenticated(true);
                                         connection.emit('authenticated');
                                     }
@@ -490,16 +507,17 @@ export function apply(ctx: Context, config: PluginConfig) {
                         case 'ping':
                             // Respond with pong
                             const { MessageFactory } = await import('./protocol/messages');
-                            const pongResponse = MessageFactory.createResponse(
-                                message.id,
-                                'system.pong',
-                                {
-                                    latency: Date.now() - (message.timestamp 
-                                        ? new Date(message.timestamp).getTime() 
-                                        : Date.now())
-                                },
-                                { success: true, serverId: connection.serverId }
-                            );
+                            const pingTimestamp = typeof message.timestamp === 'number'
+                                ? message.timestamp
+                                : Date.parse(String(message.timestamp || ''));
+                            const pongResponse = MessageFactory.createSystemMessage('pong', {
+                                latency: Number.isFinite(pingTimestamp)
+                                    ? Math.max(0, Date.now() - pingTimestamp)
+                                    : 0
+                            }, {
+                                serverId: connection.serverId,
+                                requestId: message.id
+                            });
                             await connection.send(pongResponse);
                             break;
 
@@ -507,6 +525,14 @@ export function apply(ctx: Context, config: PluginConfig) {
                             // Update connection ping time
                             connection.lastPing = Date.now();
                             logger.debug(`Pong received from ${connection.serverId}`);
+                            break;
+
+                        case 'capabilities':
+                            if (connection.isReady()) {
+                                connection.updateCapabilities(
+                                    normalizeConnectorCapabilities(message.data?.capabilities)
+                                );
+                            }
                             break;
 
                         case 'disconnect':
@@ -518,8 +544,12 @@ export function apply(ctx: Context, config: PluginConfig) {
                     }
                 }
                 
-                wsManager.on('disconnection', async (connection: WebSocketConnection, code: number, reason: string) => {
+                const cleanupConnection = async (connection: WebSocketConnection, code: number, reason: string) => {
                     logger.info(`Server disconnected: ${connection.serverId} (${code}: ${reason})`);
+
+                    // WebSocket shutdown can emit after the database provider
+                    // has begun disposal. Avoid late status writes during stop.
+                    if (isStopping) return;
                     
                     // Update server status to offline and remove bridge
                     if (serviceManager) {
@@ -534,12 +564,93 @@ export function apply(ctx: Context, config: PluginConfig) {
                             logger.error(`Failed to cleanup server ${connection.serverId}:`, error);
                         }
                     }
-                });
+                };
+                wsManager.on('disconnection', cleanupConnection);
                 
                 wsManager.on('error', (error: Error) => {
                     logger.error('WebSocket server error:', error);
                 });
-                
+
+                wsManager.on('securityWarning', (message: string) => {
+                    logger.warn(message);
+                });
+
+                // Reverse (dial_outbound_ws) connections: Koishi dials out to the
+                // connector using the endpoint/token explicitly stored in
+                // connection_config during registration.
+                const dialOutboundServers = async () => {
+                    if (!serviceManager) return;
+                    let servers: any[] = [];
+                    try {
+                        servers = await ctx.database.get(TableNames.servers as any, {}) as any[];
+                    } catch (error) {
+                        logger.error('Failed to load servers for outbound dialing:', error);
+                        return;
+                    }
+
+                    for (const server of servers || []) {
+                        try {
+                            const caps = resolveServerWsCapabilities(server);
+                            if (!caps.dial_outbound_ws) continue;
+                            if (outboundClients.has(server.id)) continue;
+
+                            const parsed = parseConnectionConfig(server);
+                            const endpointUrl = typeof parsed.endpointUrl === 'string'
+                                ? parsed.endpointUrl.trim()
+                                : '';
+                            const token = typeof parsed.token === 'string'
+                                ? parsed.token
+                                : (typeof parsed.authToken === 'string' ? parsed.authToken : '');
+
+                            if (!endpointUrl) {
+                                logger.warn(`Reverse server ${server.id} missing connection_config.endpointUrl; skipping outbound dial`);
+                                continue;
+                            }
+
+                            const { MochiWebSocketClient } = await import('./websocket/client');
+                            const client = new MochiWebSocketClient(authManager, {
+                                url: endpointUrl,
+                                serverId: server.id,
+                                authToken: token,
+                                autoReconnect: true
+                            });
+
+                            client.on('authenticated', () => {
+                                const connection = client.getConnection();
+                                if (connection) {
+                                    setupAuthenticatedConnection(connection);
+                                }
+                            });
+                            client.on('message', (message: any) => {
+                                const connection = client.getConnection();
+                                if (connection) {
+                                    routeIncomingMessage(message, connection);
+                                }
+                            });
+                            client.on('disconnected', (code: number, reason: string) => {
+                                const connection = client.getConnection();
+                                if (connection) {
+                                    cleanupConnection(connection, code, reason);
+                                } else if (!isStopping) {
+                                    cleanupConnection({ serverId: server.id } as any, code, reason);
+                                }
+                            });
+                            client.on('error', (error: Error) => {
+                                logger.error(`Outbound client error for ${server.id}:`, error);
+                            });
+
+                            outboundClients.set(server.id, client);
+                            logger.info(`Dialing outbound connector for server ${server.id}: ${endpointUrl}`);
+                            await client.connect();
+                        } catch (error) {
+                            logger.error(`Failed to dial outbound server ${server?.id}:`, error);
+                        }
+                    }
+                };
+
+                await dialOutboundServers();
+                triggerOutboundDial = dialOutboundServers;
+
             } catch (wsError) {
                 logger.error('Failed to start WebSocket server:', wsError);
                 logger.warn('Plugin will continue without WebSocket support');
@@ -568,8 +679,21 @@ export function apply(ctx: Context, config: PluginConfig) {
     // Cleanup on dispose
     ctx.on('dispose', async () => {
         try {
+            isStopping = true;
             logger.info('Stopping Mochi-Link plugin...');
-            
+
+            // Stop outbound (reverse) clients first so their disconnect events
+            // are drained before the inbound server shuts down.
+            for (const [serverId, client] of Array.from(outboundClients.entries())) {
+                try {
+                    await client.disconnect('Plugin dispose');
+                } catch (error) {
+                    logger.error(`Error disconnecting outbound client ${serverId}:`, error);
+                }
+            }
+            outboundClients.clear();
+            triggerOutboundDial = null;
+
             // Stop HTTP server
             if (httpServer) {
                 try {
@@ -767,6 +891,9 @@ export function apply(ctx: Context, config: PluginConfig) {
       .option('port', '-p <port:number> 服务器端口', { fallback: 25565 })
       .option('type', '-t <type:string> 服务器类型 (java/bedrock)', { fallback: 'java' })
       .option('core', '-c <core:string> 核心类型 (paper/fabric/forge/folia/nukkit/pmmp/llbds)', { fallback: 'paper' })
+      .option('reverse', '--reverse 反向连接（Koishi 主动拨号到 Connector）')
+      .option('endpoint', '--endpoint <url:string> 反向连接地址，如 ws://host:8080/ws')
+      .option('token', '--token <token:string> 反向连接认证令牌')
       .before(({ session }) => {
         const authCheck = checkAuthority(session, 3);
         if (!authCheck.allowed) {
@@ -828,12 +955,28 @@ export function apply(ctx: Context, config: PluginConfig) {
           // 修复问题 #14: 添加令牌过期时间（默认 1 年）
           const expiresAt = createTokenExpiryDate();
           
+          const isReverse = Boolean(options.reverse);
+          const endpoint = typeof options.endpoint === 'string' ? options.endpoint.trim() : '';
+          const outboundToken = typeof options.token === 'string' ? options.token : '';
+
+          if (isReverse && !endpoint) {
+            return '❌ 反向连接（--reverse）必须通过 --endpoint 提供 Connector 的 WebSocket 地址\n' +
+                   '示例: mochi.server.register survival 生存服 --reverse --endpoint ws://10.0.0.2:8080/ws --token <令牌>';
+          }
+
           const normalizedConnection = normalizeServerConnectionConfig(
             {
               host: host,
-              port: port
+              port: port,
+              ...(isReverse
+                ? {
+                    ws_capabilities: { accept_inbound_ws: false, dial_outbound_ws: true },
+                    endpointUrl: endpoint,
+                    token: outboundToken
+                  }
+                : {})
             },
-            'forward'
+            isReverse ? 'reverse' : 'forward'
           );
 
           // 创建服务器记录
@@ -879,7 +1022,30 @@ export function apply(ctx: Context, config: PluginConfig) {
               { userId: session?.userId }
             );
           }
-          
+
+          if (isReverse) {
+            // Reverse mode: Koishi dials out to the connector immediately.
+            try {
+              await triggerOutboundDial?.();
+            } catch (dialError) {
+              logger.error(`Failed to dial reverse server ${id} after registration:`, dialError);
+            }
+
+            return `✅ 反向服务器注册成功！\n\n` +
+                   `📋 服务器信息:\n` +
+                   `  🆔 ID: ${id}\n` +
+                   `  📝 名称: ${name}\n` +
+                   `  🎮 类型: ${finalType === 'java' ? 'Java 版' : '基岩版'}\n` +
+                   `  ⚙️ 核心: ${core}\n` +
+                   `  🔁 模式: 反向连接（Koishi 主动拨号）\n` +
+                   `  🌐 回拨地址: ${endpoint}\n\n` +
+                   `📡 已发起反向连接，Koishi 将主动拨号到上述地址。\n` +
+                   `  使用 mochi.server.list 查看连接状态。\n\n` +
+                   `💡 提示:\n` +
+                   `  • 反向连接使用注册时 --token 提供的令牌进行认证\n` +
+                   `  • 若 Connector 未监听该地址，将按重连策略自动重试`;
+          }
+
           // 根据核心类型推荐连接器
           const connectorMap: Record<string, string> = {
             'paper': 'MochiLinkConnector-Paper.jar',
@@ -906,7 +1072,9 @@ export function apply(ctx: Context, config: PluginConfig) {
                  `� 连接令牌:\n` +
                  `  ${token}\n\n` +
                  `📦 连接配置:\n` +
-                 `  WebSocket URL: ws://your-host:${config.websocket?.port || 8080}/ws?serverId=${id}&token=${token}\n\n` +
+                 `  WebSocket URL: ws://your-host:${config.websocket?.port || 8080}/ws?serverId=${id}\n` +
+                 `  X-Auth-Token: ${token}\n` +
+                 `  (or Authorization: Bearer ${token})\n\n` +
                  `📦 下一步:\n` +
                  `  1️⃣ 在服务器上安装连接器: ${connector}\n` +
                  `  2️⃣ 在连接器配置中设置:\n` +
@@ -1061,7 +1229,9 @@ export function apply(ctx: Context, config: PluginConfig) {
                    `  • 旧令牌已失效，请立即更新连接器配置\n` +
                    `  • 不要将令牌分享给他人或提交到代码仓库\n\n` +
                    `📝 连接配置:\n` +
-                   `  URL: ws://your-host:${config.websocket?.port || 8080}/ws?serverId=${id}&token=${newToken}\n\n` +
+                   `  URL: ws://your-host:${config.websocket?.port || 8080}/ws?serverId=${id}\n` +
+                   `  X-Auth-Token: ${newToken}\n` +
+                   `  (or Authorization: Bearer ${newToken})\n\n` +
                    `💡 提示: 下次查看时将只显示令牌的部分内容`;
           }
           
@@ -1092,7 +1262,9 @@ export function apply(ctx: Context, config: PluginConfig) {
                    `  • 请立即复制并保存到安全位置\n` +
                    `  • 不要将令牌分享给他人或提交到代码仓库\n\n` +
                    `📝 连接配置:\n` +
-                   `  URL: ws://your-host:${config.websocket?.port || 8080}/ws?serverId=${id}&token=${newToken}\n\n` +
+                   `  URL: ws://your-host:${config.websocket?.port || 8080}/ws?serverId=${id}\n` +
+                   `  X-Auth-Token: ${newToken}\n` +
+                   `  (or Authorization: Bearer ${newToken})\n\n` +
                    `💡 提示: 下次查看时将只显示令牌的部分内容`;
           }
           

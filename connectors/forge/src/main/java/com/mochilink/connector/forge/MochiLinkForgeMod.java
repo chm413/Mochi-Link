@@ -235,7 +235,7 @@ public class MochiLinkForgeMod {
             }
             eventData.addProperty("coreType", "Java");
             eventData.addProperty("coreName", "Forge");
-            eventData.addProperty("startTime", java.time.Instant.now().toString());
+            eventData.addProperty("startTime", System.currentTimeMillis());
             
             connectionManager.sendEvent("server.start", eventData);
             LOGGER.info("Server start event sent");
@@ -254,7 +254,7 @@ public class MochiLinkForgeMod {
                 eventData.addProperty("serverName", server.getServerModName());
             }
             eventData.addProperty("reason", "Mod shutdown");
-            eventData.addProperty("stopTime", java.time.Instant.now().toString());
+            eventData.addProperty("stopTime", System.currentTimeMillis());
             
             connectionManager.sendEvent("server.stop", eventData);
             LOGGER.info("Server stop event sent");

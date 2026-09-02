@@ -36,7 +36,7 @@ export interface ServerACL {
   id: number;
   user_id: string;
   server_id: string;
-  role: 'owner' | 'admin' | 'operator' | 'viewer';
+  role: 'owner' | 'admin' | 'sm' | 'pm' | 'moderator' | 'viewer';
   permissions: string; // JSON array string
   granted_by: string;
   granted_at: Date;
@@ -394,8 +394,14 @@ export class SimpleDatabaseManager {
    * Update server
    */
   async updateServer(id: string, updates: Partial<MinecraftServer>): Promise<void> {
+    // The route/query identifies the record. Never allow a partial update to
+    // move the primary key or rewrite the creation time.
+    const safeUpdates: any = { ...updates };
+    delete safeUpdates.id;
+    delete safeUpdates.created_at;
+
     await this.ctx.database.set(this.table('servers') as any, { id }, {
-      ...updates,
+      ...safeUpdates,
       updated_at: new Date()
     });
   }

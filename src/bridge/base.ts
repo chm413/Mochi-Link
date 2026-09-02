@@ -107,7 +107,7 @@ export abstract class BaseConnectorBridge extends EventEmitter {
       coreType: this.config.coreType,
       coreName: this.config.coreName,
       coreVersion: this.config.coreVersion,
-      capabilities: Array.from(this.capabilities),
+      capabilities: this.getCapabilities(),
       protocolVersion: '2.0',
       isOnline: this.isConnected,
       lastUpdate: this.lastUpdate
@@ -126,6 +126,19 @@ export abstract class BaseConnectorBridge extends EventEmitter {
    */
   getCapabilities(): BridgeCapability[] {
     return Array.from(this.capabilities);
+  }
+
+  /**
+   * Trim the capability set to the intersection with declared capabilities
+   * (PROTOCOL §9).  When the declared list is empty the defaults are kept
+   * so that legacy connectors that omit X-Capabilities are not broken.
+   */
+  applyDeclaredCapabilities(declared: string[]): void {
+    if (!Array.isArray(declared) || declared.length === 0) return;
+    const allowed = new Set(declared);
+    for (const cap of Array.from(this.capabilities)) {
+      if (!allowed.has(cap)) this.capabilities.delete(cap);
+    }
   }
 
   /**

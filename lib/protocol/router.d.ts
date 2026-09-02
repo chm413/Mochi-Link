@@ -66,7 +66,7 @@ export declare class MessageRouter {
     /**
      * Route a message to the appropriate handler
      */
-    route(message: UWBPMessage, connection: Connection): Promise<UWBPResponse | void>;
+    route(message: UWBPMessage, connection: Connection): Promise<UWBPResponse | UWBPSystemMessage | void>;
     private routeRequest;
     private routeResponse;
     private routeEvent;

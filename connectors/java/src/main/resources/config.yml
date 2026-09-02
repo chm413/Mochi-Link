@@ -48,7 +48,6 @@ features:
     - "command_execution"    # 命令执行
     - "event_monitoring"     # 事件监控
     - "performance_stats"    # 性能统计
-    - "plugin_integration"   # 插件集成
     
   # 玩家管理
   player_management:
@@ -136,12 +135,13 @@ logging:
 
 # 安全配置
 security:
+  # Application-layer encryption is deprecated; enable connection.forward.ssl for WSS.
   # 启用消息加密
   enable_encryption: false
   # 加密算法
-  encryption_algorithm: "AES-256-GCM"
+  encryption_algorithm: "TLS"
   # 验证消息完整性
-  verify_message_integrity: true
+  verify_message_integrity: false
   # 允许的管理端 IP 地址 (空列表表示允许所有)
   allowed_management_ips: []
 

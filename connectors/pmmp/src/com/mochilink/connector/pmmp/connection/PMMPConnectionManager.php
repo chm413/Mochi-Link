@@ -26,6 +26,14 @@ use pocketmine\utils\TextFormat;
  * @version 2.1.0
  */
 class PMMPConnectionManager implements ReconnectionCallback {
+    private const DECLARED_CAPABILITIES = [
+        'player_management',
+        'command_execution',
+        'performance_monitoring',
+        'event_streaming',
+        'whitelist_management',
+        'server_control'
+    ];
     
     private MochiLinkPMMPPlugin $plugin;
     private PMMPPluginConfig $config;
@@ -37,6 +45,9 @@ class PMMPConnectionManager implements ReconnectionCallback {
     
     /** @var resource|null */
     private $socket = null;
+    private string $receiveBuffer = '';
+    private string $fragmentBuffer = '';
+    private ?int $fragmentOpcode = null;
     
     private array $messageQueue = [];
     private array $pendingMessages = [];
@@ -100,8 +111,10 @@ class PMMPConnectionManager implements ReconnectionCallback {
             
             $this->plugin->getLogger()->info(TextFormat::YELLOW . "Connecting to Mochi-Link at {$host}:{$port}...");
             
-            // Create socket connection
-            $address = "tcp://{$host}:{$port}";
+            // Use TLS for WSS deployments. The HTTP upgrade remains the same
+            // after the encrypted stream is established.
+            $scheme = $this->config->useSsl() ? 'tls' : 'tcp';
+            $address = "{$scheme}://{$host}:{$port}";
             $this->socket = @stream_socket_client(
                 $address,
                 $errno,
@@ -127,8 +140,9 @@ class PMMPConnectionManager implements ReconnectionCallback {
             
             $this->plugin->getLogger()->info(TextFormat::GREEN . "Connected to Mochi-Link management server!");
             
-            // Send handshake message
-            $this->sendHandshake();
+            // URL/header token authentication is complete before application
+            // messages are exchanged. A token-less connection answers the
+            // server challenge from handleSystemMessage().
             
             // Send queued messages
             $this->sendQueuedMessages();
@@ -148,7 +162,7 @@ class PMMPConnectionManager implements ReconnectionCallback {
      * Disconnect from Mochi-Link
      */
     public function disconnect(): void {
-        if (!$this->connected) {
+        if (!$this->connected && !$this->connecting && $this->socket === null) {
             return;
         }
         
@@ -157,8 +171,9 @@ class PMMPConnectionManager implements ReconnectionCallback {
         // 取消重连
         $this->reconnectionManager->cancel();
         
-        // Send disconnect message
-        $this->sendDisconnect("Plugin disabled");
+        if ($this->connected) {
+            $this->sendDisconnect("Plugin disabled");
+        }
         
         // Close socket
         if ($this->socket !== null) {
@@ -168,6 +183,10 @@ class PMMPConnectionManager implements ReconnectionCallback {
         
         $this->connected = false;
         $this->connecting = false;
+        $this->receiveBuffer = '';
+        $this->fragmentBuffer = '';
+        $this->fragmentOpcode = null;
+        $this->pendingMessages = [];
     }
     
     /**
@@ -184,16 +203,22 @@ class PMMPConnectionManager implements ReconnectionCallback {
             $json = $message->toJson();
             $frame = $this->createWebSocketFrame($json);
             
-            $written = @fwrite($this->socket, $frame);
-            if ($written === false) {
-                throw new \RuntimeException("Failed to send message");
+            $remaining = strlen($frame);
+            $offset = 0;
+            while ($remaining > 0) {
+                $written = @fwrite($this->socket, substr($frame, $offset));
+                if ($written === false || $written === 0) {
+                    throw new \RuntimeException("Failed to send message");
+                }
+                $offset += $written;
+                $remaining -= $written;
             }
             
             // Track pending messages
             if ($message->isRequest()) {
                 $this->pendingMessages[$message->getId()] = [
                     'message' => $message,
-                    'timestamp' => time()
+                    'timestamp' => (int) (microtime(true) * 1000)
                 ];
             }
             
@@ -214,7 +239,9 @@ class PMMPConnectionManager implements ReconnectionCallback {
         
         $key = base64_encode(random_bytes(16));
         
-        $request = "GET {$path}?serverId=" . urlencode($serverId) . " HTTP/1.1\r\n";
+        $query = 'serverId=' . rawurlencode($serverId);
+        $token = $this->config->getAuthToken();
+        $request = "GET {$path}?{$query} HTTP/1.1\r\n";
         $request .= "Host: {$host}:{$port}\r\n";
         $request .= "Upgrade: websocket\r\n";
         $request .= "Connection: Upgrade\r\n";
@@ -223,7 +250,10 @@ class PMMPConnectionManager implements ReconnectionCallback {
         $request .= "X-Server-Id: {$serverId}\r\n";
         $request .= "X-Server-Type: PMMP\r\n";
         $request .= "X-Protocol-Version: 2.0\r\n";
-        $request .= "Authorization: Bearer " . $this->config->getAuthToken() . "\r\n";
+        $request .= "X-Capabilities: " . implode(',', self::DECLARED_CAPABILITIES) . "\r\n";
+        if ($token !== '') {
+            $request .= "X-Auth-Token: {$token}\r\n";
+        }
         $request .= "\r\n";
         
         fwrite($this->socket, $request);
@@ -246,31 +276,56 @@ class PMMPConnectionManager implements ReconnectionCallback {
         if (strpos($response, '101 Switching Protocols') === false) {
             throw new \RuntimeException("WebSocket handshake failed");
         }
+
+        $expectedAccept = base64_encode(sha1(
+            $key . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11',
+            true
+        ));
+        if (!preg_match('/^Sec-WebSocket-Accept:\s*(.+)$/mi', $response, $matches) ||
+            !hash_equals($expectedAccept, trim($matches[1]))) {
+            throw new \RuntimeException("Invalid WebSocket handshake response");
+        }
     }
     
     /**
      * Send handshake message (U-WBP v2)
      */
-    private function sendHandshake(): void {
-        $message = UWBPMessage::createRequest(
-            'system.handshake',
-            [
-                'serverId' => $this->config->getServerId(),
-                'serverName' => $this->config->getServerName(),
-                'serverType' => 'PMMP',
-                'protocolVersion' => '2.0',
-                'capabilities' => [
-                    'player_management',
-                    'command_execution',
-                    'performance_monitoring',
-                    'event_streaming',
-                    'whitelist_management'
-                ],
-                'authentication' => [
-                    'token' => $this->config->getAuthToken()
-                ]
-            ],
-            $this->config->getServerId()
+    private function sendHandshake(?array $challengeMessage = null): void {
+        $token = $this->config->getAuthToken();
+        $challenge = isset($challengeMessage['data']['challenge'])
+            ? (string) $challengeMessage['data']['challenge']
+            : null;
+        $challengeTimestamp = $challenge !== null
+            ? (int) ($challengeMessage['data']['challengeTimestamp'] ?? $challengeMessage['timestamp'] ?? 0)
+            : null;
+        $data = [
+            'serverId' => $this->config->getServerId(),
+            'serverName' => $this->config->getServerName(),
+            'serverType' => 'PMMP',
+            'protocolVersion' => '2.0',
+            // Shutdown is supported; restart is explicitly rejected by
+            // PMMPCommandHandler because PMMP cannot spawn its process.
+            'capabilities' => self::DECLARED_CAPABILITIES,
+            'authentication' => [
+                'token' => $token,
+                'method' => $challenge !== null ? 'challenge' : 'token'
+            ]
+        ];
+        if ($challenge !== null && $challengeTimestamp !== null) {
+            $data['challenge'] = $challenge;
+            $data['challengeTimestamp'] = $challengeTimestamp;
+            $data['challengeResponse'] = hash_hmac(
+                'sha256',
+                "{$challenge}:{$token}:{$challengeTimestamp}",
+                $token
+            );
+        }
+
+        $message = UWBPMessage::createSystem(
+            'handshake',
+            $data,
+            $this->config->getServerId(),
+            isset($challengeMessage['id']) ? (string) $challengeMessage['id'] : null
         );
         
         $this->send($message);
@@ -280,8 +335,8 @@ class PMMPConnectionManager implements ReconnectionCallback {
      * Send disconnect message
      */
     private function sendDisconnect(string $reason): void {
-        $message = UWBPMessage::createRequest(
-            'system.disconnect',
+        $message = UWBPMessage::createSystem(
+            'disconnect',
             ['reason' => $reason],
             $this->config->getServerId()
         );
@@ -297,8 +352,8 @@ class PMMPConnectionManager implements ReconnectionCallback {
             return;
         }
         
-        $message = UWBPMessage::createRequest(
-            'system.ping',
+        $message = UWBPMessage::createSystem(
+            'ping',
             [
                 'serverId' => $this->config->getServerId(),
                 'timestamp' => (int)(microtime(true) * 1000)
@@ -375,7 +430,10 @@ class PMMPConnectionManager implements ReconnectionCallback {
             $frame .= pack('n', $length);
         } else {
             $frame .= chr(127 | 0x80);
-            $frame .= pack('J', $length);
+            // RFC 6455 encodes the 64-bit length in network byte order.
+            $high = intdiv($length, 4294967296);
+            $low = $length % 4294967296;
+            $frame .= pack('NN', $high, $low);
         }
         
         // Masking key
@@ -399,19 +457,54 @@ class PMMPConnectionManager implements ReconnectionCallback {
         }
         
         try {
-            $data = @fread($this->socket, 8192);
-            if ($data === false || $data === '') {
+            do {
+                $data = @fread($this->socket, 8192);
+                if ($data === false) {
+                    throw new \RuntimeException('Failed to read from WebSocket');
+                }
+                if ($data !== '') {
+                    $this->receiveBuffer .= $data;
+                }
+            } while ($data !== '' && !feof($this->socket));
+
+            if (feof($this->socket)) {
+                $this->markSocketDisconnected('WebSocket stream closed');
                 return;
             }
-            
-            // Parse WebSocket frame and handle message
-            $message = $this->parseWebSocketFrame($data);
-            if ($message !== null) {
-                $this->handleMessage($message);
+
+            while (true) {
+                $frame = $this->extractWebSocketFrame();
+                if ($frame === null) break;
+                $opcode = $frame['opcode'];
+                if ($opcode === 0x8) {
+                    $this->markSocketDisconnected('Peer closed WebSocket');
+                    return;
+                }
+                if ($opcode === 0x9) {
+                    $this->sendControlFrame(0xA, $frame['payload']);
+                    continue;
+                }
+                if ($opcode === 0xA) continue;
+
+                if ($opcode === 0x0) {
+                    if ($this->fragmentOpcode === null) continue;
+                    $this->fragmentBuffer .= $frame['payload'];
+                    if ($frame['fin']) {
+                        $this->handleMessage($this->fragmentBuffer);
+                        $this->fragmentBuffer = '';
+                        $this->fragmentOpcode = null;
+                    }
+                } elseif (!$frame['fin']) {
+                    $this->fragmentOpcode = $opcode;
+                    $this->fragmentBuffer = $frame['payload'];
+                } else {
+                    $this->handleMessage($frame['payload']);
+                }
             }
             
         } catch (\Exception $e) {
             $this->plugin->getLogger()->error("Error reading messages: " . $e->getMessage());
+            $this->markSocketDisconnected($e->getMessage());
         }
     }
     
@@ -419,22 +512,104 @@ class PMMPConnectionManager implements ReconnectionCallback {
      * Parse WebSocket frame (simplified)
      */
     private function parseWebSocketFrame(string $data): ?string {
-        // Simplified WebSocket frame parsing
-        // For production, use a proper WebSocket library
-        if (strlen($data) < 2) {
-            return null;
-        }
-        
-        $payloadLength = ord($data[1]) & 0x7F;
+        $buffer = $data;
+        $frame = $this->extractWebSocketFrameFrom($buffer);
+        return $frame === null ? null : $frame['payload'];
+    }
+
+    /** Extract one complete RFC 6455 frame and consume it from the buffer. */
+    private function extractWebSocketFrame(): ?array {
+        return $this->extractWebSocketFrameFrom($this->receiveBuffer);
+    }
+
+    private function extractWebSocketFrameFrom(string &$buffer): ?array {
+        $length = strlen($buffer);
+        if ($length < 2) return null;
+
+        $first = ord($buffer[0]);
+        $second = ord($buffer[1]);
+        $fin = ($first & 0x80) !== 0;
+        $opcode = $first & 0x0F;
+        $masked = ($second & 0x80) !== 0;
+        $payloadLength = $second & 0x7F;
         $offset = 2;
-        
+
         if ($payloadLength === 126) {
-            $offset = 4;
+            if ($length < $offset + 2) return null;
+            $payloadLength = unpack('n', substr($buffer, $offset, 2))[1];
+            $offset += 2;
         } elseif ($payloadLength === 127) {
-            $offset = 10;
+            if ($length < $offset + 8) return null;
+            $parts = unpack('N2', substr($buffer, $offset, 8));
+            if ($parts[1] !== 0) {
+                throw new \RuntimeException('WebSocket frame is too large');
+            }
+            $payloadLength = $parts[2];
+            $offset += 8;
         }
-        
-        return substr($data, $offset);
+
+        $mask = '';
+        if ($masked) {
+            if ($length < $offset + 4) return null;
+            $mask = substr($buffer, $offset, 4);
+            $offset += 4;
+        }
+
+        if ($payloadLength > 1024 * 1024) {
+            throw new \RuntimeException('WebSocket frame exceeds 1 MiB limit');
+        }
+        if ($length < $offset + $payloadLength) return null;
+
+        $payload = substr($buffer, $offset, $payloadLength);
+        $buffer = substr($buffer, $offset + $payloadLength);
+        if ($masked) {
+            for ($i = 0; $i < $payloadLength; $i++) {
+                $payload[$i] = $payload[$i] ^ $mask[$i % 4];
+            }
+        }
+
+        return ['fin' => $fin, 'opcode' => $opcode, 'payload' => $payload];
+    }
+
+    private function sendControlFrame(int $opcode, string $payload): void {
+        if ($this->socket === null || !$this->connected) return;
+        $this->sendRawFrame($opcode, $payload);
+    }
+
+    private function sendRawFrame(int $opcode, string $payload): void {
+        $length = strlen($payload);
+        if ($length > 125) throw new \RuntimeException('Control frame payload too large');
+        // Client-to-server frames must be masked.
+        $mask = random_bytes(4);
+        $frame = chr(0x80 | ($opcode & 0x0F)) . chr(0x80 | $length) . $mask;
+        for ($i = 0; $i < $length; $i++) {
+            $frame .= $payload[$i] ^ $mask[$i % 4];
+        }
+        $offset = 0;
+        while ($offset < strlen($frame)) {
+            $written = @fwrite($this->socket, substr($frame, $offset));
+            if ($written === false || $written === 0) throw new \RuntimeException('Failed to send control frame');
+            $offset += $written;
+        }
+    }
+
+    private function markSocketDisconnected(string $reason): void {
+        if (!$this->connected && $this->socket === null) return;
+        if ($this->socket !== null) @fclose($this->socket);
+        $this->socket = null;
+        $wasConnected = $this->connected;
+        $this->connected = false;
+        $this->connecting = false;
+        $this->receiveBuffer = '';
+        $this->fragmentBuffer = '';
+        $this->fragmentOpcode = null;
+        if ($wasConnected) {
+            $this->plugin->setConnected(false);
+            $this->plugin->getLogger()->warning("Mochi-Link connection lost: {$reason}");
+            if ($this->config->isAutoReconnectEnabled()) {
+                $this->reconnectionManager->scheduleReconnect();
+            }
+        }
     }
     
     /**
@@ -477,7 +652,15 @@ class PMMPConnectionManager implements ReconnectionCallback {
                 $this->handleEventUnsubscribe($request, $requestId);
                 break;
             default:
-                $this->plugin->getLogger()->debug("Unhandled request operation: {$op}");
+                // All server/player/command operations are owned by the
+                // command handler. Keep subscription handling local because
+                // it updates the PMMP subscription manager directly.
+                $message = UWBPMessage::fromJson(json_encode($request, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+                if ($message !== null && $this->plugin->getCommandHandler() !== null) {
+                    $this->plugin->getCommandHandler()->handleMessage($message);
+                } else {
+                    $this->sendErrorResponse($requestId, $op, "Unsupported operation: {$op}");
+                }
                 break;
         }
     }
@@ -517,6 +700,8 @@ class PMMPConnectionManager implements ReconnectionCallback {
                     'subscriptionId' => $subscriptionId,
                     'success' => true
                 ],
+                true,
+                null,
                 $this->config->getServerId()
             );
             
@@ -549,6 +734,8 @@ class PMMPConnectionManager implements ReconnectionCallback {
                 $requestId,
                 'event.unsubscribe',
                 ['success' => true],
+                true,
+                null,
                 $this->config->getServerId()
             );
             
@@ -565,7 +752,7 @@ class PMMPConnectionManager implements ReconnectionCallback {
      * Handle response message
      */
     private function handleResponse(array $response): void {
-        $id = $response['id'] ?? '';
+        $id = $response['requestId'] ?? $response['id'] ?? '';
         
         if (isset($this->pendingMessages[$id])) {
             unset($this->pendingMessages[$id]);
@@ -576,11 +763,27 @@ class PMMPConnectionManager implements ReconnectionCallback {
      * Handle system message
      */
     private function handleSystemMessage(array $message): void {
-        $op = $message['op'] ?? '';
+        $op = $message['systemOp'] ?? $message['op'] ?? '';
         
         switch ($op) {
             case 'pong':
                 // Heartbeat response received
+                break;
+            case 'ping':
+                $this->send(UWBPMessage::createSystem(
+                    'pong',
+                    [
+                        'serverId' => $this->config->getServerId(),
+                        'timestamp' => (int) (microtime(true) * 1000)
+                    ],
+                    $this->config->getServerId(),
+                    isset($message['id']) ? (string) $message['id'] : null
+                ));
+                break;
+            case 'handshake':
+                if ($this->config->getAuthToken() !== '') {
+                    $this->sendHandshake($message);
+                }
                 break;
             default:
                 $this->plugin->getLogger()->debug("Received system message: {$op}");

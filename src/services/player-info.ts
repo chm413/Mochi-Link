@@ -269,11 +269,12 @@ export class PlayerInfoService extends EventEmitter {
     
     if (cached) {
       // Update cached identity markers
+      const currentMarkers = cached.player.identityMarkers ?? { serverIds: [] };
       cached.player.identityMarkers = {
-        ...cached.player.identityMarkers,
+        ...currentMarkers,
         ...markers,
         lastSeen: new Date(),
-        serverIds: [...new Set([...cached.player.identityMarkers.serverIds, serverId])]
+        serverIds: [...new Set([...(currentMarkers.serverIds ?? []), serverId])]
       };
       
       // Recalculate confidence
@@ -469,12 +470,12 @@ export class PlayerInfoService extends EventEmitter {
     }
     
     // Long play time increases confidence
-    if (player.totalPlayTime > 3600000) { // 1 hour
+    if ((player.totalPlayTime ?? 0) > 3600000) { // 1 hour
       score += 0.1;
     }
     
     // Multiple server presence increases confidence
-    if (player.identityMarkers.serverIds.length > 1) {
+    if ((player.identityMarkers?.serverIds.length ?? 0) > 1) {
       score += 0.1;
     }
     

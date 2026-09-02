@@ -465,6 +465,7 @@ export class EventService {
       'server.logLine': 100,
       'alert.tpsLow': 3,
       'alert.memoryHigh': 3,
+      'alert.cpuHigh': 3,
       'alert.playerFlood': 1
     };
 

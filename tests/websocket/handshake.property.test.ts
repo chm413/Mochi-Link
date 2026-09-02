@@ -5,7 +5,11 @@
  */
 
 import * as fc from 'fast-check';
-import { AuthenticationManager, TokenManager } from '../../src/websocket/auth';
+import {
+  AuthenticationManager,
+  TokenManager,
+  normalizeConnectorCapabilities
+} from '../../src/websocket/auth';
 import { MessageFactory } from '../../src/protocol/messages';
 import { APIToken, UWBPSystemMessage } from '../../src/types';
 
@@ -85,6 +89,20 @@ describe('WebSocket Handshake Property Tests', () => {
 
   afterEach(() => {
     authManager.shutdown();
+  });
+
+  it('normalizes connector capabilities and drops unknown declarations', () => {
+    expect(normalizeConnectorCapabilities([
+      'command.execute',
+      'realtime_events',
+      'server_control',
+      'not-a-capability',
+      'server_control'
+    ])).toEqual([
+      'command_execution',
+      'event_streaming',
+      'server_control'
+    ]);
   });
 
   /**

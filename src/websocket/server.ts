@@ -8,8 +8,12 @@
 import WebSocket, { WebSocketServer } from 'ws';
 import { EventEmitter } from 'events';
 import { IncomingMessage } from 'http';
+import { createServer as createHttpsServer, Server as HttpsServer } from 'https';
+import { readFileSync } from 'fs';
 import { WebSocketConnection } from './connection';
 import { AuthenticationManager } from './auth';
+import { normalizeConnectorCapabilities } from '../protocol/capabilities';
+import { isCompatibleUWBPVersion } from '../protocol/messages';
 import { 
   ConnectionError, 
   AuthenticationError,
@@ -71,6 +75,7 @@ interface ConnectionInfo {
 
 export class MochiWebSocketServer extends EventEmitter {
   private server: WebSocketServer;
+  private httpServer?: HttpsServer;
   private config: WebSocketServerConfig;
   private connections = new Map<string, ConnectionInfo>();
   private authManager: AuthenticationManager;
@@ -101,14 +106,30 @@ export class MochiWebSocketServer extends EventEmitter {
       ...config
     };
 
-    this.server = new WebSocketServer({
-      port: this.config.port,
-      host: this.config.host,
+    // Terminate TLS in-process when a certificate/key pair is configured so
+    // WSS actually takes effect (previously the ssl block was accepted but
+    // ignored, leaving a plaintext `ws://` listener).
+    const wsOptions: WebSocket.ServerOptions = {
       path: this.config.path,
       maxPayload: this.config.maxMessageSize,
       perMessageDeflate: true,
       clientTracking: true
-    });
+    };
+
+    if (this.config.ssl?.cert && this.config.ssl?.key) {
+      this.httpServer = createHttpsServer({
+        cert: readFileSync(this.config.ssl.cert),
+        key: readFileSync(this.config.ssl.key),
+        ...(this.config.ssl.ca ? { ca: readFileSync(this.config.ssl.ca) } : {})
+      });
+      this.server = new WebSocketServer({ ...wsOptions, server: this.httpServer });
+    } else {
+      this.server = new WebSocketServer({
+        ...wsOptions,
+        port: this.config.port,
+        host: this.config.host
+      });
+    }
 
     this.setupServerHandlers();
   }
@@ -126,7 +147,7 @@ export class MochiWebSocketServer extends EventEmitter {
     }
 
     return new Promise((resolve, reject) => {
-      this.server.once('listening', () => {
+      const onListening = () => {
         this.isRunning = true;
         this.emit('started', {
           port: this.config.port,
@@ -134,14 +155,23 @@ export class MochiWebSocketServer extends EventEmitter {
           path: this.config.path
         });
         resolve();
-      });
+      };
 
-      this.server.once('error', (error) => {
+      const onError = (error: Error) => {
         reject(new ConnectionError(
           `Failed to start WebSocket server: ${error.message}`,
           'server'
         ));
-      });
+      };
+
+      if (this.httpServer) {
+        this.httpServer.once('listening', onListening);
+        this.httpServer.once('error', onError);
+        this.httpServer.listen(this.config.port, this.config.host);
+      } else {
+        this.server.once('listening', onListening);
+        this.server.once('error', onError);
+      }
     });
   }
 
@@ -165,12 +195,22 @@ export class MochiWebSocketServer extends EventEmitter {
 
     // Close server
     return new Promise((resolve) => {
-      this.server.close(() => {
+      const finalize = () => {
         this.isRunning = false;
         this.connections.clear();
         this.emit('stopped');
         resolve();
-      });
+      };
+
+      if (this.httpServer) {
+        // Close the HTTPS listener once the WebSocket server has released its
+        // upgrade handler and clients.
+        this.server.close(() => {
+          this.httpServer?.close(() => finalize());
+        });
+      } else {
+        this.server.close(finalize);
+      }
     });
   }
 
@@ -298,11 +338,37 @@ export class MochiWebSocketServer extends EventEmitter {
 
     // Extract server ID and token from query parameters or headers
     const url = new URL(request.url || '', `http://${request.headers.host}`);
-    const serverId = url.searchParams.get('serverId') || 
-                    request.headers['x-server-id'] as string ||
-                    `unknown-${Date.now()}`;
-    const token = url.searchParams.get('token') || 
-                 request.headers['x-auth-token'] as string;
+    const serverId = url.searchParams.get('serverId') ||
+                    request.headers['x-server-id'] as string;
+    if (!serverId) {
+      ws.close(1008, 'Missing serverId');
+      return;
+    }
+    const protocolVersionHeader = request.headers['x-protocol-version'];
+    const protocolVersion = Array.isArray(protocolVersionHeader)
+      ? protocolVersionHeader[0]
+      : protocolVersionHeader;
+    if (protocolVersion && !isCompatibleUWBPVersion(protocolVersion)) {
+      ws.close(1002, 'Unsupported U-WBP version');
+      return;
+    }
+    const authorization = request.headers.authorization as string | undefined;
+    const bearerToken = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
+    const urlToken = url.searchParams.get('token');
+    const token = urlToken ||
+                 request.headers['x-auth-token'] as string ||
+                 bearerToken;
+    const declaredCapabilities = normalizeConnectorCapabilities(
+      request.headers['x-capabilities']
+    );
+
+    // Token-in-URL is legacy-compatible only: query strings leak into proxy
+    // and access logs. Surface a warning so operators can migrate clients.
+    if (urlToken) {
+      this.emit('securityWarning',
+        `Server ${serverId} authenticated with a token in the URL query string. ` +
+        'Credentials may leak into access logs; use the X-Auth-Token or Authorization header instead.');
+    }
 
     // Check if server is already connected
     if (this.connections.has(serverId)) {
@@ -327,6 +393,9 @@ export class MochiWebSocketServer extends EventEmitter {
 
       // Set up connection event handlers
       this.setupConnectionHandlers(connection, connectionInfo);
+      // Accepted sockets are already open; their `open` event can precede the
+      // wrapper, so explicitly mark the wrapper ready before authentication.
+      connection.markConnected();
 
       // Start authentication process if required
       if (this.config.authenticationRequired) {
@@ -339,6 +408,7 @@ export class MochiWebSocketServer extends EventEmitter {
           );
           
           if (result.success) {
+            connection.updateCapabilities(declaredCapabilities);
             connectionInfo.authenticated = true;
             connection.setAuthenticated(true);
             this.emit('authenticated', connection);
@@ -352,6 +422,7 @@ export class MochiWebSocketServer extends EventEmitter {
           await this.initiateAuthentication(connection);
         }
       } else {
+        connection.updateCapabilities(declaredCapabilities);
         connectionInfo.authenticated = true;
         connection.setAuthenticated(true);
       }
@@ -369,6 +440,17 @@ export class MochiWebSocketServer extends EventEmitter {
     connection.on('message', (message) => {
       info.lastActivity = new Date();
       info.messageCount++;
+
+      const operation = message?.systemOp || message?.op;
+      if (!info.authenticated && !(message?.type === 'system' && operation === 'handshake')) {
+        this.emit('connectionError', new AuthenticationError(
+          'Only the authentication handshake is allowed before authentication',
+          connection.serverId
+        ), connection.serverId);
+        void connection.close(1008, 'Authentication required');
+        return;
+      }
+
       this.emit('message', message, connection);
     });
 
@@ -408,11 +490,14 @@ export class MochiWebSocketServer extends EventEmitter {
       const { MessageFactory } = await import('../protocol/messages');
       const { UWBP_VERSION } = await import('../protocol/messages');
       
+      const challenge = await this.authManager.generateChallengeData(connection.serverId);
       const challengeMessage = MessageFactory.createSystemMessage('handshake', {
         protocolVersion: UWBP_VERSION,
         serverType: 'koishi',
         authenticationRequired: true,
-        challenge: await this.authManager.generateChallenge(connection.serverId)
+        challenge: challenge.challenge,
+        challengeTimestamp: challenge.timestamp,
+        challengeExpiresAt: challenge.expiresAt
       }, {
         serverId: connection.serverId
       });

@@ -7,8 +7,10 @@
 import { UWBPMessage, UWBPRequest, UWBPResponse, UWBPEvent, UWBPSystemMessage, Player, PlayerDetail, ServerInfo, PerformanceMetrics, CommandResult } from '../types';
 export declare const UWBP_VERSION = "2.0";
 export declare const PROTOCOL_NAME = "U-WBP";
-export type RequestOperation = 'server.getInfo' | 'server.getStatus' | 'server.getMetrics' | 'server.shutdown' | 'server.restart' | 'server.reload' | 'server.save' | 'player.list' | 'player.getInfo' | 'player.kick' | 'player.ban' | 'player.unban' | 'player.banlist' | 'player.message' | 'player.teleport' | 'whitelist.get' | 'whitelist.add' | 'whitelist.remove' | 'whitelist.enable' | 'whitelist.disable' | 'command.execute' | 'command.suggest' | 'command.batch' | 'permission.grant' | 'permission.revoke' | 'permission.update' | 'permission.query' | 'permission.list' | 'world.list' | 'world.getInfo' | 'world.setTime' | 'world.setWeather' | 'world.broadcast';
-export type EventOperation = 'player.join' | 'player.leave' | 'player.chat' | 'player.death' | 'player.advancement' | 'player.move' | 'server.status' | 'server.logLine' | 'server.metrics' | 'alert.tpsLow' | 'alert.memoryHigh' | 'alert.playerFlood' | 'alert.diskSpace' | 'alert.connectionLost';
+export declare const UWBP_COMPATIBLE_VERSIONS: readonly ["2.0", "2.0.0"];
+export declare function isCompatibleUWBPVersion(value: unknown): boolean;
+export type RequestOperation = 'server.getInfo' | 'server.getStatus' | 'server.getMetrics' | 'server.shutdown' | 'server.restart' | 'server.reload' | 'server.save' | 'player.list' | 'player.getInfo' | 'player.kick' | 'player.ban' | 'player.unban' | 'player.banlist' | 'player.message' | 'player.teleport' | 'whitelist.get' | 'whitelist.add' | 'whitelist.remove' | 'whitelist.enable' | 'whitelist.disable' | 'command.execute' | 'command.suggest' | 'command.batch' | 'event.subscribe' | 'event.unsubscribe' | 'permission.grant' | 'permission.revoke' | 'permission.update' | 'permission.query' | 'permission.list' | 'world.list' | 'world.getInfo' | 'world.setTime' | 'world.setWeather' | 'world.broadcast';
+export type EventOperation = 'player.join' | 'player.leave' | 'player.chat' | 'player.death' | 'player.advancement' | 'player.move' | 'server.status' | 'server.logLine' | 'server.metrics' | 'alert.tpsLow' | 'alert.memoryHigh' | 'alert.cpuHigh' | 'alert.playerFlood' | 'alert.diskSpace' | 'alert.connectionLost';
 export type SystemOperation = 'ping' | 'pong' | 'handshake' | 'capabilities' | 'disconnect' | 'error';
 export declare class MessageFactory {
     /**
@@ -39,6 +41,7 @@ export declare class MessageFactory {
      */
     static createSystemMessage(op: SystemOperation, data?: any, options?: {
         serverId?: string;
+        requestId?: string;
     }): UWBPSystemMessage;
     /**
      * Create an error response
@@ -54,6 +57,7 @@ export interface ServerInfoData {
 }
 export interface ServerStatusData {
     status: 'online' | 'offline' | 'starting' | 'stopping' | 'error';
+    online: boolean;
     uptime?: number;
     playerCount?: number;
     maxPlayers?: number;
@@ -166,12 +170,25 @@ export interface AlertEventData {
 }
 export interface HandshakeData {
     protocolVersion: string;
-    serverType: 'koishi' | 'connector';
+    serverType: string;
     serverId?: string;
-    capabilities: string[];
+    serverName?: string;
+    capabilities?: string[];
     authentication?: {
         token: string;
-        method: 'token' | 'certificate';
+        method: 'token' | 'challenge';
+    };
+    challenge?: string;
+    challengeTimestamp?: number;
+    challengeExpiresAt?: number;
+    challengeResponse?: string;
+    success?: boolean;
+    error?: string;
+    serverInfo?: {
+        name?: string;
+        version?: string;
+        coreType?: 'Java' | 'Bedrock';
+        coreName?: string;
     };
 }
 export interface CapabilitiesData {

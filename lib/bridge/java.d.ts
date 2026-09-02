@@ -15,6 +15,11 @@ export declare class JavaConnectorBridge {
      * "There are 5 of a max of 20 players online: player1, player2"
      */
     private parseListOutput;
+    /** Send a canonical U-WBP request when the adapter supports it. */
+    private sendProtocolRequest;
+    private responseData;
+    private normalizeMemory;
+    private normalizePlayer;
     getServerInfo(): Promise<any>;
     getPerformanceMetrics(): Promise<any>;
     executeCommand(command: string, timeout?: number): Promise<any>;
@@ -22,6 +27,8 @@ export declare class JavaConnectorBridge {
     getOnlinePlayers(): Promise<any[]>;
     getPlayerDetail(playerId: string): Promise<any>;
     getCapabilities(): string[];
+    hasCapability(capability: string): boolean;
+    performServerOperation(operation: any): Promise<any>;
     getBridgeInfo(): any;
     performPlayerAction(action: any): Promise<any>;
     private buildPlayerActionCommand;

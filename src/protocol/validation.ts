@@ -23,7 +23,8 @@ import {
   isUWBPResponse,
   isUWBPEvent,
   isUWBPSystemMessage,
-  MessageUtils
+  MessageUtils,
+  isCompatibleUWBPVersion
 } from './messages';
 
 // ============================================================================
@@ -182,6 +183,10 @@ export class MessageValidator {
    * Validate response message
    */
   private static validateResponse(message: UWBPResponse, result: ValidationResult): void {
+    if (!this.isValidRequestOperation(message.op)) {
+      this.addError(result, 'op', `Invalid response operation: ${message.op}`, 'INVALID_OPERATION');
+    }
+
     // Validate requestId
     if (!(message as any).requestId || typeof (message as any).requestId !== 'string') {
       this.addError(result, 'requestId', 'Response must have a valid requestId', 'MISSING_REQUEST_ID');
@@ -201,6 +206,17 @@ export class MessageValidator {
 
     if ((message as any).error && typeof (message as any).error !== 'string') {
       this.addError(result, 'error', 'Error field must be a string', 'INVALID_ERROR');
+    }
+
+    if ((message as any).success === false) {
+      const code = (message as any).data?.code;
+      if (!code || typeof code !== 'string') {
+        this.addError(result, 'data.code', 'Failed response must include a stable error code', 'MISSING_ERROR_CODE');
+      } else if (!/^[A-Z][A-Z0-9_]*$/.test(code)) {
+        this.addError(result, 'data.code', 'Error code must use uppercase snake case', 'INVALID_ERROR_CODE');
+      }
+    } else {
+      this.validateResponseData(message.op as RequestOperation, message.data, result);
     }
   }
 
@@ -239,6 +255,14 @@ export class MessageValidator {
     // Validate systemOp
     if (!this.isValidSystemOperation(message.systemOp)) {
       this.addError(result, 'systemOp', `Invalid system operation: ${message.systemOp}`, 'INVALID_SYSTEM_OP');
+    }
+
+    if (message.op !== message.systemOp) {
+      this.addError(result, 'systemOp', 'System op must match the envelope op', 'SYSTEM_OP_MISMATCH');
+    }
+
+    if (message.systemOp === 'pong' && !message.requestId) {
+      this.addError(result, 'requestId', 'Pong must reference the ping message ID', 'MISSING_REQUEST_ID');
     }
 
     // Validate system-specific data
@@ -399,9 +423,11 @@ export class MessageValidator {
   private static isValidRequestOperation(op: string): boolean {
     const validOps: RequestOperation[] = [
       'server.getInfo', 'server.getStatus', 'server.getMetrics', 'server.shutdown', 'server.restart', 'server.reload', 'server.save',
-      'player.list', 'player.getInfo', 'player.kick', 'player.ban', 'player.unban', 'player.message', 'player.teleport',
+      'player.list', 'player.getInfo', 'player.kick', 'player.ban', 'player.unban', 'player.banlist', 'player.message', 'player.teleport',
       'whitelist.get', 'whitelist.add', 'whitelist.remove', 'whitelist.enable', 'whitelist.disable',
-      'command.execute', 'command.suggest',
+      'command.execute', 'command.suggest', 'command.batch',
+      'event.subscribe', 'event.unsubscribe',
+      'permission.grant', 'permission.revoke', 'permission.update', 'permission.query', 'permission.list',
       'world.list', 'world.getInfo', 'world.setTime', 'world.setWeather', 'world.broadcast'
     ];
     return validOps.includes(op as RequestOperation);
@@ -411,7 +437,7 @@ export class MessageValidator {
     const validOps: EventOperation[] = [
       'player.join', 'player.leave', 'player.chat', 'player.death', 'player.advancement', 'player.move',
       'server.status', 'server.logLine', 'server.metrics',
-      'alert.tpsLow', 'alert.memoryHigh', 'alert.playerFlood', 'alert.diskSpace', 'alert.connectionLost'
+      'alert.tpsLow', 'alert.memoryHigh', 'alert.cpuHigh', 'alert.playerFlood', 'alert.diskSpace', 'alert.connectionLost'
     ];
     return validOps.includes(op as EventOperation);
   }
@@ -428,59 +454,80 @@ export class MessageValidator {
   // ============================================================================
 
   private static validateRequestData(op: RequestOperation, data: any, result: ValidationResult): void {
+    const payload = data && typeof data === 'object' ? data : {};
+
     // Implement operation-specific data validation
     switch (op) {
       case 'player.kick':
       case 'player.ban':
-        if (!data.playerId) {
+        if (!payload.playerId) {
           this.addError(result, 'data.playerId', 'Player ID is required', 'MISSING_PLAYER_ID');
         }
         break;
       
       case 'player.message':
-        if (!data.playerId || !data.message) {
+        if (!payload.playerId || !payload.message) {
           this.addError(result, 'data', 'Player ID and message are required', 'MISSING_REQUIRED_FIELDS');
         }
         break;
       
       case 'command.execute':
-        if (!data.command || typeof data.command !== 'string') {
+        if (!payload.command || typeof payload.command !== 'string') {
           this.addError(result, 'data.command', 'Command string is required', 'MISSING_COMMAND');
         }
         break;
       
       case 'whitelist.add':
       case 'whitelist.remove':
-        if (!data.playerId) {
+        if (!payload.playerId) {
           this.addError(result, 'data.playerId', 'Player ID is required', 'MISSING_PLAYER_ID');
         }
         break;
     }
   }
 
+  private static validateResponseData(op: RequestOperation, data: any, result: ValidationResult): void {
+    const payload = data && typeof data === 'object' ? data : {};
+
+    if (op === 'server.getStatus') {
+      if (typeof payload.status !== 'string') {
+        this.addError(result, 'data.status', 'Server status response must include status', 'MISSING_STATUS');
+      } else if (!['online', 'offline', 'starting', 'stopping', 'error'].includes(payload.status)) {
+        this.addError(result, 'data.status', 'Server status response contains an invalid status', 'INVALID_STATUS');
+      }
+      if (typeof payload.online !== 'boolean') {
+        this.addError(result, 'data.online', 'Server status response must include online boolean', 'MISSING_ONLINE');
+      } else if (typeof payload.status === 'string' && payload.online !== (payload.status === 'online')) {
+        this.addError(result, 'data.online', 'Online flag must agree with server status', 'STATUS_ONLINE_MISMATCH');
+      }
+    }
+  }
+
   private static validateEventData(op: EventOperation, data: any, result: ValidationResult): void {
+    const payload = data && typeof data === 'object' ? data : {};
+
     // Implement event-specific data validation
     switch (op) {
       case 'player.join':
-        if (!data.player || !data.player.id || !data.player.name) {
+        if (!payload.player || !payload.player.id || !payload.player.name) {
           this.addError(result, 'data', 'Player object with ID and name is required', 'MISSING_PLAYER_INFO');
         }
         break;
       
       case 'player.leave':
-        if (!data.playerId && !data.playerName && (!data.player || !data.player.id || !data.player.name)) {
+        if (!payload.playerId && !payload.playerName && (!payload.player || !payload.player.id || !payload.player.name)) {
           this.addError(result, 'data', 'Player ID and name are required', 'MISSING_PLAYER_INFO');
         }
         break;
       
       case 'player.chat':
-        if (!data.playerId && !data.playerName && !data.message && (!data.player || !data.player.id || !data.player.name)) {
+        if (!payload.playerId && !payload.playerName && !payload.message && (!payload.player || !payload.player.id || !payload.player.name)) {
           this.addError(result, 'data', 'Player ID, name, and message are required', 'MISSING_CHAT_INFO');
         }
         break;
       
       case 'server.status':
-        if (!data.status) {
+        if (!payload.status) {
           this.addError(result, 'data.status', 'Server status is required', 'MISSING_STATUS');
         }
         break;
@@ -488,22 +535,43 @@ export class MessageValidator {
   }
 
   private static validateSystemData(op: SystemOperation, data: any, result: ValidationResult): void {
+    const payload = data && typeof data === 'object' ? data : {};
+
     // Implement system-specific data validation
     switch (op) {
       case 'handshake':
-        if (!data.protocolVersion || !data.serverType) {
+        if (!payload.protocolVersion || !payload.serverType) {
           this.addError(result, 'data', 'Protocol version and server type are required', 'MISSING_HANDSHAKE_INFO');
+        }
+        if (payload.protocolVersion && !isCompatibleUWBPVersion(payload.protocolVersion)) {
+          this.addError(result, 'data.protocolVersion', 'Unsupported handshake protocol version', 'INVALID_VERSION');
+        }
+        if (payload.capabilities !== undefined &&
+            (!Array.isArray(payload.capabilities) || payload.capabilities.some((item: unknown) => typeof item !== 'string'))) {
+          this.addError(result, 'data.capabilities', 'Handshake capabilities must be a string array', 'INVALID_CAPABILITIES');
+        }
+        if (payload.authentication !== undefined) {
+          const authentication = payload.authentication;
+          if (!payload.serverId || !authentication || typeof authentication !== 'object' ||
+              typeof authentication.token !== 'string' || !authentication.token ||
+              !['token', 'challenge'].includes(authentication.method)) {
+            this.addError(result, 'data.authentication', 'Connector authentication data is invalid', 'INVALID_AUTHENTICATION');
+          } else if (authentication.method === 'challenge' &&
+              (!payload.challenge || !Number.isFinite(Number(payload.challengeTimestamp)) ||
+               typeof payload.challengeResponse !== 'string' || !/^[a-f0-9]{64}$/i.test(payload.challengeResponse))) {
+            this.addError(result, 'data.authentication', 'Challenge authentication proof is incomplete', 'INVALID_CHALLENGE_RESPONSE');
+          }
         }
         break;
       
       case 'capabilities':
-        if (!Array.isArray(data.capabilities)) {
+        if (!Array.isArray(payload.capabilities) || payload.capabilities.some((item: unknown) => typeof item !== 'string')) {
           this.addError(result, 'data.capabilities', 'Capabilities must be an array', 'INVALID_CAPABILITIES');
         }
         break;
       
       case 'disconnect':
-        if (!data.reason) {
+        if (!payload.reason) {
           this.addWarning(result, 'data.reason', 'Disconnect reason should be provided', 'MISSING_DISCONNECT_REASON');
         }
         break;

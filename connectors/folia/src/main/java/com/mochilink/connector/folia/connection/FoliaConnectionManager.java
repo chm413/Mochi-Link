@@ -171,7 +171,7 @@ public class FoliaConnectionManager {
             handshake.addProperty("type", "system");
             handshake.addProperty("id", generateId());
             handshake.addProperty("op", "handshake");
-            handshake.addProperty("timestamp", java.time.Instant.now().toString());
+            handshake.addProperty("timestamp", System.currentTimeMillis());
             handshake.addProperty("version", "2.0");
             handshake.addProperty("systemOp", "handshake");
             
@@ -427,7 +427,7 @@ public class FoliaConnectionManager {
             response.addProperty("type", "response");
             response.addProperty("id", requestId);
             response.addProperty("op", "event.subscribe");
-            response.addProperty("timestamp", java.time.Instant.now().toString());
+            response.addProperty("timestamp", System.currentTimeMillis());
             response.addProperty("version", "2.0");
             
             JsonObject responseData = new JsonObject();
@@ -464,7 +464,7 @@ public class FoliaConnectionManager {
             response.addProperty("type", "response");
             response.addProperty("id", requestId);
             response.addProperty("op", "event.unsubscribe");
-            response.addProperty("timestamp", java.time.Instant.now().toString());
+            response.addProperty("timestamp", System.currentTimeMillis());
             response.addProperty("version", "2.0");
             
             JsonObject responseData = new JsonObject();
@@ -490,7 +490,7 @@ public class FoliaConnectionManager {
             response.addProperty("type", "response");
             response.addProperty("id", requestId);
             response.addProperty("op", op);
-            response.addProperty("timestamp", java.time.Instant.now().toString());
+            response.addProperty("timestamp", System.currentTimeMillis());
             response.addProperty("version", "2.0");
             
             JsonObject data = new JsonObject();
@@ -524,7 +524,7 @@ public class FoliaConnectionManager {
         pong.addProperty("type", "system");
         pong.addProperty("id", generateId());
         pong.addProperty("op", "pong");
-        pong.addProperty("timestamp", java.time.Instant.now().toString());
+        pong.addProperty("timestamp", System.currentTimeMillis());
         pong.addProperty("version", "2.0");
         pong.addProperty("systemOp", "pong");
         
@@ -548,7 +548,7 @@ public class FoliaConnectionManager {
             disconnect.addProperty("type", "system");
             disconnect.addProperty("id", generateId());
             disconnect.addProperty("op", "disconnect");
-            disconnect.addProperty("timestamp", java.time.Instant.now().toString());
+            disconnect.addProperty("timestamp", System.currentTimeMillis());
             disconnect.addProperty("version", "2.0");
             disconnect.addProperty("systemOp", "disconnect");
             
@@ -633,8 +633,8 @@ public class FoliaConnectionManager {
             event.addProperty("type", "event");
             event.addProperty("id", generateId());
             event.addProperty("op", eventOp);
-            event.addProperty("timestamp", java.time.Instant.now().toString());  // ISO 8601
-            event.addProperty("version", "2.0.0");
+            event.addProperty("timestamp", System.currentTimeMillis());
+            event.addProperty("version", "2.0");
             event.addProperty("serverId", config.getServerId());
             event.add("data", eventData);
             

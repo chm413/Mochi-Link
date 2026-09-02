@@ -352,7 +352,7 @@ public class MochiLinkFoliaPlugin extends JavaPlugin {
             eventData.addProperty("coreName", "Folia");
             eventData.addProperty("onlinePlayers", getServer().getOnlinePlayers().size());
             eventData.addProperty("maxPlayers", getServer().getMaxPlayers());
-            eventData.addProperty("startTime", java.time.Instant.now().toString());
+            eventData.addProperty("startTime", System.currentTimeMillis());
             
             connectionManager.sendEvent("server.start", eventData);
             getLogger().info("Server start event sent");
@@ -369,7 +369,7 @@ public class MochiLinkFoliaPlugin extends JavaPlugin {
             com.google.gson.JsonObject eventData = new com.google.gson.JsonObject();
             eventData.addProperty("serverName", getServer().getName());
             eventData.addProperty("reason", "Plugin disabled");
-            eventData.addProperty("stopTime", java.time.Instant.now().toString());
+            eventData.addProperty("stopTime", System.currentTimeMillis());
             
             connectionManager.sendEvent("server.stop", eventData);
             getLogger().info("Server stop event sent");

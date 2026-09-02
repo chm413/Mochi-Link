@@ -267,7 +267,13 @@ export class ServiceManager {
       (serverId: string) => this.server.getBridge(serverId)
     );
     this.event = new EventService(ctx, this.audit);
-    this.monitoring = new MonitoringService(ctx, this.audit, this.event);
+    this.monitoring = new MonitoringService(
+      ctx,
+      this.audit,
+      this.event,
+      undefined,
+      (serverId: string) => this.server.getBridge(serverId)
+    );
     this.binding = new BindingManager(ctx, this.audit, this.permission);
     this.messageRouter = new MessageRouter(ctx, this.binding, this.event);
     this.performance = new PerformanceOptimizationService(ctx, this.db);
